@@ -204,8 +204,8 @@ async function scheduleLocalNotification(title, body, tag = 'building-nick') {
   const notification = new Notification(title, {
     body,
     tag,
-    icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png',
+    icon: './icons/icon-192.svg',
+    badge: './icons/icon-192.svg',
     requireInteraction: false
   });
 

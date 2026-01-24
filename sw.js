@@ -19,8 +19,8 @@ const STATIC_ASSETS = [
   './js/ui.js',
   './js/notifications.js',
   './js/app.js',
-  './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-192.svg',
+  './icons/icon-512.svg'
 ];
 
 // Install event - cache static assets
@@ -157,8 +157,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Building Nick',
     body: 'Time to check your daily plan!',
-    icon: './icons/icon-192.png',
-    badge: './icons/icon-192.png'
+    icon: './icons/icon-192.svg',
+    badge: './icons/icon-192.svg'
   };
 
   if (event.data) {
@@ -171,8 +171,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || './icons/icon-192.png',
-    badge: data.badge || './icons/icon-192.png',
+    icon: data.icon || './icons/icon-192.svg',
+    badge: data.badge || './icons/icon-192.svg',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
