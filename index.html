@@ -11,9 +11,9 @@
 
   <title>Building Nick</title>
 
-  <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="/icons/icon-192.png">
-  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
+  <link rel="stylesheet" href="./css/styles.css">
 </head>
 <body>
   <div id="app">
@@ -173,18 +173,18 @@
   </div>
 
   <!-- Scripts -->
-  <script src="/js/activities.js"></script>
-  <script src="/js/storage.js"></script>
-  <script src="/js/utils.js"></script>
-  <script src="/js/ui.js"></script>
-  <script src="/js/notifications.js"></script>
-  <script src="/js/app.js"></script>
+  <script src="./js/activities.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/utils.js"></script>
+  <script src="./js/ui.js"></script>
+  <script src="./js/notifications.js"></script>
+  <script src="./js/app.js"></script>
 
   <!-- Service Worker Registration -->
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('./sw.js')
           .then(registration => {
             console.log('ServiceWorker registered:', registration.scope);
           })

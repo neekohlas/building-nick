@@ -7,20 +7,20 @@ const CACHE_NAME = 'building-nick-v1';
 const STATIC_CACHE = 'building-nick-static-v1';
 const DYNAMIC_CACHE = 'building-nick-dynamic-v1';
 
-// Static assets to cache
+// Static assets to cache (relative to service worker scope)
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/css/styles.css',
-  '/js/activities.js',
-  '/js/storage.js',
-  '/js/utils.js',
-  '/js/ui.js',
-  '/js/notifications.js',
-  '/js/app.js',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  './',
+  './index.html',
+  './manifest.json',
+  './css/styles.css',
+  './js/activities.js',
+  './js/storage.js',
+  './js/utils.js',
+  './js/ui.js',
+  './js/notifications.js',
+  './js/app.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
 // Install event - cache static assets
@@ -117,7 +117,7 @@ async function cacheFirst(request) {
     return networkResponse;
   } catch (error) {
     console.log('[SW] Network request failed:', error);
-    return caches.match('/index.html');
+    return caches.match('./index.html');
   }
 }
 
@@ -143,7 +143,7 @@ async function networkFirst(request) {
 
     // Return offline page for navigation requests
     if (request.mode === 'navigate') {
-      return caches.match('/index.html');
+      return caches.match('./index.html');
     }
 
     throw error;
@@ -157,8 +157,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Building Nick',
     body: 'Time to check your daily plan!',
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png'
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png'
   };
 
   if (event.data) {
@@ -171,8 +171,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/icons/icon-192.png',
-    badge: data.badge || '/icons/icon-192.png',
+    icon: data.icon || './icons/icon-192.png',
+    badge: data.badge || './icons/icon-192.png',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
