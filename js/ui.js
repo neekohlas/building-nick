@@ -24,6 +24,7 @@ const elements = {
 
   // Navigation
   navToday: document.getElementById('navToday'),
+  navWeek: document.getElementById('navWeek'),
   navPlan: document.getElementById('navPlan'),
   navStats: document.getElementById('navStats'),
 
@@ -40,6 +41,18 @@ const elements = {
   cancelCustomActivity: document.getElementById('cancelCustomActivity'),
   saveCustomActivity: document.getElementById('saveCustomActivity'),
 
+  // Activity Detail Modal
+  activityDetailModal: document.getElementById('activityDetailModal'),
+  activityDetailTitle: document.getElementById('activityDetailTitle'),
+  activityDetailMeta: document.getElementById('activityDetailMeta'),
+  activityDetailDescription: document.getElementById('activityDetailDescription'),
+  activityDetailInstructions: document.getElementById('activityDetailInstructions'),
+  activityDetailLink: document.getElementById('activityDetailLink'),
+  activityDetailVideo: document.getElementById('activityDetailVideo'),
+  closeActivityDetail: document.getElementById('closeActivityDetail'),
+  activityDetailSwap: document.getElementById('activityDetailSwap'),
+  activityDetailComplete: document.getElementById('activityDetailComplete'),
+
   // Views
   weeklyPlanView: document.getElementById('weeklyPlanView'),
   backFromPlan: document.getElementById('backFromPlan'),
@@ -48,6 +61,14 @@ const elements = {
   emphasisOptions: document.getElementById('emphasisOptions'),
   physicalSchedule: document.getElementById('physicalSchedule'),
   saveWeeklyPlan: document.getElementById('saveWeeklyPlan'),
+
+  // Week View
+  weekView: document.getElementById('weekView'),
+  backFromWeek: document.getElementById('backFromWeek'),
+  prevWeek: document.getElementById('prevWeek'),
+  nextWeek: document.getElementById('nextWeek'),
+  weekDateRange: document.getElementById('weekDateRange'),
+  weekDaysContainer: document.getElementById('weekDaysContainer'),
 
   statsView: document.getElementById('statsView'),
   backFromStats: document.getElementById('backFromStats'),
@@ -62,6 +83,12 @@ const elements = {
 
 // Current state for swap modal
 let currentSwapContext = null;
+
+// Current state for activity detail modal
+let currentActivityContext = null;
+
+// Current week offset for week view (0 = current week, -1 = last week, 1 = next week)
+let weekViewOffset = 0;
 
 // ============================================
 // HEADER RENDERING
@@ -171,6 +198,11 @@ function createActivityCard(activity, isCompleted, timeBlock) {
   card.className = `activity-card ${isCompleted ? 'completed' : ''}`;
   card.dataset.activityId = activity.id;
   card.dataset.timeBlock = timeBlock;
+
+  // Make card clickable to show details
+  card.addEventListener('click', () => {
+    openActivityDetail(activity, timeBlock, isCompleted);
+  });
 
   // Checkbox
   const checkbox = document.createElement('div');
@@ -346,6 +378,29 @@ function showCelebration() {
   }, 1500);
 }
 
+/**
+ * Complete an activity by ID (used by voice guide)
+ */
+async function completeActivity(activityId) {
+  const today = formatDateISO(new Date());
+  const isCompleted = await isActivityCompleted(today, activityId);
+
+  if (!isCompleted) {
+    await saveCompletion({
+      date: today,
+      activityId: activityId,
+      timeBlock: 'anytime'
+    });
+
+    showCelebration();
+    await renderDailyPlan();
+    await renderMotivationCard();
+  }
+}
+
+// Make completeActivity available globally for voice guide
+window.completeActivity = completeActivity;
+
 // ============================================
 // PROGRESS UPDATE
 // ============================================
@@ -355,6 +410,156 @@ async function updateProgress(completed, total) {
 
   const streak = await getCurrentStreak();
   elements.currentStreak.textContent = streak;
+}
+
+// ============================================
+// ACTIVITY DETAIL MODAL
+// ============================================
+
+function openActivityDetail(activity, timeBlock, isCompleted) {
+  currentActivityContext = { activity, timeBlock, isCompleted };
+
+  // Set title
+  elements.activityDetailTitle.textContent = activity.name;
+
+  // Set meta info
+  const category = CATEGORIES[activity.category];
+  elements.activityDetailMeta.innerHTML = `
+    <div class="activity-detail-meta-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span>${formatDuration(activity.duration)}</span>
+    </div>
+    <div class="activity-detail-meta-item">
+      <span style="width: 12px; height: 12px; border-radius: 50%; background: ${category.color}; display: inline-block;"></span>
+      <span>${category.name}</span>
+    </div>
+  `;
+
+  // Set video if available
+  if (activity.video) {
+    const embedUrl = getVideoEmbedUrl(activity.video);
+    if (embedUrl) {
+      elements.activityDetailVideo.innerHTML = `
+        <div class="video-container">
+          <iframe src="${embedUrl}" allowfullscreen allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+        </div>
+      `;
+      elements.activityDetailVideo.classList.remove('hidden');
+    } else {
+      elements.activityDetailVideo.classList.add('hidden');
+    }
+  } else {
+    elements.activityDetailVideo.innerHTML = '';
+    elements.activityDetailVideo.classList.add('hidden');
+  }
+
+  // Set description
+  elements.activityDetailDescription.textContent = activity.description;
+
+  // Set instructions
+  if (activity.instructions) {
+    elements.activityDetailInstructions.innerHTML = activity.instructions;
+  } else {
+    elements.activityDetailInstructions.innerHTML = '<p style="color: var(--color-text-muted);">No specific instructions for this activity.</p>';
+  }
+
+  // Set link if available
+  if (activity.link) {
+    elements.activityDetailLink.href = activity.link;
+    elements.activityDetailLink.classList.remove('hidden');
+  } else {
+    elements.activityDetailLink.classList.add('hidden');
+  }
+
+  // Add Start Guided Exercise button if activity has steps
+  const existingVoiceBtn = document.getElementById('activityDetailVoiceGuide');
+  if (existingVoiceBtn) {
+    existingVoiceBtn.remove();
+  }
+
+  if (activity.hasVoiceGuide && activity.steps && activity.steps.length > 0) {
+    const voiceBtn = document.createElement('button');
+    voiceBtn.id = 'activityDetailVoiceGuide';
+    voiceBtn.className = 'btn btn-voice-guide btn-full';
+    voiceBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Start Guided Exercise
+    `;
+    voiceBtn.addEventListener('click', () => {
+      closeActivityDetail();
+      if (window.VoiceGuide) {
+        window.VoiceGuide.start(activity);
+      }
+    });
+
+    // Insert after link or instructions
+    const modalBody = elements.activityDetailModal.querySelector('.modal-body');
+    modalBody.appendChild(voiceBtn);
+  }
+
+  // Update complete button text based on status
+  if (isCompleted) {
+    elements.activityDetailComplete.textContent = 'Mark Incomplete';
+    elements.activityDetailComplete.classList.remove('btn-primary');
+    elements.activityDetailComplete.classList.add('btn-secondary');
+  } else {
+    elements.activityDetailComplete.textContent = 'Mark Complete';
+    elements.activityDetailComplete.classList.remove('btn-secondary');
+    elements.activityDetailComplete.classList.add('btn-primary');
+  }
+
+  elements.activityDetailModal.classList.add('visible');
+}
+
+/**
+ * Convert video URL to embed URL
+ * Supports YouTube and Vimeo
+ */
+function getVideoEmbedUrl(url) {
+  // YouTube
+  const youtubeMatch = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (youtubeMatch) {
+    return `https://www.youtube.com/embed/${youtubeMatch[1]}`;
+  }
+
+  // Vimeo
+  const vimeoMatch = url.match(/(?:vimeo\.com\/)(\d+)/);
+  if (vimeoMatch) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
+  }
+
+  // Already an embed URL
+  if (url.includes('youtube.com/embed/') || url.includes('player.vimeo.com/video/')) {
+    return url;
+  }
+
+  return null;
+}
+
+function closeActivityDetail() {
+  elements.activityDetailModal.classList.remove('visible');
+  currentActivityContext = null;
+}
+
+async function handleActivityDetailComplete() {
+  if (!currentActivityContext) return;
+
+  const { activity, timeBlock } = currentActivityContext;
+  closeActivityDetail();
+  await toggleActivityCompletion(activity.id, timeBlock);
+}
+
+function handleActivityDetailSwap() {
+  if (!currentActivityContext) return;
+
+  const { activity, timeBlock } = currentActivityContext;
+  closeActivityDetail();
+  openSwapModal(activity, timeBlock);
 }
 
 // ============================================
@@ -554,6 +759,140 @@ async function saveWeeklyPlanData() {
 }
 
 // ============================================
+// WEEK VIEW
+// ============================================
+
+async function showWeekView() {
+  elements.weekView.classList.remove('hidden');
+  await renderWeekView();
+}
+
+function hideWeekView() {
+  elements.weekView.classList.add('hidden');
+}
+
+async function renderWeekView() {
+  // Get the week dates based on offset
+  const today = new Date();
+  const offsetDate = new Date(today);
+  offsetDate.setDate(offsetDate.getDate() + (weekViewOffset * 7));
+
+  const weekDates = getWeekDates(offsetDate);
+  const weekStart = weekDates[0];
+  const weekEnd = weekDates[6];
+
+  // Update date range display
+  const startStr = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const endStr = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  elements.weekDateRange.textContent = `${startStr} - ${endStr}`;
+
+  // Render each day
+  elements.weekDaysContainer.innerHTML = '';
+
+  for (const date of weekDates) {
+    const dayCard = await createWeekDayCard(date, today);
+    elements.weekDaysContainer.appendChild(dayCard);
+  }
+}
+
+async function createWeekDayCard(date, today) {
+  const dateStr = formatDateISO(date);
+  const isToday = formatDateISO(today) === dateStr;
+  const isPast = date < new Date(today.setHours(0, 0, 0, 0));
+
+  // Get or generate schedule for this day
+  let schedule = await getDailySchedule(dateStr);
+  if (!schedule) {
+    schedule = await generateDailySchedule(date);
+  }
+
+  // Get completions
+  const completions = await getCompletionsForDate(dateStr);
+  const completedIds = new Set(completions.map(c => c.activityId));
+
+  // Count total activities
+  let totalActivities = 0;
+  let allActivityIds = [];
+  for (const timeBlock in schedule.activities) {
+    totalActivities += schedule.activities[timeBlock].length;
+    allActivityIds = allActivityIds.concat(schedule.activities[timeBlock]);
+  }
+
+  const completedCount = allActivityIds.filter(id => completedIds.has(id)).length;
+
+  // Create card
+  const card = document.createElement('div');
+  card.className = `week-day-card ${isToday ? 'today' : ''}`;
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'week-day-header';
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = dayNames[date.getDay()];
+  const dateDisplay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  header.innerHTML = `
+    <div class="week-day-info">
+      <span class="week-day-name">${dayName}</span>
+      <span class="week-day-date">${dateDisplay}</span>
+      ${isToday ? '<span class="week-day-badge">Today</span>' : ''}
+      ${completedCount === totalActivities && totalActivities > 0 ? '<span class="week-day-badge complete">Done</span>' : ''}
+    </div>
+    <span class="week-day-progress">${completedCount}/${totalActivities}</span>
+  `;
+
+  // Toggle collapse on header click
+  header.addEventListener('click', () => {
+    activitiesContainer.classList.toggle('collapsed');
+  });
+
+  // Activities container
+  const activitiesContainer = document.createElement('div');
+  activitiesContainer.className = `week-day-activities ${!isToday ? 'collapsed' : ''}`;
+
+  // Add activities
+  for (const activityId of allActivityIds) {
+    const activity = ACTIVITIES[activityId];
+    if (!activity) continue;
+
+    const isCompleted = completedIds.has(activityId);
+    const category = CATEGORIES[activity.category];
+
+    const activityItem = document.createElement('div');
+    activityItem.className = `week-activity-item ${isCompleted ? 'completed' : ''}`;
+
+    activityItem.innerHTML = `
+      <div class="week-activity-check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </div>
+      <span class="week-activity-name">${activity.name}</span>
+      <span class="week-activity-duration">${formatDuration(activity.duration)}</span>
+      <span class="week-activity-category" style="background: ${category.color}"></span>
+    `;
+
+    // Click to open detail
+    activityItem.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openActivityDetail(activity, 'anytime', isCompleted);
+    });
+
+    activitiesContainer.appendChild(activityItem);
+  }
+
+  if (allActivityIds.length === 0) {
+    activitiesContainer.innerHTML = '<div style="padding: 12px; color: var(--color-text-muted); text-align: center;">No activities scheduled</div>';
+  }
+
+  card.appendChild(header);
+  card.appendChild(activitiesContainer);
+
+  return card;
+}
+
+// ============================================
 // STATS VIEW
 // ============================================
 
@@ -663,23 +1002,39 @@ async function renderRecentActivity() {
 function setupNavigation() {
   elements.navToday.addEventListener('click', () => {
     setActiveNav('today');
+    hideWeekView();
+    hideWeeklyPlanView();
+    hideStatsView();
+  });
+
+  elements.navWeek.addEventListener('click', () => {
+    setActiveNav('week');
+    weekViewOffset = 0;
+    showWeekView();
     hideWeeklyPlanView();
     hideStatsView();
   });
 
   elements.navPlan.addEventListener('click', () => {
     setActiveNav('plan');
+    hideWeekView();
     showWeeklyPlanView();
     hideStatsView();
   });
 
   elements.navStats.addEventListener('click', () => {
     setActiveNav('stats');
+    hideWeekView();
     hideWeeklyPlanView();
     showStatsView();
   });
 
   // Back buttons
+  elements.backFromWeek.addEventListener('click', () => {
+    setActiveNav('today');
+    hideWeekView();
+  });
+
   elements.backFromPlan.addEventListener('click', () => {
     setActiveNav('today');
     hideWeeklyPlanView();
@@ -690,12 +1045,24 @@ function setupNavigation() {
     hideStatsView();
   });
 
+  // Week navigation
+  elements.prevWeek.addEventListener('click', () => {
+    weekViewOffset--;
+    renderWeekView();
+  });
+
+  elements.nextWeek.addEventListener('click', () => {
+    weekViewOffset++;
+    renderWeekView();
+  });
+
   // Save weekly plan
   elements.saveWeeklyPlan.addEventListener('click', saveWeeklyPlanData);
 }
 
 function setActiveNav(view) {
   elements.navToday.classList.toggle('active', view === 'today');
+  elements.navWeek.classList.toggle('active', view === 'week');
   elements.navPlan.classList.toggle('active', view === 'plan');
   elements.navStats.classList.toggle('active', view === 'stats');
 }
@@ -712,6 +1079,11 @@ function setupModalListeners() {
   elements.cancelCustomActivity.addEventListener('click', closeCustomActivityModal);
   elements.saveCustomActivity.addEventListener('click', saveCustomActivityCompletion);
 
+  // Activity detail modal
+  elements.closeActivityDetail.addEventListener('click', closeActivityDetail);
+  elements.activityDetailComplete.addEventListener('click', handleActivityDetailComplete);
+  elements.activityDetailSwap.addEventListener('click', handleActivityDetailSwap);
+
   // Close on overlay click
   elements.swapModal.addEventListener('click', (e) => {
     if (e.target === elements.swapModal) {
@@ -722,6 +1094,12 @@ function setupModalListeners() {
   elements.customActivityModal.addEventListener('click', (e) => {
     if (e.target === elements.customActivityModal) {
       closeCustomActivityModal();
+    }
+  });
+
+  elements.activityDetailModal.addEventListener('click', (e) => {
+    if (e.target === elements.activityDetailModal) {
+      closeActivityDetail();
     }
   });
 }
@@ -747,6 +1125,7 @@ if (typeof module !== 'undefined' && module.exports) {
     showWeeklyPlanView,
     hideWeeklyPlanView,
     showStatsView,
-    hideStatsView
+    hideStatsView,
+    completeActivity
   };
 }

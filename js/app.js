@@ -21,6 +21,10 @@ async function initApp() {
     await initDB();
     console.log('Database initialized');
 
+    // Initialize activities (fetch from Notion if available)
+    await initActivities();
+    console.log('Activities initialized');
+
     // Initialize UI
     initUI();
     console.log('UI initialized');
