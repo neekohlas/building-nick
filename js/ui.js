@@ -25,8 +25,8 @@ const elements = {
   // Navigation
   navToday: document.getElementById('navToday'),
   navWeek: document.getElementById('navWeek'),
-  navPlan: document.getElementById('navPlan'),
-  navStats: document.getElementById('navStats'),
+  navLibrary: document.getElementById('navLibrary'),
+  navMenu: document.getElementById('navMenu'),
 
   // Modals
   swapModal: document.getElementById('swapModal'),
@@ -62,14 +62,40 @@ const elements = {
   physicalSchedule: document.getElementById('physicalSchedule'),
   saveWeeklyPlan: document.getElementById('saveWeeklyPlan'),
 
-  // Week View
+  // Week View (Horizontal Timeline)
   weekView: document.getElementById('weekView'),
   backFromWeek: document.getElementById('backFromWeek'),
-  prevWeek: document.getElementById('prevWeek'),
-  nextWeek: document.getElementById('nextWeek'),
-  weekDateRange: document.getElementById('weekDateRange'),
-  weekDaysContainer: document.getElementById('weekDaysContainer'),
+  goToToday: document.getElementById('goToToday'),
+  prevDays: document.getElementById('prevDays'),
+  nextDays: document.getElementById('nextDays'),
+  dateScrollContainer: document.getElementById('dateScrollContainer'),
+  dateScrollTrack: document.getElementById('dateScrollTrack'),
+  selectedDayHeader: document.getElementById('selectedDayHeader'),
+  selectedDayActivities: document.getElementById('selectedDayActivities'),
+  addActivityToDay: document.getElementById('addActivityToDay'),
 
+  // Library View
+  libraryView: document.getElementById('libraryView'),
+  backFromLibrary: document.getElementById('backFromLibrary'),
+  libraryFilters: document.getElementById('libraryFilters'),
+  libraryList: document.getElementById('libraryList'),
+
+  // Menu View
+  menuView: document.getElementById('menuView'),
+  backFromMenu: document.getElementById('backFromMenu'),
+  menuPlanWeek: document.getElementById('menuPlanWeek'),
+  menuStats: document.getElementById('menuStats'),
+  menuSync: document.getElementById('menuSync'),
+  menuSettings: document.getElementById('menuSettings'),
+
+  // Add Activity Modal
+  addActivityModal: document.getElementById('addActivityModal'),
+  closeAddActivity: document.getElementById('closeAddActivity'),
+  addActivityDate: document.getElementById('addActivityDate'),
+  addActivityFilters: document.getElementById('addActivityFilters'),
+  addActivityList: document.getElementById('addActivityList'),
+
+  // Stats View
   statsView: document.getElementById('statsView'),
   backFromStats: document.getElementById('backFromStats'),
   statsOverview: document.getElementById('statsOverview'),
@@ -87,8 +113,15 @@ let currentSwapContext = null;
 // Current state for activity detail modal
 let currentActivityContext = null;
 
-// Current week offset for week view (0 = current week, -1 = last week, 1 = next week)
-let weekViewOffset = 0;
+// Week view state
+let selectedDate = new Date(); // Currently selected date in week view
+let weekViewCenterDate = new Date(); // Center date for the scrolling view
+
+// Library view state
+let libraryFilter = 'all';
+
+// Add activity modal state
+let addActivityTargetDate = null;
 
 // ============================================
 // HEADER RENDERING
@@ -549,9 +582,15 @@ function closeActivityDetail() {
 async function handleActivityDetailComplete() {
   if (!currentActivityContext) return;
 
-  const { activity, timeBlock } = currentActivityContext;
+  const { activity, timeBlock, dateStr } = currentActivityContext;
   closeActivityDetail();
-  await toggleActivityCompletion(activity.id, timeBlock);
+
+  // If we have a specific date (from week view), use that
+  if (dateStr) {
+    await toggleActivityCompletionForDate(activity.id, dateStr);
+  } else {
+    await toggleActivityCompletion(activity.id, timeBlock);
+  }
 }
 
 function handleActivityDetailSwap() {
@@ -759,11 +798,13 @@ async function saveWeeklyPlanData() {
 }
 
 // ============================================
-// WEEK VIEW
+// WEEK VIEW (Horizontal Timeline)
 // ============================================
 
 async function showWeekView() {
   elements.weekView.classList.remove('hidden');
+  selectedDate = new Date();
+  weekViewCenterDate = new Date();
   await renderWeekView();
 }
 
@@ -772,124 +813,366 @@ function hideWeekView() {
 }
 
 async function renderWeekView() {
-  // Get the week dates based on offset
-  const today = new Date();
-  const offsetDate = new Date(today);
-  offsetDate.setDate(offsetDate.getDate() + (weekViewOffset * 7));
-
-  const weekDates = getWeekDates(offsetDate);
-  const weekStart = weekDates[0];
-  const weekEnd = weekDates[6];
-
-  // Update date range display
-  const startStr = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const endStr = weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  elements.weekDateRange.textContent = `${startStr} - ${endStr}`;
-
-  // Render each day
-  elements.weekDaysContainer.innerHTML = '';
-
-  for (const date of weekDates) {
-    const dayCard = await createWeekDayCard(date, today);
-    elements.weekDaysContainer.appendChild(dayCard);
-  }
+  await renderDatePills();
+  await renderSelectedDayContent();
 }
 
-async function createWeekDayCard(date, today) {
-  const dateStr = formatDateISO(date);
+async function renderDatePills() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Show 21 days centered around weekViewCenterDate (3 weeks)
+  const startDate = new Date(weekViewCenterDate);
+  startDate.setDate(startDate.getDate() - 10);
+
+  elements.dateScrollTrack.innerHTML = '';
+
+  for (let i = 0; i < 21; i++) {
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + i);
+
+    const dateStr = formatDateISO(date);
+    const isToday = formatDateISO(today) === dateStr;
+    const isSelected = formatDateISO(selectedDate) === dateStr;
+    const isPast = date < today;
+
+    // Check if this day has any completions
+    const completions = await getCompletionsForDate(dateStr);
+    const hasActivities = completions.length > 0;
+
+    const pill = document.createElement('div');
+    pill.className = `date-pill${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}${isPast ? ' past' : ''}${hasActivities ? ' has-activities' : ''}`;
+    pill.dataset.date = dateStr;
+
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    pill.innerHTML = `
+      <span class="date-pill-day">${dayNames[date.getDay()]}</span>
+      <span class="date-pill-num">${date.getDate()}</span>
+    `;
+
+    pill.addEventListener('click', () => selectDate(date));
+
+    elements.dateScrollTrack.appendChild(pill);
+  }
+
+  // Scroll to selected date
+  setTimeout(() => {
+    const selectedPill = elements.dateScrollTrack.querySelector('.date-pill.selected');
+    if (selectedPill) {
+      selectedPill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
+  }, 100);
+}
+
+async function selectDate(date) {
+  selectedDate = new Date(date);
+  await renderWeekView();
+}
+
+async function renderSelectedDayContent() {
+  const dateStr = formatDateISO(selectedDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const isToday = formatDateISO(today) === dateStr;
-  const isPast = date < new Date(today.setHours(0, 0, 0, 0));
+  const isPast = selectedDate < today;
+
+  // Render header
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayName = dayNames[selectedDate.getDay()];
+  const dateDisplay = selectedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+  elements.selectedDayHeader.innerHTML = `
+    <h3>${isToday ? 'Today' : dayName}</h3>
+    <p>${dateDisplay}</p>
+  `;
 
   // Get or generate schedule for this day
   let schedule = await getDailySchedule(dateStr);
   if (!schedule) {
-    schedule = await generateDailySchedule(date);
+    schedule = await generateDailySchedule(selectedDate);
+    await saveDailySchedule(dateStr, schedule);
   }
 
   // Get completions
   const completions = await getCompletionsForDate(dateStr);
   const completedIds = new Set(completions.map(c => c.activityId));
 
-  // Count total activities
-  let totalActivities = 0;
+  // Collect all activities
   let allActivityIds = [];
   for (const timeBlock in schedule.activities) {
-    totalActivities += schedule.activities[timeBlock].length;
     allActivityIds = allActivityIds.concat(schedule.activities[timeBlock]);
   }
 
-  const completedCount = allActivityIds.filter(id => completedIds.has(id)).length;
-
-  // Create card
-  const card = document.createElement('div');
-  card.className = `week-day-card ${isToday ? 'today' : ''}`;
-
-  // Header
-  const header = document.createElement('div');
-  header.className = 'week-day-header';
-
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const dayName = dayNames[date.getDay()];
-  const dateDisplay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
-  header.innerHTML = `
-    <div class="week-day-info">
-      <span class="week-day-name">${dayName}</span>
-      <span class="week-day-date">${dateDisplay}</span>
-      ${isToday ? '<span class="week-day-badge">Today</span>' : ''}
-      ${completedCount === totalActivities && totalActivities > 0 ? '<span class="week-day-badge complete">Done</span>' : ''}
-    </div>
-    <span class="week-day-progress">${completedCount}/${totalActivities}</span>
-  `;
-
-  // Toggle collapse on header click
-  header.addEventListener('click', () => {
-    activitiesContainer.classList.toggle('collapsed');
-  });
-
-  // Activities container
-  const activitiesContainer = document.createElement('div');
-  activitiesContainer.className = `week-day-activities ${!isToday ? 'collapsed' : ''}`;
-
-  // Add activities
-  for (const activityId of allActivityIds) {
-    const activity = ACTIVITIES[activityId];
-    if (!activity) continue;
-
-    const isCompleted = completedIds.has(activityId);
-    const category = CATEGORIES[activity.category];
-
-    const activityItem = document.createElement('div');
-    activityItem.className = `week-activity-item ${isCompleted ? 'completed' : ''}`;
-
-    activityItem.innerHTML = `
-      <div class="week-activity-check">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-          <polyline points="20 6 9 17 4 12"/>
-        </svg>
-      </div>
-      <span class="week-activity-name">${activity.name}</span>
-      <span class="week-activity-duration">${formatDuration(activity.duration)}</span>
-      <span class="week-activity-category" style="background: ${category.color}"></span>
-    `;
-
-    // Click to open detail
-    activityItem.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openActivityDetail(activity, 'anytime', isCompleted);
-    });
-
-    activitiesContainer.appendChild(activityItem);
-  }
+  // Render activities
+  elements.selectedDayActivities.innerHTML = '';
 
   if (allActivityIds.length === 0) {
-    activitiesContainer.innerHTML = '<div style="padding: 12px; color: var(--color-text-muted); text-align: center;">No activities scheduled</div>';
+    elements.selectedDayActivities.innerHTML = `
+      <div class="empty-day-message">
+        <p>No activities scheduled for this day</p>
+      </div>
+    `;
+  } else {
+    for (const activityId of allActivityIds) {
+      const activity = ACTIVITIES[activityId];
+      if (!activity) continue;
+
+      const isCompleted = completedIds.has(activityId);
+      const category = CATEGORIES[activity.category];
+
+      const card = document.createElement('div');
+      card.className = `day-activity-card${isCompleted ? ' completed' : ''}`;
+      card.dataset.activityId = activityId;
+
+      card.innerHTML = `
+        <div class="day-activity-check">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <div class="day-activity-info">
+          <div class="day-activity-name">${activity.name}</div>
+          <div class="day-activity-meta">
+            <span>${formatDuration(activity.duration)}</span>
+            <span class="day-activity-category" style="background: ${category.color}"></span>
+            <span>${category.name}</span>
+          </div>
+        </div>
+      `;
+
+      // Click on card to view details
+      card.addEventListener('click', (e) => {
+        if (!e.target.closest('.day-activity-check')) {
+          openActivityDetailForDate(activity, dateStr, isCompleted);
+        }
+      });
+
+      // Click on checkbox to toggle completion
+      const checkbox = card.querySelector('.day-activity-check');
+      checkbox.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await toggleActivityCompletionForDate(activityId, dateStr);
+      });
+
+      elements.selectedDayActivities.appendChild(card);
+    }
+  }
+}
+
+function openActivityDetailForDate(activity, dateStr, isCompleted) {
+  currentActivityContext = { activity, timeBlock: 'anytime', isCompleted, dateStr };
+  openActivityDetail(activity, 'anytime', isCompleted);
+}
+
+async function toggleActivityCompletionForDate(activityId, dateStr) {
+  const isCompleted = await isActivityCompleted(dateStr, activityId);
+
+  if (isCompleted) {
+    await removeCompletion(dateStr, activityId);
+  } else {
+    await saveCompletion({
+      date: dateStr,
+      activityId: activityId,
+      timeBlock: 'anytime'
+    });
+    showCelebration();
   }
 
-  card.appendChild(header);
-  card.appendChild(activitiesContainer);
+  // Re-render
+  await renderWeekView();
 
-  return card;
+  // Update today view if we're modifying today
+  const today = formatDateISO(new Date());
+  if (dateStr === today) {
+    await renderDailyPlan();
+    await renderMotivationCard();
+  }
+}
+
+function shiftDays(offset) {
+  weekViewCenterDate.setDate(weekViewCenterDate.getDate() + offset);
+  renderDatePills();
+}
+
+function goToTodayInWeekView() {
+  selectedDate = new Date();
+  weekViewCenterDate = new Date();
+  renderWeekView();
+}
+
+// ============================================
+// LIBRARY VIEW
+// ============================================
+
+function showLibraryView() {
+  elements.libraryView.classList.remove('hidden');
+  libraryFilter = 'all';
+  renderLibrary();
+  setupLibraryFilters();
+}
+
+function hideLibraryView() {
+  elements.libraryView.classList.add('hidden');
+}
+
+function setupLibraryFilters() {
+  const filterBtns = elements.libraryFilters.querySelectorAll('.filter-chip');
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      libraryFilter = btn.dataset.category;
+      renderLibrary();
+    });
+  });
+}
+
+function renderLibrary() {
+  const activities = Object.values(ACTIVITIES);
+
+  const filtered = libraryFilter === 'all'
+    ? activities
+    : activities.filter(a => a.category === libraryFilter);
+
+  elements.libraryList.innerHTML = '';
+
+  for (const activity of filtered) {
+    const category = CATEGORIES[activity.category];
+
+    const card = document.createElement('div');
+    card.className = 'library-card';
+
+    card.innerHTML = `
+      <div class="library-card-icon" style="background: ${category.color}20; color: ${category.color};">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+          <circle cx="12" cy="12" r="10"/>
+        </svg>
+      </div>
+      <div class="library-card-info">
+        <div class="library-card-name">${activity.name}</div>
+        <div class="library-card-meta">${formatDuration(activity.duration)} · ${category.name}</div>
+      </div>
+      <div class="library-card-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      openActivityDetail(activity, 'anytime', false);
+    });
+
+    elements.libraryList.appendChild(card);
+  }
+
+  if (filtered.length === 0) {
+    elements.libraryList.innerHTML = '<div class="empty-day-message"><p>No activities in this category</p></div>';
+  }
+}
+
+// ============================================
+// MENU VIEW
+// ============================================
+
+function showMenuView() {
+  elements.menuView.classList.remove('hidden');
+}
+
+function hideMenuView() {
+  elements.menuView.classList.add('hidden');
+}
+
+// ============================================
+// ADD ACTIVITY MODAL
+// ============================================
+
+function openAddActivityModal(dateStr) {
+  addActivityTargetDate = dateStr || formatDateISO(selectedDate);
+
+  const date = new Date(addActivityTargetDate + 'T12:00:00');
+  const dateDisplay = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  elements.addActivityDate.textContent = `For ${dateDisplay}`;
+
+  renderAddActivityList('all');
+  setupAddActivityFilters();
+
+  elements.addActivityModal.classList.add('visible');
+}
+
+function closeAddActivityModal() {
+  elements.addActivityModal.classList.remove('visible');
+  addActivityTargetDate = null;
+}
+
+function setupAddActivityFilters() {
+  const filterBtns = elements.addActivityFilters.querySelectorAll('.filter-chip');
+  filterBtns.forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.category === 'all') btn.classList.add('active');
+
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderAddActivityList(btn.dataset.category);
+    });
+  });
+}
+
+function renderAddActivityList(filter) {
+  const activities = Object.values(ACTIVITIES);
+  const filtered = filter === 'all'
+    ? activities
+    : activities.filter(a => a.category === filter);
+
+  elements.addActivityList.innerHTML = '';
+
+  for (const activity of filtered) {
+    const category = CATEGORIES[activity.category];
+
+    const item = document.createElement('div');
+    item.className = 'modal-activity-item';
+
+    item.innerHTML = `
+      <span class="modal-activity-color" style="background: ${category.color}"></span>
+      <div class="modal-activity-info">
+        <div class="modal-activity-name">${activity.name}</div>
+        <div class="modal-activity-duration">${formatDuration(activity.duration)}</div>
+      </div>
+    `;
+
+    item.addEventListener('click', () => addActivityToDate(activity.id));
+
+    elements.addActivityList.appendChild(item);
+  }
+}
+
+async function addActivityToDate(activityId) {
+  if (!addActivityTargetDate) return;
+
+  // Get current schedule
+  let schedule = await getDailySchedule(addActivityTargetDate);
+  if (!schedule) {
+    schedule = { activities: { before9am: [], beforeNoon: [], anytime: [] } };
+  }
+
+  // Add to anytime block if not already there
+  if (!schedule.activities.anytime.includes(activityId)) {
+    schedule.activities.anytime.push(activityId);
+    await saveDailySchedule(addActivityTargetDate, schedule);
+  }
+
+  closeAddActivityModal();
+
+  // Refresh view
+  await renderWeekView();
+
+  // Update today view if needed
+  const today = formatDateISO(new Date());
+  if (addActivityTargetDate === today) {
+    await renderDailyPlan();
+  }
 }
 
 // ============================================
@@ -1002,31 +1285,25 @@ async function renderRecentActivity() {
 function setupNavigation() {
   elements.navToday.addEventListener('click', () => {
     setActiveNav('today');
-    hideWeekView();
-    hideWeeklyPlanView();
-    hideStatsView();
+    hideAllViews();
   });
 
   elements.navWeek.addEventListener('click', () => {
     setActiveNav('week');
-    weekViewOffset = 0;
+    hideAllViews();
     showWeekView();
-    hideWeeklyPlanView();
-    hideStatsView();
   });
 
-  elements.navPlan.addEventListener('click', () => {
-    setActiveNav('plan');
-    hideWeekView();
-    showWeeklyPlanView();
-    hideStatsView();
+  elements.navLibrary.addEventListener('click', () => {
+    setActiveNav('library');
+    hideAllViews();
+    showLibraryView();
   });
 
-  elements.navStats.addEventListener('click', () => {
-    setActiveNav('stats');
-    hideWeekView();
-    hideWeeklyPlanView();
-    showStatsView();
+  elements.navMenu.addEventListener('click', () => {
+    setActiveNav('menu');
+    hideAllViews();
+    showMenuView();
   });
 
   // Back buttons
@@ -1045,26 +1322,60 @@ function setupNavigation() {
     hideStatsView();
   });
 
-  // Week navigation
-  elements.prevWeek.addEventListener('click', () => {
-    weekViewOffset--;
-    renderWeekView();
+  elements.backFromLibrary.addEventListener('click', () => {
+    setActiveNav('today');
+    hideLibraryView();
   });
 
-  elements.nextWeek.addEventListener('click', () => {
-    weekViewOffset++;
-    renderWeekView();
+  elements.backFromMenu.addEventListener('click', () => {
+    setActiveNav('today');
+    hideMenuView();
+  });
+
+  // Week view navigation
+  elements.prevDays.addEventListener('click', () => shiftDays(-7));
+  elements.nextDays.addEventListener('click', () => shiftDays(7));
+  elements.goToToday.addEventListener('click', goToTodayInWeekView);
+  elements.addActivityToDay.addEventListener('click', () => openAddActivityModal());
+
+  // Menu items
+  elements.menuPlanWeek.addEventListener('click', () => {
+    hideMenuView();
+    showWeeklyPlanView();
+  });
+
+  elements.menuStats.addEventListener('click', () => {
+    hideMenuView();
+    showStatsView();
+  });
+
+  elements.menuSync.addEventListener('click', () => {
+    // TODO: Implement cloud sync
+    alert('Cloud sync coming soon! Your data will sync across devices.');
+  });
+
+  elements.menuSettings.addEventListener('click', () => {
+    // TODO: Implement settings
+    alert('Settings coming soon!');
   });
 
   // Save weekly plan
   elements.saveWeeklyPlan.addEventListener('click', saveWeeklyPlanData);
 }
 
+function hideAllViews() {
+  hideWeekView();
+  hideWeeklyPlanView();
+  hideStatsView();
+  hideLibraryView();
+  hideMenuView();
+}
+
 function setActiveNav(view) {
   elements.navToday.classList.toggle('active', view === 'today');
   elements.navWeek.classList.toggle('active', view === 'week');
-  elements.navPlan.classList.toggle('active', view === 'plan');
-  elements.navStats.classList.toggle('active', view === 'stats');
+  elements.navLibrary.classList.toggle('active', view === 'library');
+  elements.navMenu.classList.toggle('active', view === 'menu');
 }
 
 // ============================================
@@ -1102,6 +1413,14 @@ function setupModalListeners() {
       closeActivityDetail();
     }
   });
+
+  // Add activity modal
+  elements.closeAddActivity.addEventListener('click', closeAddActivityModal);
+  elements.addActivityModal.addEventListener('click', (e) => {
+    if (e.target === elements.addActivityModal) {
+      closeAddActivityModal();
+    }
+  });
 }
 
 // ============================================
@@ -1126,6 +1445,12 @@ if (typeof module !== 'undefined' && module.exports) {
     hideWeeklyPlanView,
     showStatsView,
     hideStatsView,
+    showWeekView,
+    hideWeekView,
+    showLibraryView,
+    hideLibraryView,
+    showMenuView,
+    hideMenuView,
     completeActivity
   };
 }
