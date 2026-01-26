@@ -4,7 +4,10 @@ import { useEffect, useState, useCallback } from 'react'
 import { ActivityCard } from './activity-card'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SwapModal } from './swap-modal'
+import { PushModal } from './push-modal'
 import { Celebration } from './celebration'
+import { Button } from '@/components/ui/button'
+import { CalendarClock } from 'lucide-react'
 import {
   Activity,
   ACTIVITIES,
@@ -40,6 +43,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [showSwapModal, setShowSwapModal] = useState(false)
   const [swapActivity, setSwapActivity] = useState<Activity | null>(null)
   const [showCelebration, setShowCelebration] = useState(false)
+  const [showPushModal, setShowPushModal] = useState(false)
+  const [pushActivity, setPushActivity] = useState<Activity | null>(null)
 
   const today = new Date()
   const dateStr = formatDateISO(today)
@@ -181,6 +186,115 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     setSwapActivity(null)
   }
 
+  // Get tomorrow's date string
+  const getTomorrowDateStr = () => {
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return tomorrow.toISOString().split('T')[0]
+  }
+
+  // Push single activity to tomorrow
+  const handlePushSingle = async () => {
+    if (!schedule || !pushActivity) return
+
+    const tomorrowStr = getTomorrowDateStr()
+    
+    // Find which time block the activity is in
+    let activityTimeBlock: TimeBlock | null = null
+    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+      if (schedule.activities[block].includes(pushActivity.id)) {
+        activityTimeBlock = block
+        break
+      }
+    }
+    if (!activityTimeBlock) return
+
+    // Remove from today
+    const newTodaySchedule: DailySchedule = {
+      ...schedule,
+      activities: {
+        ...schedule.activities,
+        [activityTimeBlock]: schedule.activities[activityTimeBlock].filter(
+          id => id !== pushActivity.id
+        )
+      }
+    }
+    await storage.saveDailySchedule(newTodaySchedule)
+    setSchedule(newTodaySchedule)
+
+    // Add to tomorrow
+    let tomorrowSchedule = await storage.getDailySchedule(tomorrowStr)
+    if (!tomorrowSchedule) {
+      tomorrowSchedule = {
+        date: tomorrowStr,
+        activities: { before9am: [], beforeNoon: [], anytime: [] }
+      }
+    }
+    tomorrowSchedule.activities[activityTimeBlock] = [
+      ...tomorrowSchedule.activities[activityTimeBlock],
+      pushActivity.id
+    ]
+    await storage.saveDailySchedule(tomorrowSchedule)
+
+    setShowPushModal(false)
+    setPushActivity(null)
+  }
+
+  // Push all incomplete activities to tomorrow
+  const handlePushAllIncomplete = async () => {
+    if (!schedule) return
+
+    const tomorrowStr = getTomorrowDateStr()
+    
+    // Get or create tomorrow's schedule
+    let tomorrowSchedule = await storage.getDailySchedule(tomorrowStr)
+    if (!tomorrowSchedule) {
+      tomorrowSchedule = {
+        date: tomorrowStr,
+        activities: { before9am: [], beforeNoon: [], anytime: [] }
+      }
+    }
+
+    // Build new schedules
+    const newTodayActivities: DailySchedule['activities'] = {
+      before9am: [],
+      beforeNoon: [],
+      anytime: []
+    }
+
+    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+      for (const activityId of schedule.activities[block]) {
+        if (completedIds.has(activityId)) {
+          // Keep completed activities in today
+          newTodayActivities[block].push(activityId)
+        } else {
+          // Move incomplete to tomorrow
+          tomorrowSchedule.activities[block] = [
+            ...tomorrowSchedule.activities[block],
+            activityId
+          ]
+        }
+      }
+    }
+
+    // Save both schedules
+    const newTodaySchedule: DailySchedule = {
+      ...schedule,
+      activities: newTodayActivities
+    }
+    await storage.saveDailySchedule(newTodaySchedule)
+    await storage.saveDailySchedule(tomorrowSchedule)
+    
+    setSchedule(newTodaySchedule)
+    setShowPushModal(false)
+    setPushActivity(null)
+  }
+
+  // Calculate incomplete count
+  const incompleteActivities = schedule
+    ? Object.values(schedule.activities).flat().filter(id => !completedIds.has(id))
+    : []
+
   // Calculate progress
   const totalActivities = schedule
     ? Object.values(schedule.activities).flat().length
@@ -231,6 +345,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                       setSelectedTimeBlock(block)
                       setShowSwapModal(true)
                     }}
+                    onPush={() => {
+                      setPushActivity(activity)
+                      setShowPushModal(true)
+                    }}
                     onClick={() => {
                       setSelectedActivity(activity)
                       setSelectedTimeBlock(block)
@@ -242,6 +360,21 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           )
         })}
       </div>
+
+      {/* Push All Incomplete Button */}
+      {incompleteActivities.length > 1 && (
+        <Button
+          variant="outline"
+          className="w-full bg-transparent"
+          onClick={() => {
+            setPushActivity(null)
+            setShowPushModal(true)
+          }}
+        >
+          <CalendarClock className="h-4 w-4 mr-2" />
+          Push {incompleteActivities.length} Incomplete to Tomorrow
+        </Button>
+      )}
 
       {/* Progress Section */}
       <div className="rounded-2xl bg-card p-6 shadow-sm">
@@ -277,6 +410,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
             setSwapActivity(selectedActivity)
             setShowSwapModal(true)
           }}
+          onPush={() => {
+            setPushActivity(selectedActivity)
+            setSelectedActivity(null)
+            setShowPushModal(true)
+          }}
         />
       )}
 
@@ -289,6 +427,20 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
             setSwapActivity(null)
           }}
           onSwap={handleSwap}
+        />
+      )}
+
+      {/* Push Modal */}
+      {showPushModal && (
+        <PushModal
+          activity={pushActivity}
+          incompleteCount={incompleteActivities.length}
+          onClose={() => {
+            setShowPushModal(false)
+            setPushActivity(null)
+          }}
+          onPushSingle={handlePushSingle}
+          onPushAllIncomplete={handlePushAllIncomplete}
         />
       )}
 

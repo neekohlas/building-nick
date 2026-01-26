@@ -1,6 +1,6 @@
 'use client'
 
-import { X, Clock, ExternalLink, Check } from 'lucide-react'
+import { X, Clock, ExternalLink, Check, CalendarClock } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ interface ActivityDetailModalProps {
   onClose: () => void
   onComplete: () => void
   onSwap: () => void
+  onPush?: () => void
 }
 
 export function ActivityDetailModal({
@@ -18,7 +19,8 @@ export function ActivityDetailModal({
   isCompleted,
   onClose,
   onComplete,
-  onSwap
+  onSwap,
+  onPush
 }: ActivityDetailModalProps) {
   const category = CATEGORIES[activity.category]
 
@@ -83,28 +85,40 @@ export function ActivityDetailModal({
           />
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              className="flex-1 bg-transparent"
-              onClick={onSwap}
-            >
-              Swap Activity
-            </Button>
-            <Button
-              className="flex-1"
-              onClick={onComplete}
-              disabled={isCompleted}
-            >
-              {isCompleted ? (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Completed
-                </>
-              ) : (
-                'Mark Complete'
-              )}
-            </Button>
+          <div className="flex flex-col gap-3 pt-4 border-t">
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 bg-transparent"
+                onClick={onSwap}
+              >
+                Swap Activity
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={onComplete}
+                disabled={isCompleted}
+              >
+                {isCompleted ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    Completed
+                  </>
+                ) : (
+                  'Mark Complete'
+                )}
+              </Button>
+            </div>
+            {onPush && !isCompleted && (
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={onPush}
+              >
+                <CalendarClock className="h-4 w-4 mr-2" />
+                Push to Tomorrow
+              </Button>
+            )}
           </div>
         </div>
       </div>

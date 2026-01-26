@@ -1,9 +1,15 @@
 'use client'
 
-import { Check, ArrowRightLeft, Clock, ExternalLink } from 'lucide-react'
+import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface ActivityCardProps {
   activity: Activity
@@ -11,6 +17,7 @@ interface ActivityCardProps {
   timeBlock: string
   onToggleComplete: () => void
   onSwap: () => void
+  onPush: () => void
   onClick: () => void
 }
 
@@ -19,6 +26,7 @@ export function ActivityCard({
   isCompleted,
   onToggleComplete,
   onSwap,
+  onPush,
   onClick
 }: ActivityCardProps) {
   const category = CATEGORIES[activity.category]
@@ -79,16 +87,27 @@ export function ActivityCard({
         style={{ backgroundColor: category.color }}
       />
 
-      {/* Swap button */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onSwap()
-        }}
-        className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-      >
-        <ArrowRightLeft className="h-5 w-5" />
-      </button>
+      {/* Actions menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            onClick={(e) => e.stopPropagation()}
+            className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
+            <ArrowRightLeft className="h-4 w-4 mr-2" />
+            Swap Activity
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
+            <CalendarClock className="h-4 w-4 mr-2" />
+            Push to Tomorrow
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }
