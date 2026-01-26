@@ -1,12 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Check, ChevronRight, ChevronLeft, Dumbbell, Briefcase, Brain, Sparkles } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Check, ChevronRight, ChevronLeft, Dumbbell, Briefcase, Brain, Sparkles, Search, ArrowUpDown, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion'
 import { 
   ACTIVITIES, 
-  CATEGORIES
+  CATEGORIES,
+  getQuickMindBodyActivities
 } from '@/lib/activities'
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
@@ -17,16 +25,7 @@ interface PlanWeekViewProps {
 }
 
 type TimeBlock = 'before9am' | 'beforeNoon' | 'anytime'
-
-// Mind-body activities that can be chosen as a weekly focus
-const MIND_BODY_OPTIONS = [
-  { id: 'breathing', name: 'Breathing Exercises', description: 'Calm and presence through focused breathing' },
-  { id: 'external_orienting', name: 'External Orienting', description: 'Scan your environment mindfully' },
-  { id: 'internal_orienting', name: 'Internal Orienting', description: 'Safe body awareness practice' },
-  { id: 'visualize_movement', name: 'Visualize Movement', description: 'Mental rehearsal of gradual movement' },
-  { id: 'movement_coach', name: 'Movement Coach', description: 'Guided exercise from "Better Movement"' },
-  { id: 'expressive_writing', name: 'Expressive Writing', description: 'Process feelings through writing' },
-]
+type SortOption = 'name' | 'duration'
 
 // Preset schedules for common patterns
 const PRESETS = {
@@ -63,6 +62,40 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
   const [step, setStep] = useState<'mind_body' | 'presets' | 'preview' | 'done'>('mind_body')
   const [weekDates, setWeekDates] = useState<Date[]>([])
   const [generatedSchedules, setGeneratedSchedules] = useState<Record<string, DailySchedule>>({})
+  
+  // Search and sort for mind-body selection
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>('name')
+  
+  // Get mind-body activities from the activities data
+  const mindBodyActivities = useMemo(() => {
+    return getQuickMindBodyActivities()
+  }, [])
+  
+  // Filter and sort mind-body activities
+  const filteredMindBodyActivities = useMemo(() => {
+    let activities = [...mindBodyActivities]
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase()
+      activities = activities.filter(a => 
+        a.name.toLowerCase().includes(query) || 
+        a.description.toLowerCase().includes(query)
+      )
+    }
+    
+    // Sort
+    activities.sort((a, b) => {
+      if (sortBy === 'name') {
+        return a.name.localeCompare(b.name)
+      } else {
+        return a.duration - b.duration
+      }
+    })
+    
+    return activities
+  }, [mindBodyActivities, searchQuery, sortBy])
 
   // Generate week dates starting from today
   useEffect(() => {
@@ -192,7 +225,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
   // Step 1: Mind-Body Selection
   if (step === 'mind_body') {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
             <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Step 1 of 2</span>
@@ -203,47 +236,102 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
           </p>
         </div>
 
-        {/* Mind-body options */}
-        <div className="space-y-2">
-          {MIND_BODY_OPTIONS.map(option => {
-            const isSelected = selectedMindBody === option.id
+        {/* Search and Sort Controls */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search activities..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setSortBy(prev => prev === 'name' ? 'duration' : 'name')}
+            className="shrink-0 bg-transparent"
+            title={`Sort by ${sortBy === 'name' ? 'duration' : 'name'}`}
+          >
+            <ArrowUpDown className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <div className="text-xs text-muted-foreground">
+          Sorted by: {sortBy === 'name' ? 'Name (A-Z)' : 'Duration (shortest first)'}
+        </div>
+
+        {/* Mind-body options with accordion */}
+        <Accordion 
+          type="single" 
+          collapsible 
+          className="space-y-2"
+          value={selectedMindBody}
+          onValueChange={(value) => {
+            if (value) setSelectedMindBody(value)
+          }}
+        >
+          {filteredMindBodyActivities.map(activity => {
+            const isSelected = selectedMindBody === activity.id
+            const categoryColor = CATEGORIES[activity.category].color
             
             return (
-              <button
-                key={option.id}
-                onClick={() => setSelectedMindBody(option.id)}
+              <AccordionItem 
+                key={activity.id} 
+                value={activity.id}
                 className={cn(
-                  'w-full p-4 rounded-xl border text-left transition-all',
+                  'rounded-xl border px-4 transition-all',
                   isSelected 
                     ? 'border-primary bg-primary/5 ring-2 ring-primary' 
                     : 'border-border bg-card hover:border-primary/50'
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
-                    isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                  )}>
-                    <Sparkles className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{option.name}</span>
-                      {isSelected && (
-                        <Check className="h-4 w-4 text-primary" />
-                      )}
+                <AccordionTrigger className="hover:no-underline py-3">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className={cn(
+                      'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
+                      isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                    )}>
+                      <Sparkles className="h-4 w-4" />
                     </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {option.description}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{activity.name}</span>
+                        {isSelected && (
+                          <Check className="h-4 w-4 text-primary shrink-0" />
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">{activity.duration} min</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </button>
+                </AccordionTrigger>
+                <AccordionContent className="pt-0 pb-4">
+                  <div className="pl-12 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      {activity.description}
+                    </p>
+                    <div 
+                      className="prose prose-sm max-w-none text-muted-foreground [&_h4]:text-xs [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:text-muted-foreground [&_h4]:font-semibold [&_h4]:mb-2 [&_ol]:pl-5 [&_li]:mb-1.5 [&_p]:mt-2 [&_p]:text-sm"
+                      dangerouslySetInnerHTML={{ __html: activity.instructions }}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
             )
           })}
-        </div>
+        </Accordion>
 
-        <div className="flex gap-3">
+        {filteredMindBodyActivities.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">
+            No activities match your search
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2">
           <Button
             variant="outline"
             className="flex-1 bg-transparent"
@@ -254,6 +342,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
           <Button
             className="flex-1"
             onClick={() => setStep('presets')}
+            disabled={!selectedMindBody}
           >
             Next
             <ChevronRight className="h-4 w-4 ml-1" />
