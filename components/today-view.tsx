@@ -192,8 +192,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     <div className="space-y-6">
       {/* Motivation Card */}
       <div className="rounded-2xl border-l-4 border-l-[var(--accent)] bg-card p-6 shadow-sm">
-        <p className="text-lg font-medium leading-relaxed text-foreground">
-          {motivation}
+        <p className="text-lg font-medium leading-relaxed text-foreground font-sans" suppressHydrationWarning>
+          {motivation || '\u00A0'}
         </p>
       </div>
 
