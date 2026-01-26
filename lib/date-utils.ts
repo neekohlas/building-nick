@@ -144,3 +144,19 @@ export function addDays(date: Date, days: number): Date {
   result.setDate(result.getDate() + days)
   return result
 }
+
+export function getMonthName(date: Date): string {
+  return date.toLocaleDateString('en-US', { month: 'long' })
+}
+
+export function getYear(date: Date): number {
+  return date.getFullYear()
+}
+
+export function getExtendedWeekDates(centerDate: Date, daysBeforeAfter: number = 14): Date[] {
+  const dates: Date[] = []
+  for (let i = -daysBeforeAfter; i <= daysBeforeAfter; i++) {
+    dates.push(addDays(centerDate, i))
+  }
+  return dates
+}

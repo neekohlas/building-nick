@@ -12,7 +12,7 @@ import {
   Activity,
   ACTIVITIES,
   getQuickMindBodyActivities,
-  getOutdoorPhysicalActivities
+  getPhysicalActivities
 } from '@/lib/activities'
 import { formatDateISO, shouldShowProfessionalGoals } from '@/lib/date-utils'
 import { getRandomMessage, getStreakMessage, pickRandom } from '@/lib/messages'
@@ -62,16 +62,19 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       }
     }
 
-    // Before 9 AM: Mind-body practice + job follow-up (if weekday)
-    const quickActivities = getQuickMindBodyActivities()
-    const picked = pickRandom(quickActivities)
-    newSchedule.activities.before9am.push(picked.id)
+    // Before 9 AM: ALWAYS mind-body or physical activities only
+    const quickMindBody = getQuickMindBodyActivities()
+    const morningMindBody = pickRandom(quickMindBody)
+    newSchedule.activities.before9am.push(morningMindBody.id)
 
-    if (isProfessionalDay) {
-      newSchedule.activities.before9am.push('job_followup')
+    // Add a light physical activity in the morning too
+    const physicalActivities = getPhysicalActivities()
+    const lightPhysical = physicalActivities.find(a => a.id === 'stretching') || pickRandom(physicalActivities)
+    if (lightPhysical.id !== morningMindBody.id) {
+      newSchedule.activities.before9am.push(lightPhysical.id)
     }
 
-    // Before Noon: Physical exercise + education
+    // Before Noon: Main physical exercise + education
     newSchedule.activities.beforeNoon.push('biking')
     newSchedule.activities.beforeNoon.push('dumbbell_presses')
 
@@ -79,11 +82,12 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       newSchedule.activities.beforeNoon.push('coursera_module')
     }
 
-    // Anytime: Mindfulness + job search (if weekday)
+    // Anytime: Mindfulness + professional tasks (if weekday)
     newSchedule.activities.anytime.push('lin_health_activity')
 
     if (isProfessionalDay) {
       newSchedule.activities.anytime.push('job_search')
+      newSchedule.activities.anytime.push('job_followup')
     }
 
     return newSchedule

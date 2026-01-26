@@ -1,24 +1,27 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ActivityCard } from './activity-card'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SwapModal } from './swap-modal'
+import { PushModal } from './push-modal'
 import { Celebration } from './celebration'
 import { AddActivityModal } from './add-activity-modal'
 import {
   formatDateISO,
-  formatDateShort,
   getShortDayName,
   getDayNumber,
   isToday,
   addDays,
-  getWeekDates,
-  shouldShowProfessionalGoals
+  getMonthName,
+  getYear,
+  getExtendedWeekDates,
+  shouldShowProfessionalGoals,
+  formatDateShort
 } from '@/lib/date-utils'
-import { Activity, ACTIVITIES, getQuickMindBodyActivities } from '@/lib/activities'
+import { Activity, ACTIVITIES, getQuickMindBodyActivities, getPhysicalActivities } from '@/lib/activities'
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
 import { pickRandom } from '@/lib/messages'
 import { Button } from '@/components/ui/button'
@@ -32,9 +35,11 @@ type TimeBlock = 'before9am' | 'beforeNoon' | 'anytime'
 export function WeekView({ onBack }: WeekViewProps) {
   const storage = useStorage()
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [weekDates, setWeekDates] = useState<Date[]>([])
+  const [visibleDates, setVisibleDates] = useState<Date[]>([])
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const weekDates = getExtendedWeekDates(new Date(), 14)
 
   // Modals
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
@@ -43,13 +48,31 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [swapActivity, setSwapActivity] = useState<Activity | null>(null)
   const [showCelebration, setShowCelebration] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showPushModal, setShowPushModal] = useState(false)
+  const [pushActivity, setPushActivity] = useState<Activity | null>(null)
 
-  // Initialize week dates
+  // Initialize extended dates for scrolling (2 weeks before and after)
   useEffect(() => {
-    setWeekDates(getWeekDates(selectedDate))
-  }, [selectedDate])
+    setVisibleDates(getExtendedWeekDates(new Date(), 14))
+  }, [])
+
+  // Scroll to selected date
+  useEffect(() => {
+    if (scrollContainerRef.current) {
+      const selectedIndex = visibleDates.findIndex(
+        d => formatDateISO(d) === formatDateISO(selectedDate)
+      )
+      if (selectedIndex >= 0) {
+        const container = scrollContainerRef.current
+        const dayWidth = 64 // min-w-16 = 64px
+        const scrollPosition = (selectedIndex * dayWidth) - (container.clientWidth / 2) + (dayWidth / 2)
+        container.scrollTo({ left: Math.max(0, scrollPosition), behavior: 'smooth' })
+      }
+    }
+  }, [selectedDate, visibleDates])
 
   // Generate schedule for a date
+  // Before 9am is ALWAYS physical or mind-body activities only
   const generateSchedule = (date: Date): DailySchedule => {
     const dateStr = formatDateISO(date)
     const isProfessionalDay = shouldShowProfessionalGoals(date)
@@ -63,14 +86,19 @@ export function WeekView({ onBack }: WeekViewProps) {
       }
     }
 
-    const quickActivities = getQuickMindBodyActivities()
-    const picked = pickRandom(quickActivities)
-    newSchedule.activities.before9am.push(picked.id)
+    // Before 9am: Always mind-body or physical activities
+    const quickMindBody = getQuickMindBodyActivities()
+    const morningMindBody = pickRandom(quickMindBody)
+    newSchedule.activities.before9am.push(morningMindBody.id)
 
-    if (isProfessionalDay) {
-      newSchedule.activities.before9am.push('job_followup')
+    // Add a physical activity in the morning too (light option)
+    const physicalActivities = getPhysicalActivities()
+    const lightPhysical = physicalActivities.find(a => a.id === 'stretching') || pickRandom(physicalActivities)
+    if (lightPhysical.id !== morningMindBody.id) {
+      newSchedule.activities.before9am.push(lightPhysical.id)
     }
 
+    // Before Noon: Main physical activities
     newSchedule.activities.beforeNoon.push('biking')
     newSchedule.activities.beforeNoon.push('dumbbell_presses')
 
@@ -78,10 +106,12 @@ export function WeekView({ onBack }: WeekViewProps) {
       newSchedule.activities.beforeNoon.push('coursera_module')
     }
 
+    // Anytime: Lin Health and professional tasks
     newSchedule.activities.anytime.push('lin_health_activity')
 
     if (isProfessionalDay) {
       newSchedule.activities.anytime.push('job_search')
+      newSchedule.activities.anytime.push('job_followup')
     }
 
     return newSchedule
@@ -109,17 +139,25 @@ export function WeekView({ onBack }: WeekViewProps) {
     loadSchedule()
   }, [storage.isReady, selectedDate, storage])
 
-  // Navigate weeks
+  // Navigate days
+  const goToPreviousDay = () => {
+    setSelectedDate(prev => addDays(prev, -1))
+  }
+
+  const goToNextDay = () => {
+    setSelectedDate(prev => addDays(prev, 1))
+  }
+
+  const goToToday = () => {
+    setSelectedDate(new Date())
+  }
+
   const goToPreviousWeek = () => {
     setSelectedDate(prev => addDays(prev, -7))
   }
 
   const goToNextWeek = () => {
     setSelectedDate(prev => addDays(prev, 7))
-  }
-
-  const goToToday = () => {
-    setSelectedDate(new Date())
   }
 
   // Toggle completion
@@ -184,73 +222,205 @@ export function WeekView({ onBack }: WeekViewProps) {
     setShowAddModal(false)
   }
 
+  // Get tomorrow's date string
+  const getTomorrowDateStr = () => {
+    const tomorrow = new Date(selectedDate)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    return tomorrow.toISOString().split('T')[0]
+  }
+
+  // Push single activity to tomorrow
+  const handlePushSingle = async () => {
+    if (!schedule || !pushActivity) return
+
+    const tomorrowStr = getTomorrowDateStr()
+    
+    // Find which time block the activity is in
+    let activityTimeBlock: TimeBlock | null = null
+    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+      if (schedule.activities[block].includes(pushActivity.id)) {
+        activityTimeBlock = block
+        break
+      }
+    }
+    if (!activityTimeBlock) return
+
+    // Remove from selected date
+    const newTodaySchedule: DailySchedule = {
+      ...schedule,
+      activities: {
+        ...schedule.activities,
+        [activityTimeBlock]: schedule.activities[activityTimeBlock].filter(
+          id => id !== pushActivity.id
+        )
+      }
+    }
+    await storage.saveDailySchedule(newTodaySchedule)
+    setSchedule(newTodaySchedule)
+
+    // Add to tomorrow
+    let tomorrowSchedule = await storage.getDailySchedule(tomorrowStr)
+    if (!tomorrowSchedule) {
+      tomorrowSchedule = {
+        date: tomorrowStr,
+        activities: { before9am: [], beforeNoon: [], anytime: [] }
+      }
+    }
+    tomorrowSchedule.activities[activityTimeBlock] = [
+      ...tomorrowSchedule.activities[activityTimeBlock],
+      pushActivity.id
+    ]
+    await storage.saveDailySchedule(tomorrowSchedule)
+
+    setShowPushModal(false)
+    setPushActivity(null)
+  }
+
+  // Push all incomplete activities to tomorrow
+  const handlePushAllIncomplete = async () => {
+    if (!schedule) return
+
+    const tomorrowStr = getTomorrowDateStr()
+    
+    // Get or create tomorrow's schedule
+    let tomorrowSchedule = await storage.getDailySchedule(tomorrowStr)
+    if (!tomorrowSchedule) {
+      tomorrowSchedule = {
+        date: tomorrowStr,
+        activities: { before9am: [], beforeNoon: [], anytime: [] }
+      }
+    }
+
+    // Build new schedules
+    const newTodayActivities: DailySchedule['activities'] = {
+      before9am: [],
+      beforeNoon: [],
+      anytime: []
+    }
+
+    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+      for (const activityId of schedule.activities[block]) {
+        if (completedIds.has(activityId)) {
+          // Keep completed activities in selected date
+          newTodayActivities[block].push(activityId)
+        } else {
+          // Move incomplete to tomorrow
+          tomorrowSchedule.activities[block] = [
+            ...tomorrowSchedule.activities[block],
+            activityId
+          ]
+        }
+      }
+    }
+
+    // Save both schedules
+    const newTodaySchedule: DailySchedule = {
+      ...schedule,
+      activities: newTodayActivities
+    }
+    await storage.saveDailySchedule(newTodaySchedule)
+    await storage.saveDailySchedule(tomorrowSchedule)
+    
+    setSchedule(newTodaySchedule)
+    setShowPushModal(false)
+    setPushActivity(null)
+  }
+
+  // Calculate incomplete count
+  const incompleteActivities = schedule
+    ? Object.values(schedule.activities).flat().filter(id => !completedIds.has(id))
+    : []
+
   return (
-    <div className="space-y-6">
-      {/* Week Navigation */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={goToPreviousWeek}
-          className="p-2 rounded-lg hover:bg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-
-        <button
+    <div className="space-y-4">
+      {/* Month Header */}
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            {getMonthName(selectedDate)}{' '}
+            <span className="text-primary">{getYear(selectedDate)}</span>
+          </h1>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
           onClick={goToToday}
-          className="text-sm font-medium text-primary hover:underline"
+          className={cn(
+            "rounded-full h-9 w-9 p-0 font-bold",
+            isToday(selectedDate) ? "bg-primary text-primary-foreground" : "bg-transparent"
+          )}
         >
-          Go to Today
-        </button>
-
-        <button
-          onClick={goToNextWeek}
-          className="p-2 rounded-lg hover:bg-muted"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
+          {getDayNumber(new Date())}
+        </Button>
       </div>
 
-      {/* Date Selector */}
-      <div className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4">
-        {weekDates.map(date => {
+      {/* Horizontal Scrollable Day Selector */}
+      <div 
+        ref={scrollContainerRef}
+        className="flex gap-1 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {visibleDates.map(date => {
           const isSelected = formatDateISO(date) === formatDateISO(selectedDate)
           const isTodayDate = isToday(date)
+          const dayName = getShortDayName(date).toUpperCase()
 
           return (
             <button
               key={formatDateISO(date)}
               onClick={() => setSelectedDate(date)}
               className={cn(
-                'flex flex-col items-center px-4 py-2 rounded-xl min-w-[60px] transition-all',
+                'flex flex-col items-center py-2 min-w-16 rounded-xl transition-all shrink-0',
                 isSelected
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted',
-                isTodayDate && !isSelected && 'ring-2 ring-primary ring-offset-2'
+                  ? 'bg-primary/10'
+                  : 'hover:bg-muted'
               )}
             >
-              <span className="text-xs font-medium opacity-80">
-                {getShortDayName(date)}
+              <span className={cn(
+                "text-[10px] font-semibold tracking-wide mb-1",
+                isSelected ? "text-primary" : "text-muted-foreground"
+              )}>
+                {dayName}
               </span>
-              <span className="text-lg font-bold">
+              <div className={cn(
+                "flex items-center justify-center w-9 h-9 rounded-full text-lg font-bold transition-all",
+                isSelected && "bg-primary text-primary-foreground",
+                isTodayDate && !isSelected && "ring-2 ring-primary"
+              )}>
                 {getDayNumber(date)}
-              </span>
+              </div>
             </button>
           )
         })}
       </div>
 
-      {/* Selected Day Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          {formatDateShort(selectedDate)}
-          {isToday(selectedDate) && (
-            <span className="ml-2 text-sm font-normal text-primary">(Today)</span>
-          )}
-        </h2>
+      {/* Selected Day Actions */}
+      <div className="flex items-center justify-between border-t pt-4">
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={goToPreviousDay}
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-sm font-medium text-foreground">
+            {getShortDayName(selectedDate)}, {getMonthName(selectedDate).slice(0, 3)} {getDayNumber(selectedDate)}
+            {isToday(selectedDate) && (
+              <span className="ml-1 text-primary">(Today)</span>
+            )}
+          </span>
+          <button 
+            onClick={goToNextDay}
+            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
         <Button
           size="sm"
           variant="outline"
           onClick={() => setShowAddModal(true)}
+          className="bg-transparent"
         >
           <Plus className="h-4 w-4 mr-1" />
           Add
@@ -287,6 +457,10 @@ export function WeekView({ onBack }: WeekViewProps) {
                         setSelectedTimeBlock(block)
                         setShowSwapModal(true)
                       }}
+                      onPush={() => {
+                        setPushActivity(activity)
+                        setShowPushModal(true)
+                      }}
                       onClick={() => {
                         setSelectedActivity(activity)
                         setSelectedTimeBlock(block)
@@ -316,6 +490,11 @@ export function WeekView({ onBack }: WeekViewProps) {
             setSwapActivity(selectedActivity)
             setShowSwapModal(true)
           }}
+          onPush={() => {
+            setPushActivity(selectedActivity)
+            setSelectedActivity(null)
+            setShowPushModal(true)
+          }}
         />
       )}
 
@@ -335,6 +514,19 @@ export function WeekView({ onBack }: WeekViewProps) {
           targetDate={selectedDate}
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddActivity}
+        />
+      )}
+
+      {showPushModal && (
+        <PushModal
+          activity={pushActivity}
+          incompleteCount={incompleteActivities.length}
+          onClose={() => {
+            setShowPushModal(false)
+            setPushActivity(null)
+          }}
+          onPushSingle={handlePushSingle}
+          onPushAllIncomplete={handlePushAllIncomplete}
         />
       )}
 

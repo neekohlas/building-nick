@@ -3,13 +3,14 @@
 import { useState } from 'react'
 import { TodayView } from '@/components/today-view'
 import { WeekView } from '@/components/week-view'
+import { PlanWeekView } from '@/components/plan-week-view'
 import { LibraryView } from '@/components/library-view'
 import { MenuView } from '@/components/menu-view'
 import { BottomNav, View } from '@/components/bottom-nav'
 import { formatDateFriendly } from '@/lib/date-utils'
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View>('today')
+  const [activeView, setActiveView] = useState<View | 'plan'>('today')
   const today = new Date()
 
   return (
@@ -35,19 +36,25 @@ export default function Home() {
         {activeView === 'week' && (
           <WeekView onBack={() => setActiveView('today')} />
         )}
+        {activeView === 'plan' && (
+          <PlanWeekView 
+            onComplete={() => setActiveView('today')} 
+            onBack={() => setActiveView('menu')}
+          />
+        )}
         {activeView === 'library' && (
           <LibraryView onBack={() => setActiveView('today')} />
         )}
         {activeView === 'menu' && (
           <MenuView 
             onBack={() => setActiveView('today')} 
-            onOpenPlan={() => setActiveView('week')}
+            onOpenPlan={() => setActiveView('plan')}
           />
         )}
       </main>
 
       {/* Bottom Navigation */}
-      <BottomNav activeView={activeView} onViewChange={setActiveView} />
+      <BottomNav activeView={activeView as View} onViewChange={setActiveView} />
     </div>
   )
 }
