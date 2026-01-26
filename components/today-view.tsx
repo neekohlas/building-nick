@@ -84,11 +84,16 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     return newSchedule
   }, [today, dateStr])
 
-  // Load data
+  // Load data - only run once when storage becomes ready
   useEffect(() => {
     if (!storage.isReady) return
 
+    let hasLoaded = false
+
     async function loadData() {
+      if (hasLoaded) return
+      hasLoaded = true
+
       // Get or generate schedule
       let existingSchedule = await storage.getDailySchedule(dateStr)
 
@@ -109,22 +114,24 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
       const stats = await storage.getCompletionStats(7)
 
-      // Set motivation message
-      if (stats.daysWithActivity >= 5) {
-        if (currentStreak > 1) {
-          setMotivation(getStreakMessage(currentStreak))
-        } else {
-          setMotivation(getRandomMessage('morning'))
+      // Set motivation message only if not already set
+      setMotivation(prev => {
+        if (prev) return prev // Don't change if already set
+        
+        if (stats.daysWithActivity >= 5) {
+          if (currentStreak > 1) {
+            return getStreakMessage(currentStreak)
+          }
+          return getRandomMessage('morning')
+        } else if (stats.daysWithActivity > 0) {
+          return Math.random() < 0.3 ? getRandomMessage('countdown') : getRandomMessage('reengagement')
         }
-      } else if (stats.daysWithActivity > 0) {
-        setMotivation(Math.random() < 0.3 ? getRandomMessage('countdown') : getRandomMessage('reengagement'))
-      } else {
-        setMotivation(getRandomMessage('countdown'))
-      }
+        return getRandomMessage('countdown')
+      })
     }
 
     loadData()
-  }, [storage.isReady, dateStr, generateSchedule, storage])
+  }, [storage.isReady, dateStr, generateSchedule])
 
   // Toggle completion
   const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock) => {
