@@ -1,21 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Check, ChevronRight, Calendar, Dumbbell, Briefcase, Brain } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, Dumbbell, Briefcase, Brain, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { 
   ACTIVITIES, 
-  Activity, 
-  CATEGORIES,
-  getEvery2to3DayActivities,
-  getWeekdayActivities,
-  getDailyActivities,
-  getQuickMindBodyActivities
+  CATEGORIES
 } from '@/lib/activities'
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
-import { pickRandom } from '@/lib/messages'
 
 interface PlanWeekViewProps {
   onComplete: () => void
@@ -23,6 +17,16 @@ interface PlanWeekViewProps {
 }
 
 type TimeBlock = 'before9am' | 'beforeNoon' | 'anytime'
+
+// Mind-body activities that can be chosen as a weekly focus
+const MIND_BODY_OPTIONS = [
+  { id: 'breathing', name: 'Breathing Exercises', description: 'Calm and presence through focused breathing' },
+  { id: 'external_orienting', name: 'External Orienting', description: 'Scan your environment mindfully' },
+  { id: 'internal_orienting', name: 'Internal Orienting', description: 'Safe body awareness practice' },
+  { id: 'visualize_movement', name: 'Visualize Movement', description: 'Mental rehearsal of gradual movement' },
+  { id: 'movement_coach', name: 'Movement Coach', description: 'Guided exercise from "Better Movement"' },
+  { id: 'expressive_writing', name: 'Expressive Writing', description: 'Process feelings through writing' },
+]
 
 // Preset schedules for common patterns
 const PRESETS = {
@@ -54,8 +58,9 @@ const PRESETS = {
 
 export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
   const storage = useStorage()
+  const [selectedMindBody, setSelectedMindBody] = useState<string>('breathing')
   const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set(['professional', 'mindfulness']))
-  const [step, setStep] = useState<'select' | 'preview' | 'done'>('select')
+  const [step, setStep] = useState<'mind_body' | 'presets' | 'preview' | 'done'>('mind_body')
   const [weekDates, setWeekDates] = useState<Date[]>([])
   const [generatedSchedules, setGeneratedSchedules] = useState<Record<string, DailySchedule>>({})
 
@@ -83,10 +88,9 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
     })
   }
 
-  // Generate schedules based on selected presets
+  // Generate schedules based on selected mind-body focus and presets
   const generateSchedules = () => {
     const schedules: Record<string, DailySchedule> = {}
-    const quickActivities = getQuickMindBodyActivities()
     
     // Track which days have biking/weights (for 2-3x per week)
     let lastWorkoutDay = -2 // Start so first day can have workout
@@ -104,9 +108,11 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
         }
       }
 
-      // Always add a quick mind-body activity in the morning
-      const quickActivity = pickRandom(quickActivities)
-      schedule.activities.before9am.push(quickActivity.id)
+      // Before 9am: Always the selected mind-body focus activity
+      schedule.activities.before9am.push(selectedMindBody)
+      
+      // Also add stretching as a light physical morning activity
+      schedule.activities.before9am.push('stretching')
 
       // Add activities based on selected presets
       selectedPresets.forEach(presetId => {
@@ -114,15 +120,15 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
         if (!preset) return
 
         if (preset.frequency === 'weekdays' && isWeekdayDate) {
-          // Professional activities on weekdays
-          if (preset.activities.includes('job_followup')) {
-            schedule.activities.before9am.push('job_followup')
-          }
+          // Professional activities on weekdays - moved to appropriate time blocks
           if (preset.activities.includes('coursera_module')) {
             schedule.activities.beforeNoon.push('coursera_module')
           }
           if (preset.activities.includes('job_search')) {
             schedule.activities.anytime.push('job_search')
+          }
+          if (preset.activities.includes('job_followup')) {
+            schedule.activities.anytime.push('job_followup')
           }
         } else if (preset.frequency === 'daily') {
           // Daily activities
@@ -179,6 +185,175 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
         <p className="text-muted-foreground text-center">
           Your next 7 days are ready. Let's build consistency.
         </p>
+      </div>
+    )
+  }
+
+  // Step 1: Mind-Body Selection
+  if (step === 'mind_body') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Step 1 of 2</span>
+          </div>
+          <h2 className="text-xl font-semibold">Morning Mind-Body Focus</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Choose which mind-body exercise to practice each morning this week
+          </p>
+        </div>
+
+        {/* Mind-body options */}
+        <div className="space-y-2">
+          {MIND_BODY_OPTIONS.map(option => {
+            const isSelected = selectedMindBody === option.id
+            
+            return (
+              <button
+                key={option.id}
+                onClick={() => setSelectedMindBody(option.id)}
+                className={cn(
+                  'w-full p-4 rounded-xl border text-left transition-all',
+                  isSelected 
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary' 
+                    : 'border-border bg-card hover:border-primary/50'
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
+                    isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                  )}>
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{option.name}</span>
+                      {isSelected && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {option.description}
+                    </p>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 bg-transparent"
+            onClick={onBack}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={() => setStep('presets')}
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Step 2: Presets Selection
+  if (step === 'presets') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Step 2 of 2</span>
+          </div>
+          <h2 className="text-xl font-semibold">Weekly Focus Areas</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Select up to 3 additional focus areas for the week
+          </p>
+        </div>
+
+        {/* Preset options */}
+        <div className="space-y-3">
+          {Object.values(PRESETS).map(preset => {
+            const isSelected = selectedPresets.has(preset.id)
+            const Icon = preset.icon
+            
+            return (
+              <button
+                key={preset.id}
+                onClick={() => togglePreset(preset.id)}
+                className={cn(
+                  'w-full p-4 rounded-xl border text-left transition-all',
+                  isSelected 
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary' 
+                    : 'border-border bg-card hover:border-primary/50'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
+                    isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                  )}>
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{preset.name}</span>
+                      {isSelected && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {preset.description}
+                    </p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {preset.activities.map(actId => {
+                        const activity = ACTIVITIES[actId]
+                        if (!activity) return null
+                        return (
+                          <span
+                            key={actId}
+                            className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground"
+                          >
+                            {activity.name}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="text-sm text-muted-foreground text-center">
+          {selectedPresets.size}/3 selected
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 bg-transparent"
+            onClick={() => setStep('mind_body')}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Back
+          </Button>
+          <Button
+            className="flex-1"
+            onClick={generateSchedules}
+            disabled={selectedPresets.size === 0}
+          >
+            Preview Week
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
       </div>
     )
   }
@@ -267,8 +442,9 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
           <Button
             variant="outline"
             className="flex-1 bg-transparent"
-            onClick={() => setStep('select')}
+            onClick={() => setStep('presets')}
           >
+            <ChevronLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
           <Button
@@ -282,91 +458,6 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
     )
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Plan Your Week</h2>
-        <p className="text-muted-foreground text-sm mt-1">
-          Select up to 3 focus areas for the next 7 days
-        </p>
-      </div>
-
-      {/* Preset options */}
-      <div className="space-y-3">
-        {Object.values(PRESETS).map(preset => {
-          const isSelected = selectedPresets.has(preset.id)
-          const Icon = preset.icon
-          
-          return (
-            <button
-              key={preset.id}
-              onClick={() => togglePreset(preset.id)}
-              className={cn(
-                'w-full p-4 rounded-xl border text-left transition-all',
-                isSelected 
-                  ? 'border-primary bg-primary/5 ring-2 ring-primary ring-offset-2' 
-                  : 'border-border bg-card hover:border-primary/50'
-              )}
-            >
-              <div className="flex items-start gap-3">
-                <div className={cn(
-                  'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
-                  isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                )}>
-                  <Icon className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{preset.name}</span>
-                    {isSelected && (
-                      <Check className="h-4 w-4 text-primary" />
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    {preset.description}
-                  </p>
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {preset.activities.map(actId => {
-                      const activity = ACTIVITIES[actId]
-                      if (!activity) return null
-                      return (
-                        <span
-                          key={actId}
-                          className="text-xs px-2 py-0.5 rounded bg-muted text-muted-foreground"
-                        >
-                          {activity.name}
-                        </span>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            </button>
-          )
-        })}
-      </div>
-
-      <div className="text-sm text-muted-foreground text-center">
-        {selectedPresets.size}/3 selected
-      </div>
-
-      <div className="flex gap-3">
-        <Button
-          variant="outline"
-          className="flex-1 bg-transparent"
-          onClick={onBack}
-        >
-          Cancel
-        </Button>
-        <Button
-          className="flex-1"
-          onClick={generateSchedules}
-          disabled={selectedPresets.size === 0}
-        >
-          Preview Week
-          <ChevronRight className="h-4 w-4 ml-1" />
-        </Button>
-      </div>
-    </div>
-  )
+  // Fallback - should not reach here
+  return null
 }
