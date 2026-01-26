@@ -174,22 +174,54 @@ function getUrlProperty(prop) {
 }
 
 /**
- * Parse numbered markdown steps into an array
- * Handles formats like:
- * "1. Step one\n2. Step two\n3. Step three"
+ * Parse steps from text into an array
+ * Handles multiple formats:
+ * - Numbered lists: "1. Step one" or "1) Step one"
+ * - Bullet points: "- Step one" or "• Step one" or "* Step one"
+ * - Plain lines (if no list markers found, treat each line as a step)
  */
 function parseStepsFromMarkdown(text) {
   if (!text || typeof text !== 'string') return null;
 
-  // Split by numbered list pattern (e.g., "1. ", "2. ", etc.)
-  const lines = text.split(/\n/).filter(line => line.trim());
+  // Split by newlines and filter empty lines
+  const lines = text.split(/\n/).map(line => line.trim()).filter(line => line);
+
+  if (lines.length === 0) return null;
+
   const steps = [];
 
   for (const line of lines) {
-    // Match lines starting with a number followed by a period or parenthesis
-    const match = line.match(/^\d+[\.\)]\s*(.+)/);
+    // Try numbered list: "1. ", "1) ", "1: "
+    let match = line.match(/^\d+[\.\)\:]\s*(.+)/);
     if (match) {
       steps.push(match[1].trim());
+      continue;
+    }
+
+    // Try bullet points: "- ", "• ", "* ", "· "
+    match = line.match(/^[\-\•\*\·]\s*(.+)/);
+    if (match) {
+      steps.push(match[1].trim());
+      continue;
+    }
+
+    // Try checkbox style: "[ ] " or "[x] "
+    match = line.match(/^\[[ x]\]\s*(.+)/i);
+    if (match) {
+      steps.push(match[1].trim());
+      continue;
+    }
+
+    // If line doesn't match any pattern but we already have steps,
+    // it might be a continuation - append to last step
+    if (steps.length > 0 && !line.match(/^[\d\-\•\*\·\[]/)) {
+      steps[steps.length - 1] += ' ' + line;
+      continue;
+    }
+
+    // Otherwise treat as a standalone step
+    if (line.length > 0) {
+      steps.push(line);
     }
   }
 

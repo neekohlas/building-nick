@@ -359,6 +359,219 @@ async function getSetting(key) {
 }
 
 // ============================================
+// CLOUD SYNC (Notion)
+// ============================================
+
+let syncInProgress = false;
+let lastSyncTime = null;
+
+/**
+ * Sync all local data to Notion cloud
+ */
+async function syncToCloud() {
+  if (syncInProgress) {
+    console.log('[Sync] Sync already in progress');
+    return { success: false, reason: 'in_progress' };
+  }
+
+  syncInProgress = true;
+  console.log('[Sync] Starting cloud sync...');
+
+  try {
+    // Gather all local data
+    const completions = await getAllCompletions();
+    const weeklyPlans = await getAllWeeklyPlans();
+    const dailySchedules = await getAllDailySchedules();
+
+    // Send to sync API
+    const response = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: getUserId(),
+        completions,
+        weeklyPlans,
+        dailySchedules
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Sync failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    lastSyncTime = new Date().toISOString();
+    await saveSetting('lastSyncTime', lastSyncTime);
+
+    console.log('[Sync] Cloud sync complete:', result);
+    return { success: true, ...result };
+
+  } catch (error) {
+    console.error('[Sync] Cloud sync failed:', error);
+    return { success: false, error: error.message };
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+/**
+ * Load data from Notion cloud and merge with local
+ */
+async function syncFromCloud() {
+  if (syncInProgress) {
+    console.log('[Sync] Sync already in progress');
+    return { success: false, reason: 'in_progress' };
+  }
+
+  syncInProgress = true;
+  console.log('[Sync] Loading from cloud...');
+
+  try {
+    const response = await fetch(`/api/sync?userId=${getUserId()}`);
+
+    if (!response.ok) {
+      throw new Error(`Load failed: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Merge cloud completions with local (cloud wins for conflicts)
+    let imported = 0;
+    for (const completion of data.completions || []) {
+      const exists = await isActivityCompleted(completion.date, completion.activityId);
+      if (!exists) {
+        await saveCompletion(completion);
+        imported++;
+      }
+    }
+
+    // Merge weekly plans
+    for (const [weekStart, plan] of Object.entries(data.weeklyPlans || {})) {
+      const localPlan = await getWeeklyPlan(weekStart);
+      if (!localPlan) {
+        await saveWeeklyPlan(weekStart, plan);
+      }
+    }
+
+    // Merge daily schedules
+    for (const [dateStr, schedule] of Object.entries(data.dailySchedules || {})) {
+      const localSchedule = await getDailySchedule(dateStr);
+      if (!localSchedule) {
+        await saveDailySchedule(dateStr, schedule);
+      }
+    }
+
+    lastSyncTime = new Date().toISOString();
+    await saveSetting('lastSyncTime', lastSyncTime);
+
+    console.log('[Sync] Cloud load complete, imported:', imported);
+    return { success: true, imported };
+
+  } catch (error) {
+    console.error('[Sync] Cloud load failed:', error);
+    return { success: false, error: error.message };
+  } finally {
+    syncInProgress = false;
+  }
+}
+
+/**
+ * Full bidirectional sync
+ */
+async function fullSync() {
+  // First load from cloud to get any new data
+  const loadResult = await syncFromCloud();
+
+  // Then push local data to cloud
+  const pushResult = await syncToCloud();
+
+  return {
+    success: loadResult.success && pushResult.success,
+    loadResult,
+    pushResult
+  };
+}
+
+/**
+ * Get all completions from local DB
+ */
+async function getAllCompletions() {
+  return new Promise((resolve, reject) => {
+    const store = getStore(STORES.COMPLETIONS);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Get all weekly plans from local DB
+ */
+async function getAllWeeklyPlans() {
+  return new Promise((resolve, reject) => {
+    const store = getStore(STORES.WEEKLY_PLANS);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const plans = {};
+      for (const plan of request.result) {
+        plans[plan.weekStart] = plan;
+      }
+      resolve(plans);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Get all daily schedules from local DB
+ */
+async function getAllDailySchedules() {
+  return new Promise((resolve, reject) => {
+    const store = getStore(STORES.DAILY_SCHEDULES);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const schedules = {};
+      for (const schedule of request.result) {
+        schedules[schedule.date] = schedule;
+      }
+      resolve(schedules);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Get or create a user ID for sync
+ */
+function getUserId() {
+  let userId = localStorage.getItem('buildingNickUserId');
+  if (!userId) {
+    userId = 'user_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('buildingNickUserId', userId);
+  }
+  return userId;
+}
+
+/**
+ * Get last sync time
+ */
+async function getLastSyncTime() {
+  return await getSetting('lastSyncTime');
+}
+
+/**
+ * Check if sync is available (API reachable)
+ */
+async function isSyncAvailable() {
+  try {
+    const response = await fetch('/api/sync?userId=test', { method: 'HEAD' });
+    return response.ok || response.status === 405; // 405 is OK, means endpoint exists
+  } catch {
+    return false;
+  }
+}
+
+// ============================================
 // UTILITY FUNCTIONS
 // ============================================
 
@@ -417,6 +630,13 @@ if (typeof module !== 'undefined' && module.exports) {
     getSetting,
     formatDate,
     getWeekStart,
-    clearAllData
+    clearAllData,
+    // Cloud sync
+    syncToCloud,
+    syncFromCloud,
+    fullSync,
+    getLastSyncTime,
+    isSyncAvailable,
+    getUserId
   };
 }

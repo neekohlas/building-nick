@@ -150,7 +150,22 @@
 ```
 NOTION_API_KEY=<secret key for Building Nick integration>
 NOTION_DATABASE_ID=2f34ff735e318012b520fe1dcaab691f
+NOTION_SYNC_DATABASE_ID=<ID of sync database for completions/plans>
 ```
+
+## Sync Database Schema (Create in Notion)
+
+Create a new database called "Building Nick Sync" with these properties:
+- **Name** (title) - Auto-generated identifier
+- **User ID** (text) - User identifier for multi-device sync
+- **Type** (select) - Options: "completion", "weekly_plan", "daily_schedule"
+- **Date** (text) - Date string (YYYY-MM-DD)
+- **Activity ID** (text) - For completions
+- **Time Block** (text) - For completions
+- **Custom Name** (text) - For custom activities
+- **Custom Duration** (number) - For custom activities
+- **Completed At** (text) - ISO timestamp
+- **Data** (text) - JSON data for plans/schedules
 
 ---
 

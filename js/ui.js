@@ -1349,9 +1349,39 @@ function setupNavigation() {
     showStatsView();
   });
 
-  elements.menuSync.addEventListener('click', () => {
-    // TODO: Implement cloud sync
-    alert('Cloud sync coming soon! Your data will sync across devices.');
+  elements.menuSync.addEventListener('click', async () => {
+    // Show syncing state
+    const originalText = elements.menuSync.querySelector('.menu-item-title').textContent;
+    elements.menuSync.querySelector('.menu-item-title').textContent = 'Syncing...';
+    elements.menuSync.disabled = true;
+
+    try {
+      const result = await fullSync();
+
+      if (result.success) {
+        elements.menuSync.querySelector('.menu-item-title').textContent = 'Sync Complete!';
+        elements.menuSync.querySelector('.menu-item-subtitle').textContent = `Last synced: just now`;
+
+        // Refresh views
+        await renderDailyPlan();
+        await renderMotivationCard();
+      } else {
+        elements.menuSync.querySelector('.menu-item-title').textContent = 'Sync Failed';
+        setTimeout(() => {
+          elements.menuSync.querySelector('.menu-item-title').textContent = originalText;
+        }, 2000);
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      elements.menuSync.querySelector('.menu-item-title').textContent = 'Sync Failed';
+    }
+
+    elements.menuSync.disabled = false;
+
+    // Reset text after delay
+    setTimeout(() => {
+      elements.menuSync.querySelector('.menu-item-title').textContent = originalText;
+    }, 3000);
   });
 
   elements.menuSettings.addEventListener('click', () => {
