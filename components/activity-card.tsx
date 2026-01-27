@@ -39,6 +39,7 @@ export function ActivityCard({
         'active:scale-[0.98]',
         isCompleted && 'bg-muted/50 opacity-70'
       )}
+      style={{ borderLeftWidth: '4px', borderLeftColor: category.color }}
       onClick={onClick}
     >
       {/* Checkbox */}
@@ -70,7 +71,7 @@ export function ActivityCard({
             <Clock className="h-3.5 w-3.5" />
             {formatDuration(activity.duration)}
           </span>
-          {activity.pairs_with && (
+          {activity.pairsWith && (
             <span className="text-primary text-xs">
               Pairs with workout
             </span>
@@ -80,12 +81,6 @@ export function ActivityCard({
           )}
         </div>
       </div>
-
-      {/* Category indicator */}
-      <div
-        className="h-2 w-2 rounded-full shrink-0"
-        style={{ backgroundColor: category.color }}
-      />
 
       {/* Actions menu */}
       <DropdownMenu>

@@ -13,6 +13,9 @@ import { NextResponse } from 'next/server'
 const NOTION_API_KEY = process.env.NOTION_API_KEY
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID
 
+type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
+type DayType = 'heavy' | 'light' | 'both'
+
 interface NotionActivity {
   id: string
   name: string
@@ -26,6 +29,8 @@ interface NotionActivity {
   weather_dependent?: boolean
   outdoor?: boolean
   weekday_only?: boolean
+  default_time_block?: TimeBlock
+  day_type?: DayType
 }
 
 export async function GET() {
@@ -52,7 +57,7 @@ export async function GET() {
         body: JSON.stringify({
           page_size: 100
         }),
-        next: { revalidate: 3600 } // Cache for 1 hour
+        cache: 'no-store' // Disable caching while debugging
       }
     )
 
@@ -66,8 +71,59 @@ export async function GET() {
     const activities: NotionActivity[] = data.results.map((page: any) => {
       const props = page.properties
 
+      // Parse time block from Notion (e.g., "before9am" -> "before9am")
+      const rawTimeBlock = props['Default Time Block']?.select?.name || ''
+      const rawDayTypeValue = props['Day Type']?.select?.name || ''
+
+      // Debug log for specific activities
+      const activityName = props.Name?.title?.[0]?.plain_text || ''
+      if (activityName.toLowerCase().includes('biking') || activityName.toLowerCase().includes('weight')) {
+        console.log(`Activity "${activityName}": rawTimeBlock="${rawTimeBlock}", rawDayType="${rawDayTypeValue}"`)
+      }
+
+      const timeBlockMap: Record<string, TimeBlock> = {
+        'before6am': 'before6am',
+        'before 6am': 'before6am',
+        'before9am': 'before9am',
+        'before 9am': 'before9am',
+        'before 9 am': 'before9am',
+        'morning': 'before9am',
+        'before12pm': 'before12pm',
+        'before 12pm': 'before12pm',
+        'before noon': 'beforeNoon',
+        'beforenoon': 'beforeNoon',
+        'before3pm': 'before3pm',
+        'before 3pm': 'before3pm',
+        'before 2:30pm': 'before230pm',
+        'before 2:30 pm': 'before230pm',
+        'before230pm': 'before230pm',
+        'afternoon': 'before230pm',
+        'before5pm': 'before5pm',
+        'before 5pm': 'before5pm',
+        'before6pm': 'before6pm',
+        'before 6pm': 'before6pm',
+        'before9pm': 'before9pm',
+        'before 9pm': 'before9pm',
+        'evening': 'before9pm',
+        'before12am': 'before12am',
+        'before 12am': 'before12am',
+        'anytime': 'before9pm',
+        'any time': 'before9pm',
+        'flexible': 'before9pm'
+      }
+      const defaultTimeBlock = timeBlockMap[rawTimeBlock.toLowerCase()] || undefined
+
+      // Parse day type from Notion (already read above as rawDayTypeValue)
+      const rawDayType = rawDayTypeValue
+      const dayTypeMap: Record<string, DayType> = {
+        'heavy': 'heavy',
+        'light': 'light',
+        'both': 'both'
+      }
+      const dayType = dayTypeMap[rawDayType.toLowerCase()] || undefined
+
       return {
-        id: props.ID?.rich_text?.[0]?.plain_text || page.id,
+        id: props['ID']?.rich_text?.[0]?.plain_text || props['userDefined:ID']?.rich_text?.[0]?.plain_text || page.id,
         name: props.Name?.title?.[0]?.plain_text || 'Untitled',
         description: props.Description?.rich_text?.[0]?.plain_text || '',
         category: props.Category?.select?.name?.toLowerCase().replace('-', '_') || 'mind_body',
@@ -78,7 +134,9 @@ export async function GET() {
         video: props.Video?.url || undefined,
         weather_dependent: props['Weather Dependent']?.checkbox || false,
         outdoor: props.Outdoor?.checkbox || false,
-        weekday_only: props['Weekday Only']?.checkbox || false
+        weekday_only: props['Weekday Only']?.checkbox || false,
+        default_time_block: defaultTimeBlock,
+        day_type: dayType
       }
     })
 

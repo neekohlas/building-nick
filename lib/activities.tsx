@@ -3,8 +3,19 @@
  * All habits and activities available in the app
  */
 
-export type Category = 'mind_body' | 'physical' | 'mindfulness' | 'professional'
+export type Category = 'mind_body' | 'physical' | 'professional'
 export type Frequency = 'daily' | 'weekdays' | 'every_2_3_days' | 'weekly' | 'as_needed'
+export type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
+export type DayType = 'heavy' | 'light' | 'both'
+
+// New types for week planning flow
+export type PlanFrequency = 'heavy' | 'light' | 'everyday' | 'weekdays' | 'weekends'
+
+export interface ActivitySelection {
+  activityId: string
+  frequency: PlanFrequency
+  variantId?: string  // If user picked a specific variant
+}
 
 export interface Activity {
   id: string
@@ -15,11 +26,18 @@ export interface Activity {
   quick?: boolean
   instructions: string
   link?: string
+  video?: string              // Video URL for guided activities
   frequency?: Frequency
   weekdayOnly?: boolean
   weatherDependent?: boolean
   outdoor?: boolean
   pairsWith?: string
+  defaultTimeBlock?: TimeBlock  // Default time of day for this activity
+  dayType?: DayType            // Whether activity is for heavy days, light days, or both
+  // Generic activity support
+  isGeneric?: boolean           // true for parent activities like 'run', 'walk'
+  variants?: string[]           // e.g., ['run_green_lake', 'run_neighborhood']
+  parentActivityId?: string     // e.g., 'run' for run_green_lake
 }
 
 export const ACTIVITIES: Record<string, Activity> = {
@@ -161,6 +179,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     weatherDependent: false,
     frequency: 'every_2_3_days',
     pairsWith: 'dumbbell_presses',
+    defaultTimeBlock: 'before9am',
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Set up the stationary bike with proper seat height</li>
@@ -180,6 +199,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     weatherDependent: false,
     frequency: 'every_2_3_days',
     pairsWith: 'biking',
+    defaultTimeBlock: 'before9am',
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Choose a weight that allows 10-12 reps with good form</li>
@@ -189,32 +209,108 @@ export const ACTIVITIES: Record<string, Activity> = {
 </ol>
 <p>Focus on controlled movements. Quality over quantity.</p>`
   },
+
+  // Running - generic parent activity
   run: {
     id: 'run',
-    name: 'Run',
-    description: 'Outdoor running session. Great for cardio, mood, and getting outside.',
+    name: 'Running',
+    description: 'Running at your preferred location. Choose a specific route or leave flexible.',
     category: 'physical',
     duration: 30,
     weatherDependent: true,
     outdoor: true,
+    frequency: 'every_2_3_days',
+    defaultTimeBlock: 'before9am',
+    isGeneric: true,
+    variants: ['run_green_lake', 'run_neighborhood'],
     instructions: `<h4>Instructions</h4>
 <ol>
+<li>Put on running shoes and step outside</li>
 <li>Warm up with 5 minutes of brisk walking</li>
 <li>Run at a conversational pace</li>
 <li>Alternate running and walking as needed</li>
 <li>Cool down with 5 minutes of walking</li>
-<li>Stretch major muscle groups afterward</li>
 </ol>
-<p>Don't worry about pace or distance. The goal is enjoyment and consistency.</p>`
+<p>You can swap this to a specific location in Today view.</p>`
   },
-  green_lake_walk: {
-    id: 'green_lake_walk',
-    name: 'Walk around Green Lake',
+
+  // Running - with location variants
+  run_green_lake: {
+    id: 'run_green_lake',
+    name: 'Run (Green Lake)',
+    description: 'Running loop around Green Lake. Scenic path, about 2.8 miles.',
+    category: 'physical',
+    duration: 30,
+    weatherDependent: true,
+    outdoor: true,
+    defaultTimeBlock: 'before9am',
+    parentActivityId: 'run',
+    instructions: `<h4>Instructions</h4>
+<ol>
+<li>Head to Green Lake</li>
+<li>Warm up with 5 minutes of brisk walking</li>
+<li>Run at a conversational pace around the lake</li>
+<li>Alternate running and walking as needed</li>
+<li>Cool down with 5 minutes of walking</li>
+</ol>
+<p>The lake loop is about 2.8 miles. Beautiful scenery makes the run enjoyable.</p>`
+  },
+  run_neighborhood: {
+    id: 'run_neighborhood',
+    name: 'Run (Neighborhood)',
+    description: 'Running through the neighborhood. Convenient and flexible distance.',
+    category: 'physical',
+    duration: 30,
+    weatherDependent: true,
+    outdoor: true,
+    defaultTimeBlock: 'before9am',
+    parentActivityId: 'run',
+    instructions: `<h4>Instructions</h4>
+<ol>
+<li>Put on running shoes and step outside</li>
+<li>Warm up with 5 minutes of brisk walking</li>
+<li>Run at a conversational pace</li>
+<li>Explore different streets and routes</li>
+<li>Cool down with 5 minutes of walking</li>
+</ol>
+<p>No set route needed. Just run where you feel like going.</p>`
+  },
+
+  // Walking - generic parent activity
+  walk: {
+    id: 'walk',
+    name: 'Walking',
+    description: 'Walking at your preferred location. Choose a specific route or leave flexible.',
+    category: 'physical',
+    duration: 30,
+    weatherDependent: true,
+    outdoor: true,
+    frequency: 'every_2_3_days',
+    defaultTimeBlock: 'before230pm',
+    isGeneric: true,
+    variants: ['walk_green_lake', 'walk_neighborhood'],
+    instructions: `<h4>Instructions</h4>
+<ol>
+<li>Put on comfortable shoes</li>
+<li>Step outside and pick a direction</li>
+<li>Walk at a comfortable pace</li>
+<li>Notice your surroundings</li>
+<li>Turn around when ready</li>
+</ol>
+<p>You can swap this to a specific location in Today view.</p>`
+  },
+
+  // Walking - with location variants (afternoon default)
+  walk_green_lake: {
+    id: 'walk_green_lake',
+    name: 'Walk (Green Lake)',
     description: 'Scenic walk around Green Lake. About 2.8 miles, mostly flat path.',
     category: 'physical',
     duration: 45,
     weatherDependent: true,
     outdoor: true,
+    defaultTimeBlock: 'before230pm',
+    parentActivityId: 'walk',
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Drive or bike to Green Lake</li>
@@ -225,14 +321,16 @@ export const ACTIVITIES: Record<string, Activity> = {
 </ol>
 <p>This is as much about mental refreshment as physical exercise.</p>`
   },
-  neighborhood_walk: {
-    id: 'neighborhood_walk',
-    name: 'Neighborhood Walk',
+  walk_neighborhood: {
+    id: 'walk_neighborhood',
+    name: 'Walk (Neighborhood)',
     description: 'Walk around the neighborhood. Simple, accessible, and effective.',
     category: 'physical',
     duration: 30,
     weatherDependent: true,
     outdoor: true,
+    defaultTimeBlock: 'before230pm',
+    parentActivityId: 'walk',
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Put on comfortable shoes</li>
@@ -242,24 +340,6 @@ export const ACTIVITIES: Record<string, Activity> = {
 <li>Notice your surroundings</li>
 </ol>
 <p>No destination needed. The walk itself is the point.</p>`
-  },
-
-  // Mindfulness
-  lin_health_activity: {
-    id: 'lin_health_activity',
-    name: 'Lin Health Activity',
-    description: 'Complete 1 activity in the Lin Health app.',
-    category: 'mindfulness',
-    duration: 2,
-    frequency: 'daily',
-    instructions: `<h4>Instructions</h4>
-<ol>
-<li>Open the Lin Health app</li>
-<li>Check your daily recommended activities</li>
-<li>Choose one activity to complete</li>
-<li>Follow the guided instructions in the app</li>
-</ol>
-<p>Consistency matters more than perfection. Even 2 minutes counts.</p>`
   },
 
   // Professional (weekdays only)
@@ -331,11 +411,6 @@ export const CATEGORIES: Record<Category, { id: Category; name: string; color: s
     name: 'Physical Exercise',
     color: '#10B981'
   },
-  mindfulness: {
-    id: 'mindfulness',
-    name: 'Mindfulness',
-    color: '#06B6D4'
-  },
   professional: {
     id: 'professional',
     name: 'Professional Goals',
@@ -388,16 +463,73 @@ export function getDailyActivities(): Activity[] {
   return Object.values(ACTIVITIES).filter(a => a.frequency === 'daily')
 }
 
-// Get all activities suitable for week planning (excludes quick mind-body)
+// Get all activities suitable for week planning (excludes quick mind-body and variant activities)
 export function getPlanableActivities(): Activity[] {
-  return Object.values(ACTIVITIES).filter(a => 
-    // Physical activities with frequency
-    (a.category === 'physical' && a.frequency) ||
-    // Professional activities (weekday only)
-    a.category === 'professional' ||
-    // Daily mindfulness
-    (a.category === 'mindfulness' && a.frequency === 'daily') ||
-    // Longer mind-body activities
-    (a.category === 'mind_body' && !a.quick)
+  return Object.values(ACTIVITIES).filter(a =>
+    // Exclude variants - we show generic parent activities instead
+    !a.parentActivityId &&
+    (
+      // Physical activities with frequency
+      (a.category === 'physical' && a.frequency) ||
+      // Professional activities (weekday only)
+      a.category === 'professional' ||
+      // Longer mind-body activities
+      (a.category === 'mind_body' && !a.quick)
+    )
   )
+}
+
+// Get generic activities (activities that have variants)
+export function getGenericActivities(): Activity[] {
+  return Object.values(ACTIVITIES).filter(a => a.isGeneric)
+}
+
+// Get variants for a generic activity
+export function getVariantsForActivity(activityId: string): Activity[] {
+  const activity = ACTIVITIES[activityId]
+  if (!activity?.variants) return []
+  return activity.variants.map(id => ACTIVITIES[id]).filter(Boolean)
+}
+
+// Check if an activity is a variant of a generic activity
+export function isVariantActivity(activityId: string): boolean {
+  return !!ACTIVITIES[activityId]?.parentActivityId
+}
+
+// Get the parent generic activity for a variant
+export function getParentActivity(activityId: string): Activity | undefined {
+  const activity = ACTIVITIES[activityId]
+  if (!activity?.parentActivityId) return undefined
+  return ACTIVITIES[activity.parentActivityId]
+}
+
+// Get walking activity variants (for location selection)
+export function getWalkingActivities(): Activity[] {
+  return [
+    ACTIVITIES.walk_green_lake,
+    ACTIVITIES.walk_neighborhood
+  ].filter(Boolean) as Activity[]
+}
+
+// Get running activity variants (for location selection)
+export function getRunningActivities(): Activity[] {
+  return [
+    ACTIVITIES.run_green_lake,
+    ACTIVITIES.run_neighborhood
+  ].filter(Boolean) as Activity[]
+}
+
+// Get activities by their default time block
+export function getActivitiesByTimeBlock(timeBlock: TimeBlock): Activity[] {
+  return Object.values(ACTIVITIES).filter(a => a.defaultTimeBlock === timeBlock)
+}
+
+// Get morning activities (before 9am)
+export function getMorningActivities(): Activity[] {
+  return getActivitiesByTimeBlock('before9am')
+}
+
+// Get afternoon activities (before 2:30pm)
+export function getAfternoonActivities(): Activity[] {
+  return getActivitiesByTimeBlock('before230pm')
 }

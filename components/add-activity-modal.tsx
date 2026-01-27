@@ -3,33 +3,44 @@
 import { useState } from 'react'
 import { X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAllActivities, Activity, CATEGORIES, Category } from '@/lib/activities'
+import { getAllActivities, Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
 import { formatDuration, formatDateShort } from '@/lib/date-utils'
 
 interface AddActivityModalProps {
   targetDate: Date
   onClose: () => void
-  onAdd: (activityId: string, timeBlock: 'before9am' | 'beforeNoon' | 'anytime') => void
+  onAdd: (activityId: string, timeBlock: TimeBlock) => void
 }
 
 const FILTERS: { value: 'all' | Category; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'mind_body', label: 'Mind-Body' },
   { value: 'physical', label: 'Physical' },
-  { value: 'mindfulness', label: 'Mindfulness' },
   { value: 'professional', label: 'Professional' }
 ]
 
-const TIME_BLOCKS: { value: 'before9am' | 'beforeNoon' | 'anytime'; label: string }[] = [
+const TIME_BLOCKS: { value: TimeBlock; label: string }[] = [
+  { value: 'before6am', label: 'Before 6 AM' },
   { value: 'before9am', label: 'Before 9 AM' },
   { value: 'beforeNoon', label: 'Before Noon' },
-  { value: 'anytime', label: 'Anytime' }
+  { value: 'before230pm', label: 'Afternoon' },
+  { value: 'before5pm', label: 'Before 5 PM' },
+  { value: 'before9pm', label: 'Before 9 PM' }
 ]
 
 export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModalProps) {
   const [filter, setFilter] = useState<'all' | Category>('all')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
-  const [selectedTimeBlock, setSelectedTimeBlock] = useState<'before9am' | 'beforeNoon' | 'anytime'>('anytime')
+  const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock>('before9pm')
+
+  // When selecting an activity, auto-set its preferred time block
+  const handleSelectActivity = (activity: Activity) => {
+    setSelectedActivity(activity)
+    // Use the activity's default time block if set, otherwise keep current selection
+    if (activity.defaultTimeBlock) {
+      setSelectedTimeBlock(activity.defaultTimeBlock)
+    }
+  }
 
   const activities = getAllActivities().filter(
     a => filter === 'all' || a.category === filter
@@ -93,7 +104,7 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
             return (
               <button
                 key={activity.id}
-                onClick={() => setSelectedActivity(activity)}
+                onClick={() => handleSelectActivity(activity)}
                 className={cn(
                   'w-full text-left rounded-xl border p-4 transition-all',
                   isSelected

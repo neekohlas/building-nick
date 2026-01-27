@@ -21,8 +21,11 @@ import {
   shouldShowProfessionalGoals,
   formatDateShort
 } from '@/lib/date-utils'
-import { Activity, ACTIVITIES, getQuickMindBodyActivities, getPhysicalActivities } from '@/lib/activities'
+import { Activity, getQuickMindBodyActivities, getPhysicalActivities } from '@/lib/activities'
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
+import { useActivities } from '@/hooks/use-activities'
+import { useWeather, getWeatherEmoji, formatTemp, WeatherDay } from '@/hooks/use-weather'
+import { WeatherDetailModal } from './weather-detail-modal'
 import { pickRandom } from '@/lib/messages'
 import { Button } from '@/components/ui/button'
 
@@ -30,10 +33,12 @@ interface WeekViewProps {
   onBack: () => void
 }
 
-type TimeBlock = 'before9am' | 'beforeNoon' | 'anytime'
+type TimeBlock = 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'before5pm' | 'before9pm'
 
 export function WeekView({ onBack }: WeekViewProps) {
   const storage = useStorage()
+  const { getActivity } = useActivities()
+  const { getWeatherForDate, isLoading: weatherLoading, locationName } = useWeather()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [visibleDates, setVisibleDates] = useState<Date[]>([])
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
@@ -50,6 +55,8 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showPushModal, setShowPushModal] = useState(false)
   const [pushActivity, setPushActivity] = useState<Activity | null>(null)
+  const [showWeatherDetail, setShowWeatherDetail] = useState(false)
+  const [weatherDetailData, setWeatherDetailData] = useState<WeatherDay | null>(null)
 
   // Initialize extended dates for scrolling (2 weeks before and after)
   useEffect(() => {
@@ -80,9 +87,12 @@ export function WeekView({ onBack }: WeekViewProps) {
     const newSchedule: DailySchedule = {
       date: dateStr,
       activities: {
+        before6am: [],
         before9am: [],
         beforeNoon: [],
-        anytime: []
+        before230pm: [],
+        before5pm: [],
+        before9pm: []
       }
     }
 
@@ -106,13 +116,14 @@ export function WeekView({ onBack }: WeekViewProps) {
       newSchedule.activities.beforeNoon.push('coursera_module')
     }
 
-    // Anytime: Lin Health and professional tasks
-    newSchedule.activities.anytime.push('lin_health_activity')
-
+    // Before 5pm: Professional tasks
     if (isProfessionalDay) {
-      newSchedule.activities.anytime.push('job_search')
-      newSchedule.activities.anytime.push('job_followup')
+      newSchedule.activities.before5pm.push('job_search')
+      newSchedule.activities.before5pm.push('job_followup')
     }
+
+    // Before 9pm: Lin Health activity
+    newSchedule.activities.before9pm.push('lin_health_education')
 
     return newSchedule
   }
@@ -123,9 +134,12 @@ export function WeekView({ onBack }: WeekViewProps) {
 
     async function loadSchedule() {
       const dateStr = formatDateISO(selectedDate)
+      console.log('WeekView: Loading schedule for', dateStr)
       let existingSchedule = await storage.getDailySchedule(dateStr)
+      console.log('WeekView: Existing schedule:', existingSchedule)
 
       if (!existingSchedule) {
+        console.log('WeekView: No schedule found, generating default')
         existingSchedule = generateSchedule(selectedDate)
         await storage.saveDailySchedule(existingSchedule)
       }
@@ -137,7 +151,8 @@ export function WeekView({ onBack }: WeekViewProps) {
     }
 
     loadSchedule()
-  }, [storage.isReady, selectedDate, storage])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storage.isReady, selectedDate])
 
   // Navigate days
   const goToPreviousDay = () => {
@@ -263,7 +278,7 @@ export function WeekView({ onBack }: WeekViewProps) {
     if (!tomorrowSchedule) {
       tomorrowSchedule = {
         date: tomorrowStr,
-        activities: { before9am: [], beforeNoon: [], anytime: [] }
+        activities: { before6am: [], before9am: [], beforeNoon: [], before230pm: [], before5pm: [], before9pm: [] }
       }
     }
     tomorrowSchedule.activities[activityTimeBlock] = [
@@ -287,15 +302,18 @@ export function WeekView({ onBack }: WeekViewProps) {
     if (!tomorrowSchedule) {
       tomorrowSchedule = {
         date: tomorrowStr,
-        activities: { before9am: [], beforeNoon: [], anytime: [] }
+        activities: { before6am: [], before9am: [], beforeNoon: [], before230pm: [], before5pm: [], before9pm: [] }
       }
     }
 
     // Build new schedules
     const newTodayActivities: DailySchedule['activities'] = {
+      before6am: [],
       before9am: [],
       beforeNoon: [],
-      anytime: []
+      before230pm: [],
+      before5pm: [],
+      before9pm: []
     }
 
     for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
@@ -364,6 +382,7 @@ export function WeekView({ onBack }: WeekViewProps) {
           const isSelected = formatDateISO(date) === formatDateISO(selectedDate)
           const isTodayDate = isToday(date)
           const dayName = getShortDayName(date).toUpperCase()
+          const dayWeather = getWeatherForDate(formatDateISO(date))
 
           return (
             <button
@@ -389,6 +408,12 @@ export function WeekView({ onBack }: WeekViewProps) {
               )}>
                 {getDayNumber(date)}
               </div>
+              {dayWeather && (
+                <div className="flex items-center gap-0.5 mt-1">
+                  <span className="text-xs">{getWeatherEmoji(dayWeather.weather.main, dayWeather.weather.id)}</span>
+                  <span className="text-[10px] text-muted-foreground">{formatTemp(dayWeather.temp.max)}</span>
+                </div>
+              )}
             </button>
           )
         })}
@@ -397,19 +422,40 @@ export function WeekView({ onBack }: WeekViewProps) {
       {/* Selected Day Actions */}
       <div className="flex items-center justify-between border-t pt-4">
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={goToPreviousDay}
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-medium text-foreground">
-            {getShortDayName(selectedDate)}, {getMonthName(selectedDate).slice(0, 3)} {getDayNumber(selectedDate)}
-            {isToday(selectedDate) && (
-              <span className="ml-1 text-primary">(Today)</span>
-            )}
-          </span>
-          <button 
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {getShortDayName(selectedDate)}, {getMonthName(selectedDate).slice(0, 3)} {getDayNumber(selectedDate)}
+              {isToday(selectedDate) && (
+                <span className="ml-1 text-primary">(Today)</span>
+              )}
+            </span>
+            {(() => {
+              const selectedWeather = getWeatherForDate(formatDateISO(selectedDate))
+              if (!selectedWeather) return null
+              return (
+                <button
+                  onClick={() => {
+                    setWeatherDetailData(selectedWeather)
+                    setShowWeatherDetail(true)
+                  }}
+                  className="text-xs text-muted-foreground flex items-center gap-1 hover:bg-muted px-1.5 py-0.5 rounded transition-colors"
+                >
+                  {getWeatherEmoji(selectedWeather.weather.main, selectedWeather.weather.id)}
+                  {formatTemp(selectedWeather.temp.min)}-{formatTemp(selectedWeather.temp.max)}
+                  {selectedWeather.pop > 0.2 && (
+                    <span className="text-blue-500">{Math.round(selectedWeather.pop * 100)}%</span>
+                  )}
+                </button>
+              )
+            })()}
+          </div>
+          <button
             onClick={goToNextDay}
             className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
           >
@@ -430,19 +476,22 @@ export function WeekView({ onBack }: WeekViewProps) {
       {/* Activities for Selected Day */}
       {schedule && (
         <div className="space-y-6">
-          {(['before9am', 'beforeNoon', 'anytime'] as TimeBlock[]).map(block => {
-            const activities = schedule.activities[block]
+          {(['before6am', 'before9am', 'beforeNoon', 'before230pm', 'before5pm', 'before9pm'] as TimeBlock[]).map(block => {
+            const activities = schedule.activities[block] || []
             if (activities.length === 0) return null
 
             return (
               <div key={block} className="space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                  {block === 'before6am' && 'Before 6 AM'}
                   {block === 'before9am' && 'Before 9 AM'}
                   {block === 'beforeNoon' && 'Before Noon'}
-                  {block === 'anytime' && 'Anytime'}
+                  {block === 'before230pm' && 'Afternoon'}
+                  {block === 'before5pm' && 'Before 5 PM'}
+                  {block === 'before9pm' && 'Before 9 PM'}
                 </h3>
                 {activities.map(activityId => {
-                  const activity = ACTIVITIES[activityId]
+                  const activity = getActivity(activityId)
                   if (!activity) return null
 
                   return (
@@ -534,6 +583,18 @@ export function WeekView({ onBack }: WeekViewProps) {
         show={showCelebration}
         onComplete={() => setShowCelebration(false)}
       />
+
+      {/* Weather Detail Modal */}
+      {showWeatherDetail && weatherDetailData && (
+        <WeatherDetailModal
+          weather={weatherDetailData}
+          locationName={locationName}
+          onClose={() => {
+            setShowWeatherDetail(false)
+            setWeatherDetailData(null)
+          }}
+        />
+      )}
     </div>
   )
 }

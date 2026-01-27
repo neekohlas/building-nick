@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Check } from 'lucide-react'
 import { getRandomMessage } from '@/lib/messages'
 
@@ -11,14 +11,20 @@ interface CelebrationProps {
 
 export function Celebration({ show, onComplete }: CelebrationProps) {
   const [message, setMessage] = useState('')
+  const onCompleteRef = useRef(onComplete)
+
+  // Keep the ref updated without triggering the effect
+  useEffect(() => {
+    onCompleteRef.current = onComplete
+  }, [onComplete])
 
   useEffect(() => {
     if (show) {
       setMessage(getRandomMessage('completion'))
-      const timer = setTimeout(onComplete, 1500)
+      const timer = setTimeout(() => onCompleteRef.current(), 1500)
       return () => clearTimeout(timer)
     }
-  }, [show, onComplete])
+  }, [show]) // Only depend on show, not onComplete
 
   if (!show) return null
 

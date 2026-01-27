@@ -1,7 +1,11 @@
 'use client'
 
-import { CalendarDays, BarChart3, RefreshCw, Settings, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { CalendarDays, BarChart3, RefreshCw, Settings, ChevronRight, MapPin, Database } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useWeather } from '@/hooks/use-weather'
+import { useActivities } from '@/hooks/use-activities'
+import { LocationModal } from './location-modal'
 
 interface MenuViewProps {
   onBack: () => void
@@ -17,12 +21,45 @@ interface MenuItem {
 }
 
 export function MenuView({ onBack, onOpenPlan }: MenuViewProps) {
+  const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
+  const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
+  const [showLocationModal, setShowLocationModal] = useState(false)
+
+  // Format last sync time
+  const formatSyncTime = (isoString: string | null) => {
+    if (!isoString) return 'Never synced'
+    const date = new Date(isoString)
+    return `Last synced ${date.toLocaleDateString()} at ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  }
+
+  const handleSyncNotion = async () => {
+    const result = await syncFromNotion()
+    if (result.success) {
+      alert(`Synced ${result.count} activities from Notion!`)
+    } else {
+      alert(`Sync failed: ${result.message}`)
+    }
+  }
+
   const menuItems: MenuItem[] = [
     {
       icon: CalendarDays,
       label: 'Plan Next 7 Days',
       description: 'Set your focus and schedule activities',
       onClick: onOpenPlan
+    },
+    {
+      icon: MapPin,
+      label: 'Weather Location',
+      description: locationName || (hasLocation ? 'Using device location' : 'Set your location for weather'),
+      onClick: () => setShowLocationModal(true)
+    },
+    {
+      icon: Database,
+      label: 'Sync from Notion',
+      description: source === 'notion' ? formatSyncTime(lastSyncTime) : (source === 'cached' ? formatSyncTime(lastSyncTime) : 'Using local activities'),
+      onClick: handleSyncNotion,
+      disabled: isSyncing
     },
     {
       icon: BarChart3,
@@ -86,6 +123,16 @@ export function MenuView({ onBack, onOpenPlan }: MenuViewProps) {
       <p className="text-xs text-center text-muted-foreground">
         Statistics, Sync, and Settings coming soon in future updates.
       </p>
+
+      {/* Location Modal */}
+      {showLocationModal && (
+        <LocationModal
+          currentLocation={locationName}
+          onClose={() => setShowLocationModal(false)}
+          onUpdateLocation={updateLocation}
+          onResetLocation={resetLocation}
+        />
+      )}
     </div>
   )
 }

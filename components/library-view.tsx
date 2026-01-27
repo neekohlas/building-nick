@@ -15,7 +15,6 @@ const FILTERS: { value: 'all' | Category; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'mind_body', label: 'Mind-Body' },
   { value: 'physical', label: 'Physical' },
-  { value: 'mindfulness', label: 'Mindfulness' },
   { value: 'professional', label: 'Professional' }
 ]
 
