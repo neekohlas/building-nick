@@ -34,8 +34,13 @@ interface NotionActivity {
 }
 
 export async function GET() {
+  console.log('Activities API called')
+  console.log('NOTION_API_KEY present:', !!NOTION_API_KEY)
+  console.log('NOTION_DATABASE_ID present:', !!NOTION_DATABASE_ID)
+
   // If Notion is not configured, return empty array (will use local fallback)
   if (!NOTION_API_KEY || !NOTION_DATABASE_ID) {
+    console.log('Notion not configured, returning local fallback')
     return NextResponse.json({
       success: true,
       source: 'local',
@@ -45,6 +50,12 @@ export async function GET() {
   }
 
   try {
+    console.log('Fetching from Notion database:', NOTION_DATABASE_ID)
+
+    // Add timeout using AbortController
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 second timeout
+
     const response = await fetch(
       `https://api.notion.com/v1/databases/${NOTION_DATABASE_ID}/query`,
       {
@@ -57,12 +68,18 @@ export async function GET() {
         body: JSON.stringify({
           page_size: 100
         }),
-        cache: 'no-store' // Disable caching while debugging
+        cache: 'no-store', // Disable caching while debugging
+        signal: controller.signal
       }
     )
 
+    clearTimeout(timeoutId)
+    console.log('Notion response status:', response.status)
+
     if (!response.ok) {
-      throw new Error(`Notion API error: ${response.status}`)
+      const errorText = await response.text()
+      console.error('Notion API error response:', errorText)
+      throw new Error(`Notion API error: ${response.status} - ${errorText}`)
     }
 
     const data = await response.json()
@@ -148,6 +165,16 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Error fetching from Notion:', error)
+
+    // Check for abort (timeout)
+    if (error instanceof Error && error.name === 'AbortError') {
+      return NextResponse.json({
+        success: false,
+        source: 'local',
+        activities: [],
+        error: 'Notion API request timed out after 8 seconds'
+      }, { status: 504 })
+    }
 
     return NextResponse.json({
       success: false,

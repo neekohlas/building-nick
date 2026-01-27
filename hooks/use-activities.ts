@@ -111,12 +111,18 @@ export function useActivities() {
 
   // Sync from Notion (manual trigger)
   const syncFromNotion = useCallback(async () => {
+    console.log('syncFromNotion called')
+
     try {
       setIsSyncing(true)
       setError(null)
 
+      console.log('Fetching /api/activities...')
       const response = await fetch('/api/activities')
+      console.log('Response status:', response.status)
+
       const data: NotionApiResponse = await response.json()
+      console.log('Response data:', data)
 
       if (data.success && data.source === 'notion' && data.activities.length > 0) {
         // Convert Notion activities to our format
