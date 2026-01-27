@@ -26,12 +26,13 @@ export function ActivityDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[85vh] overflow-hidden rounded-2xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
+        className="w-full sm:max-w-lg max-h-[80dvh] sm:max-h-[85vh] overflow-hidden rounded-t-2xl sm:rounded-2xl bg-card animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: 'calc(100dvh - 80px)' }}
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4">
