@@ -1,8 +1,8 @@
 'use client'
 
-import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock } from 'lucide-react'
+import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Activity, CATEGORIES } from '@/lib/activities'
+import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import {
   DropdownMenu,
@@ -31,6 +31,14 @@ export function ActivityCard({
 }: ActivityCardProps) {
   const category = CATEGORIES[activity.category]
 
+  // Get the left border color - for mind_body, use mindBodyType gradient if available
+  const getBorderColor = () => {
+    if (activity.category === 'mind_body' && activity.mindBodyType) {
+      return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
+    }
+    return category.color
+  }
+
   return (
     <div
       className={cn(
@@ -39,7 +47,7 @@ export function ActivityCard({
         'active:scale-[0.98]',
         isCompleted && 'bg-muted/50 opacity-70'
       )}
-      style={{ borderLeftWidth: '4px', borderLeftColor: category.color }}
+      style={{ borderLeftWidth: '4px', borderLeftColor: getBorderColor() }}
       onClick={onClick}
     >
       {/* Checkbox */}
@@ -75,6 +83,9 @@ export function ActivityCard({
             <span className="text-primary text-xs">
               Pairs with workout
             </span>
+          )}
+          {activity.video && (
+            <Play className="h-3 w-3" />
           )}
           {activity.link && (
             <ExternalLink className="h-3 w-3" />

@@ -8,13 +8,27 @@ export type Frequency = 'daily' | 'weekdays' | 'every_2_3_days' | 'weekly' | 'as
 export type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
 export type DayType = 'heavy' | 'light' | 'both'
 
+// Mind-body spectrum: 1 = emotional/cognitive, 3 = mind-focused, 5 = movement-based
+// Used for visual gradient indicator on activity cards
+export type MindBodyType = 1 | 2 | 3 | 4 | 5
+
+// Colors for mind-body spectrum gradient (warm to cool)
+export const MIND_BODY_COLORS: Record<MindBodyType, string> = {
+  1: '#F59E0B', // Amber - emotional/writing
+  2: '#A855F7', // Purple - mind-based with some emotion
+  3: '#8B5CF6', // Violet - balanced mind-body (default)
+  4: '#6366F1', // Indigo - movement with mind focus
+  5: '#14B8A6', // Teal - primarily physical movement
+}
+
 // New types for week planning flow
-export type PlanFrequency = 'heavy' | 'light' | 'everyday' | 'weekdays' | 'weekends'
+export type PlanFrequency = 'heavy' | 'light' | 'everyday' | 'weekdays' | 'weekends' | 'custom'
 
 export interface ActivitySelection {
   activityId: string
   frequency: PlanFrequency
   variantId?: string  // If user picked a specific variant
+  customDays?: string[]  // ISO date strings for custom frequency (e.g., ['2024-01-15', '2024-01-17'])
 }
 
 export interface Activity {
@@ -34,6 +48,10 @@ export interface Activity {
   pairsWith?: string
   defaultTimeBlock?: TimeBlock  // Default time of day for this activity
   dayType?: DayType            // Whether activity is for heavy days, light days, or both
+  favorite?: boolean           // User-marked favorite activities (synced from Notion)
+  sortOrder?: number           // Custom sort order from Notion (lower numbers appear first)
+  // Mind-body spectrum for visual indicator (1=emotional, 3=mind, 5=movement)
+  mindBodyType?: MindBodyType  // Only used for mind_body category activities
   // Generic activity support
   isGeneric?: boolean           // true for parent activities like 'run', 'walk'
   variants?: string[]           // e.g., ['run_green_lake', 'run_neighborhood']
@@ -49,6 +67,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 2,
     quick: true,
+    mindBodyType: 2, // Mind-based with some emotional content
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Open the Lin Health app</li>
@@ -64,6 +83,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 3,
     quick: true,
+    mindBodyType: 3, // Balanced mind-body
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Find a comfortable seated or lying position</li>
@@ -82,6 +102,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 3,
     quick: true,
+    mindBodyType: 2, // Mind-based sensory awareness
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Look around the room slowly</li>
@@ -100,6 +121,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 5,
     quick: true,
+    mindBodyType: 3, // Body awareness (mind-body balanced)
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Sit or lie comfortably</li>
@@ -118,6 +140,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 5,
     quick: true,
+    mindBodyType: 4, // Movement-focused but still mental
     instructions: `<h4>Instructions</h4>
 <ol>
 <li>Close your eyes and relax</li>
@@ -138,6 +161,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 15,
     quick: false,
+    mindBodyType: 5, // Movement-based
     link: 'https://claude.ai/project/019b66b5-b909-7456-a083-12965209e207',
     instructions: `<h4>Instructions</h4>
 <ol>
@@ -156,6 +180,7 @@ export const ACTIVITIES: Record<string, Activity> = {
     category: 'mind_body',
     duration: 20,
     quick: false,
+    mindBodyType: 1, // Emotional processing
     link: 'https://claude.ai/public/artifacts/363274fe-da43-413b-869e-fdc43921d46f',
     instructions: `<h4>Instructions</h4>
 <ol>

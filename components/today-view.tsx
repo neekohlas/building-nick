@@ -4,12 +4,12 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { ActivityCard } from './activity-card'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SwapModal } from './swap-modal'
-import { PushModal } from './push-modal'
+import { PushModal, FutureOccurrence } from './push-modal'
 import { Celebration } from './celebration'
 import { AddActivityModal } from './add-activity-modal'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { Button } from '@/components/ui/button'
-import { CalendarClock, Plus, GripVertical, X } from 'lucide-react'
+import { CalendarClock, Plus, GripVertical, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Activity,
@@ -18,7 +18,9 @@ import {
 } from '@/lib/activities'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor, WeatherDay } from '@/hooks/use-weather'
-import { formatDateISO, shouldShowProfessionalGoals, formatDuration } from '@/lib/date-utils'
+import { useCalendar } from '@/hooks/use-calendar'
+import { CalendarEventCard } from './calendar-event-card'
+import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
 import { getRandomMessage, getStreakMessage, pickRandom } from '@/lib/messages'
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
 
@@ -44,10 +46,26 @@ const TIME_BLOCK_DEADLINE_LABELS: Record<TimeBlock, string> = {
   before12am: '12 AM'
 }
 
+// Convert time block to hours (decimal) for current time calculation
+const TIME_BLOCK_HOURS: Record<TimeBlock, number> = {
+  before6am: 6,
+  before9am: 9,
+  beforeNoon: 12,
+  before230pm: 14.5,
+  before5pm: 17,
+  before9pm: 21,
+  // Legacy blocks
+  before12pm: 12,
+  before3pm: 15,
+  before6pm: 18,
+  before12am: 24
+}
+
 export function TodayView({ onOpenMenu }: TodayViewProps) {
   const storage = useStorage()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
   const { weather, getWeatherForDate, locationName } = useWeather()
+  const { isConnected: calendarConnected, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
   const [motivation, setMotivation] = useState('')
@@ -89,12 +107,101 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   })
   const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
-  const today = new Date()
-  const dateStr = formatDateISO(today)
+  // Date navigation state
+  const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const touchStartX = useRef(0)
+  const touchEndX = useRef(0)
+
+  // Current time indicator
+  const [currentTimePosition, setCurrentTimePosition] = useState<{ top: number; visible: boolean } | null>(null)
+  const timeDividerRefs = useRef<Record<TimeBlock, HTMLDivElement | null>>({
+    before6am: null,
+    before9am: null,
+    beforeNoon: null,
+    before230pm: null,
+    before5pm: null,
+    before9pm: null,
+    before12pm: null,
+    before3pm: null,
+    before6pm: null,
+    before12am: null
+  })
+  const scheduleContainerRef = useRef<HTMLDivElement | null>(null)
+
+  const dateStr = formatDateISO(selectedDate)
+  const isToday = formatDateISO(new Date()) === dateStr
+
+  // Navigate to previous/next day
+  const navigateToPreviousDay = () => {
+    setSelectedDate(prev => {
+      const newDate = new Date(prev)
+      newDate.setDate(newDate.getDate() - 1)
+      return newDate
+    })
+    hasLoadedRef.current = false // Allow reloading data for new date
+  }
+
+  const navigateToNextDay = () => {
+    setSelectedDate(prev => {
+      const newDate = new Date(prev)
+      newDate.setDate(newDate.getDate() + 1)
+      return newDate
+    })
+    hasLoadedRef.current = false // Allow reloading data for new date
+  }
+
+  const navigateToToday = () => {
+    setSelectedDate(new Date())
+    hasLoadedRef.current = false
+  }
+
+  // Touch handlers for swipe navigation
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX
+  }
+
+  const handleTouchEnd = () => {
+    const diff = touchEndX.current - touchStartX.current
+    const threshold = 50 // Minimum swipe distance
+
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) {
+        navigateToPreviousDay() // Swipe right = go to previous day
+      } else {
+        navigateToNextDay() // Swipe left = go to next day
+      }
+    }
+
+    // Reset
+    touchStartX.current = 0
+    touchEndX.current = 0
+  }
+
+  // Format the date header
+  const getDateHeaderLabel = () => {
+    const today = new Date()
+    const todayStr = formatDateISO(today)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = formatDateISO(yesterday)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const tomorrowStr = formatDateISO(tomorrow)
+
+    if (dateStr === todayStr) return 'Today'
+    if (dateStr === yesterdayStr) return 'Yesterday'
+    if (dateStr === tomorrowStr) return 'Tomorrow'
+
+    return formatDateFriendly(selectedDate)
+  }
 
   // Generate daily schedule (fallback when no plan exists)
   const generateSchedule = useCallback((): DailySchedule => {
-    const isProfessionalDay = shouldShowProfessionalGoals(today)
+    const isProfessionalDay = shouldShowProfessionalGoals(selectedDate)
 
     const newSchedule: DailySchedule = {
       date: dateStr,
@@ -134,18 +241,18 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     newSchedule.activities.before9pm.push('lin_health_education')
 
     return newSchedule
-  }, [today, dateStr, getQuickMindBodyActivities])
+  }, [selectedDate, dateStr, getQuickMindBodyActivities])
 
   // Load data - only run once when storage becomes ready
+  // Using a ref to track if we've already loaded to prevent re-runs
+  const hasLoadedRef = useRef(false)
+
   useEffect(() => {
     if (!storage.isReady) return
-
-    let hasLoaded = false
+    if (hasLoadedRef.current) return
+    hasLoadedRef.current = true
 
     async function loadData() {
-      if (hasLoaded) return
-      hasLoaded = true
-
       // Get or generate schedule
       let existingSchedule = await storage.getDailySchedule(dateStr)
 
@@ -169,7 +276,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       // Set motivation message only if not already set
       setMotivation(prev => {
         if (prev) return prev // Don't change if already set
-        
+
         if (stats.daysWithActivity >= 5) {
           if (currentStreak > 1) {
             return getStreakMessage(currentStreak)
@@ -183,7 +290,94 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     }
 
     loadData()
-  }, [storage.isReady, dateStr, generateSchedule])
+  // Re-run when date changes or storage becomes ready
+  }, [storage.isReady, dateStr, generateSchedule, storage])
+
+  // Calculate current time indicator position
+  useEffect(() => {
+    if (!isToday) {
+      setCurrentTimePosition(null)
+      return
+    }
+
+    const calculateTimePosition = () => {
+      const now = new Date()
+      const currentHour = now.getHours() + now.getMinutes() / 60
+
+      // Find which two time blocks the current time falls between
+      let prevBlock: TimeBlock | null = null
+      let nextBlock: TimeBlock | null = null
+
+      for (let i = 0; i < TIME_BLOCKS.length; i++) {
+        const blockHour = TIME_BLOCK_HOURS[TIME_BLOCKS[i]]
+        if (currentHour < blockHour) {
+          nextBlock = TIME_BLOCKS[i]
+          prevBlock = i > 0 ? TIME_BLOCKS[i - 1] : null
+          break
+        }
+      }
+
+      // If current time is after the last block, hide indicator
+      if (!nextBlock) {
+        setCurrentTimePosition({ top: 0, visible: false })
+        return
+      }
+
+      // Get the DOM elements for the time dividers
+      const nextDivider = timeDividerRefs.current[nextBlock]
+      const prevDivider = prevBlock ? timeDividerRefs.current[prevBlock] : null
+      const container = scheduleContainerRef.current
+
+      if (!nextDivider || !container) {
+        setCurrentTimePosition(null)
+        return
+      }
+
+      const containerRect = container.getBoundingClientRect()
+      const nextRect = nextDivider.getBoundingClientRect()
+
+      if (prevDivider) {
+        const prevRect = prevDivider.getBoundingClientRect()
+        const prevHour = TIME_BLOCK_HOURS[prevBlock!]
+        const nextHour = TIME_BLOCK_HOURS[nextBlock]
+
+        // Calculate the ratio of where current time falls between prev and next
+        const ratio = (currentHour - prevHour) / (nextHour - prevHour)
+
+        // Calculate position between the two dividers
+        const prevTop = prevRect.top - containerRect.top + prevRect.height / 2
+        const nextTop = nextRect.top - containerRect.top + nextRect.height / 2
+        const top = prevTop + (nextTop - prevTop) * ratio
+
+        setCurrentTimePosition({ top, visible: true })
+      } else {
+        // Before first time block - position above the first divider
+        const nextHour = TIME_BLOCK_HOURS[nextBlock]
+        // Assume day starts at midnight (0) for calculation
+        const ratio = currentHour / nextHour
+        const nextTop = nextRect.top - containerRect.top + nextRect.height / 2
+        // Position it proportionally from top of container to first divider
+        const top = nextTop * ratio
+
+        setCurrentTimePosition({ top: Math.max(0, top), visible: true })
+      }
+    }
+
+    // Calculate immediately
+    calculateTimePosition()
+
+    // Update every minute
+    const interval = setInterval(calculateTimePosition, 60000)
+
+    // Also recalculate on scroll/resize since positions may change
+    const handleResize = () => calculateTimePosition()
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [isToday, schedule]) // Recalculate when schedule changes (affects layout)
 
   // Toggle completion
   const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock) => {
@@ -242,20 +436,91 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     console.log('handleSwap: complete')
   }
 
-  // Get tomorrow's date string
-  const getTomorrowDateStr = () => {
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    return tomorrow.toISOString().split('T')[0]
+  // Remove activity from schedule
+  const handleRemoveActivity = async (activityId: string) => {
+    if (!schedule) return
+
+    // Find which time block the activity is in
+    let activityTimeBlock: TimeBlock | null = null
+    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+      if (schedule.activities[block].includes(activityId)) {
+        activityTimeBlock = block
+        break
+      }
+    }
+    if (!activityTimeBlock) return
+
+    // Remove from schedule
+    const newSchedule: DailySchedule = {
+      ...schedule,
+      activities: {
+        ...schedule.activities,
+        [activityTimeBlock]: schedule.activities[activityTimeBlock].filter(
+          id => id !== activityId
+        )
+      }
+    }
+    await storage.saveDailySchedule(newSchedule)
+    setSchedule(newSchedule)
+    setSelectedActivity(null)
   }
 
-  // Push single activity to tomorrow
-  const handlePushSingle = async () => {
+  // Get next day's date string relative to selected date
+  const getNextDayDateStr = () => {
+    const nextDay = new Date(selectedDate)
+    nextDay.setDate(nextDay.getDate() + 1)
+    return nextDay.toISOString().split('T')[0]
+  }
+
+  // Helper function to push a single activity from one date to the next
+  const pushActivityOneDay = async (
+    activityId: string,
+    fromDateStr: string,
+    timeBlock: TimeBlock
+  ): Promise<void> => {
+    const nextDate = new Date(fromDateStr)
+    nextDate.setDate(nextDate.getDate() + 1)
+    const toDateStr = nextDate.toISOString().split('T')[0]
+
+    // Get current schedule for from date
+    const fromSchedule = await storage.getDailySchedule(fromDateStr)
+    if (!fromSchedule) return
+
+    // Remove from fromDate
+    const newFromSchedule: DailySchedule = {
+      ...fromSchedule,
+      activities: {
+        ...fromSchedule.activities,
+        [timeBlock]: fromSchedule.activities[timeBlock]?.filter(id => id !== activityId) || []
+      }
+    }
+    await storage.saveDailySchedule(newFromSchedule)
+
+    // Add to toDate
+    let toSchedule = await storage.getDailySchedule(toDateStr)
+    if (!toSchedule) {
+      toSchedule = {
+        date: toDateStr,
+        activities: { before6am: [], before9am: [], beforeNoon: [], before230pm: [], before5pm: [], before9pm: [] }
+      }
+    }
+    if (!toSchedule.activities[timeBlock]) {
+      toSchedule.activities[timeBlock] = []
+    }
+    // Only add if not already there
+    if (!toSchedule.activities[timeBlock].includes(activityId)) {
+      toSchedule.activities[timeBlock] = [...toSchedule.activities[timeBlock], activityId]
+    }
+    await storage.saveDailySchedule(toSchedule)
+  }
+
+  // Push single activity to tomorrow (with optional future cascade)
+  const handlePushSingle = async (futurePushes: FutureOccurrence[] = []) => {
     if (!schedule || !pushActivity) return
 
-    const tomorrowStr = getTomorrowDateStr()
-    
-    // Find which time block the activity is in
+    const tomorrowStr = getNextDayDateStr()
+
+    // Find which time block the activity is in today
     let activityTimeBlock: TimeBlock | null = null
     for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
       if (schedule.activities[block].includes(pushActivity.id)) {
@@ -265,7 +530,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     }
     if (!activityTimeBlock) return
 
-    // Remove from today
+    // 1. Push today's occurrence to tomorrow
     const newTodaySchedule: DailySchedule = {
       ...schedule,
       activities: {
@@ -286,15 +551,27 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
         activities: { before6am: [], before9am: [], beforeNoon: [], before230pm: [], before5pm: [], before9pm: [] }
       }
     }
-    // Ensure the time block exists
     if (!tomorrowSchedule.activities[activityTimeBlock]) {
       tomorrowSchedule.activities[activityTimeBlock] = []
     }
-    tomorrowSchedule.activities[activityTimeBlock] = [
-      ...tomorrowSchedule.activities[activityTimeBlock],
-      pushActivity.id
-    ]
+    // Only add if not already there
+    if (!tomorrowSchedule.activities[activityTimeBlock].includes(pushActivity.id)) {
+      tomorrowSchedule.activities[activityTimeBlock] = [
+        ...tomorrowSchedule.activities[activityTimeBlock],
+        pushActivity.id
+      ]
+    }
     await storage.saveDailySchedule(tomorrowSchedule)
+
+    // 2. Push selected future occurrences (process in reverse order to avoid conflicts)
+    // Sort by date descending so we process the furthest date first
+    const sortedFuturePushes = [...futurePushes].sort((a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )
+
+    for (const futureOcc of sortedFuturePushes) {
+      await pushActivityOneDay(pushActivity.id, futureOcc.date, futureOcc.timeBlock)
+    }
 
     setShowPushModal(false)
     setPushActivity(null)
@@ -304,7 +581,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const handlePushAllIncomplete = async () => {
     if (!schedule) return
 
-    const tomorrowStr = getTomorrowDateStr()
+    const tomorrowStr = getNextDayDateStr()
     
     // Get or create tomorrow's schedule
     let tomorrowSchedule = await storage.getDailySchedule(tomorrowStr)
@@ -537,34 +814,73 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     )
   }
 
-  // Get today's weather
-  const todayWeather = getWeatherForDate(dateStr)
+  // Get selected date's weather
+  const selectedDateWeather = getWeatherForDate(dateStr)
   const hasOutdoorActivities = schedule && Object.values(schedule.activities).flat().some(id => {
     const activity = getActivity(id)
     return activity?.outdoor || activity?.weatherDependent
   })
-  const badWeatherWarning = todayWeather && isBadWeatherForOutdoor(todayWeather) && hasOutdoorActivities
+  const badWeatherWarning = selectedDateWeather && isBadWeatherForOutdoor(selectedDateWeather) && hasOutdoorActivities
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      {/* Date Navigation Header */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={navigateToPreviousDay}
+          className="p-2 rounded-full hover:bg-muted transition-colors"
+          aria-label="Previous day"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+
+        <button
+          onClick={navigateToToday}
+          className={cn(
+            "px-4 py-2 rounded-full transition-colors text-center",
+            isToday
+              ? "bg-primary/10 text-primary font-semibold"
+              : "hover:bg-muted"
+          )}
+        >
+          <span className="text-lg font-semibold">{getDateHeaderLabel()}</span>
+          {!isToday && (
+            <span className="block text-xs text-muted-foreground">Tap to return to today</span>
+          )}
+        </button>
+
+        <button
+          onClick={navigateToNextDay}
+          className="p-2 rounded-full hover:bg-muted transition-colors"
+          aria-label="Next day"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
+      </div>
+
       {/* Weather + Motivation Card */}
       <div className="rounded-2xl border-l-4 border-l-[var(--accent)] bg-card p-6 shadow-sm">
-        {todayWeather && (
+        {selectedDateWeather && (
           <button
             onClick={() => setShowWeatherDetail(true)}
             className="w-full flex items-center gap-3 mb-3 pb-3 border-b border-border hover:bg-muted/50 -mx-2 px-2 py-1 rounded-lg transition-colors text-left"
           >
-            <span className="text-3xl">{getWeatherEmoji(todayWeather.weather.main, todayWeather.weather.id)}</span>
+            <span className="text-3xl">{getWeatherEmoji(selectedDateWeather.weather.main, selectedDateWeather.weather.id)}</span>
             <div className="flex-1">
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-semibold">{formatTemp(todayWeather.temp.max)}</span>
-                <span className="text-sm text-muted-foreground">/ {formatTemp(todayWeather.temp.min)}</span>
+                <span className="text-xl font-semibold">{formatTemp(selectedDateWeather.temp.max)}</span>
+                <span className="text-sm text-muted-foreground">/ {formatTemp(selectedDateWeather.temp.min)}</span>
               </div>
-              <p className="text-sm text-muted-foreground capitalize">{todayWeather.weather.description}</p>
+              <p className="text-sm text-muted-foreground capitalize">{selectedDateWeather.weather.description}</p>
             </div>
-            {todayWeather.pop > 0.1 && (
+            {selectedDateWeather.pop > 0.1 && (
               <div className="text-right">
-                <span className="text-blue-500 font-medium">{Math.round(todayWeather.pop * 100)}%</span>
+                <span className="text-blue-500 font-medium">{Math.round(selectedDateWeather.pop * 100)}%</span>
                 <p className="text-xs text-muted-foreground">rain</p>
               </div>
             )}
@@ -581,7 +897,17 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       </div>
 
       {/* Daily Plan - Activities appear ABOVE their deadline time */}
-      <div className="space-y-2">
+      <div className="space-y-2 relative" ref={scheduleContainerRef}>
+        {/* Current time indicator */}
+        {currentTimePosition?.visible && (
+          <div
+            className="absolute left-0 right-0 z-10 pointer-events-none flex items-center"
+            style={{ top: currentTimePosition.top }}
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+            <div className="flex-1 h-0.5 bg-red-500" />
+          </div>
+        )}
         {TIME_BLOCKS.map((block, blockIndex) => {
           const activities = schedule.activities[block] || []
           const hasActivities = activities.length > 0
@@ -596,6 +922,30 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
               {dropTarget?.block === block && dropTarget.index === 0 && dragState?.isDragging && (
                 <div className="h-1 bg-primary rounded-full mx-2 mb-2" />
               )}
+
+              {/* Calendar events for this time block */}
+              {calendarConnected && (() => {
+                const calendarEvents = getEventsForTimeBlock(dateStr, block)
+                return calendarEvents.length > 0 ? (
+                  <div className="space-y-2 mb-2">
+                    {calendarEvents.map(event => (
+                      <div key={event.id} className="flex items-center gap-2">
+                        {/* Spacer to align with activity drag handles */}
+                        <div className="flex-shrink-0 w-7" />
+                        {/* Calendar event card */}
+                        <div className="flex-1">
+                          <CalendarEventCard
+                            event={event}
+                            compact={true}
+                            formatTime={formatEventTime}
+                            getDuration={getEventDuration}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null
+              })()}
 
               {/* Activities for this time block */}
               {hasActivities ? (
@@ -664,7 +1014,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
               ) : null}
 
               {/* Time deadline divider - shows AFTER activities as the deadline */}
-              <div className="flex items-center gap-3 py-3">
+              <div
+                className="flex items-center gap-3 py-3"
+                ref={el => { timeDividerRefs.current[block] = el }}
+              >
                 <div className="flex-1 h-px bg-border" />
                 <span className="text-xs font-medium text-muted-foreground px-2">
                   {deadlineLabel}
@@ -703,7 +1056,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           }}
         >
           <CalendarClock className="h-4 w-4 mr-2" />
-          Push {incompleteActivities.length} Incomplete to Tomorrow
+          Push {incompleteActivities.length} Incomplete to {isToday ? 'Tomorrow' : 'Next Day'}
         </Button>
       )}
 
@@ -746,6 +1099,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
             setSelectedActivity(null)
             setShowPushModal(true)
           }}
+          onRemove={() => handleRemoveActivity(selectedActivity.id)}
         />
       )}
 
@@ -766,6 +1120,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
         <PushModal
           activity={pushActivity}
           incompleteCount={incompleteActivities.length}
+          currentDate={dateStr}
           onClose={() => {
             setShowPushModal(false)
             setPushActivity(null)
@@ -778,7 +1133,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       {/* Add Activity Modal */}
       {showAddModal && (
         <AddActivityModal
-          targetDate={today}
+          targetDate={selectedDate}
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddActivity}
         />
@@ -791,9 +1146,9 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       />
 
       {/* Weather Detail Modal */}
-      {showWeatherDetail && todayWeather && (
+      {showWeatherDetail && selectedDateWeather && (
         <WeatherDetailModal
-          weather={todayWeather}
+          weather={selectedDateWeather}
           locationName={locationName}
           onClose={() => setShowWeatherDetail(false)}
         />

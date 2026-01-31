@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, ExternalLink } from 'lucide-react'
+import { Clock, ExternalLink, Star, Loader2, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAllActivities, Activity, CATEGORIES, Category } from '@/lib/activities'
+import { Activity, CATEGORIES, Category, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
+import { useActivities } from '@/hooks/use-activities'
 
 interface LibraryViewProps {
   onBack: () => void
@@ -19,25 +20,32 @@ const FILTERS: { value: 'all' | Category; label: string }[] = [
 ]
 
 export function LibraryView({ onBack }: LibraryViewProps) {
+  const { getAllActivities, isLoading } = useActivities()
   const [filter, setFilter] = useState<'all' | Category>('all')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
 
-  const activities = getAllActivities().filter(
-    a => filter === 'all' || a.category === filter
-  )
+  // Get all activities from Notion-synced data, filter by category if needed
+  const allActivities = getAllActivities()
+    .filter(a => a.name !== 'Untitled') // Exclude untitled entries
+    .filter(a => filter === 'all' || a.category === filter)
 
-  // Group by category when showing all
-  const groupedActivities = filter === 'all'
-    ? Object.entries(
-        activities.reduce((acc, activity) => {
-          if (!acc[activity.category]) {
-            acc[activity.category] = []
-          }
-          acc[activity.category].push(activity)
-          return acc
-        }, {} as Record<Category, Activity[]>)
-      )
-    : [['filtered', activities] as [string, Activity[]]]
+  // Sort alphabetically (favorites first, then by name)
+  const sortedActivities = [...allActivities].sort((a, b) => {
+    // Favorites first
+    if (a.favorite && !b.favorite) return -1
+    if (!a.favorite && b.favorite) return 1
+    // Then alphabetically
+    return a.name.localeCompare(b.name)
+  })
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading activities...</span>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -45,7 +53,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
       <div>
         <h2 className="text-xl font-bold">Activity Library</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {activities.length} activities available
+          {sortedActivities.length} activities available
         </p>
       </div>
 
@@ -67,72 +75,76 @@ export function LibraryView({ onBack }: LibraryViewProps) {
         ))}
       </div>
 
-      {/* Activity List */}
-      <div className="space-y-6">
-        {groupedActivities.map(([categoryKey, categoryActivities]) => {
-          const category = categoryKey !== 'filtered' ? CATEGORIES[categoryKey as Category] : null
+      {/* Activity List - Alphabetically sorted, flat list */}
+      <div className="space-y-3">
+        {sortedActivities.map(activity => {
+          const activityCategory = CATEGORIES[activity.category]
+
+          // Get category badge color - use mindBodyType gradient for mind_body activities
+          const getBadgeColor = () => {
+            if (activity.category === 'mind_body' && activity.mindBodyType) {
+              return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
+            }
+            return activityCategory.color
+          }
 
           return (
-            <div key={categoryKey} className="space-y-3">
-              {category && (
-                <h3 
-                  className="text-sm font-semibold px-1"
-                  style={{ color: category.color }}
-                >
-                  {category.name}
-                </h3>
+            <button
+              key={activity.id}
+              onClick={() => setSelectedActivity(activity)}
+              className={cn(
+                'w-full text-left rounded-xl border bg-card p-4 transition-all',
+                'hover:border-muted-foreground/30 hover:shadow-md'
               )}
-              {categoryActivities.map(activity => {
-                const activityCategory = CATEGORIES[activity.category]
-
-                return (
-                  <button
-                    key={activity.id}
-                    onClick={() => setSelectedActivity(activity)}
-                    className={cn(
-                      'w-full text-left rounded-xl border bg-card p-4 transition-all',
-                      'hover:border-muted-foreground/30 hover:shadow-md'
+              style={{
+                borderLeftWidth: '4px',
+                borderLeftColor: getBadgeColor()
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {activity.favorite && (
+                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
                     )}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-foreground">
-                            {activity.name}
-                          </span>
-                          {activity.link && (
-                            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                          {activity.description}
-                        </p>
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5" />
-                            {formatDuration(activity.duration)}
-                          </span>
-                          {activity.quick && (
-                            <span className="px-2 py-0.5 rounded-full bg-muted">
-                              Quick
-                            </span>
-                          )}
-                          {activity.outdoor && (
-                            <span className="px-2 py-0.5 rounded-full bg-muted">
-                              Outdoor
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div
-                        className="h-3 w-3 rounded-full shrink-0 mt-1"
-                        style={{ backgroundColor: activityCategory.color }}
-                      />
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+                    <span className="font-medium text-foreground">
+                      {activity.name}
+                    </span>
+                    {activity.video && (
+                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    {activity.link && (
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                    {activity.description}
+                  </p>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      {formatDuration(activity.duration)}
+                    </span>
+                    <span
+                      className="px-2 py-0.5 rounded-full text-white"
+                      style={{ backgroundColor: getBadgeColor() }}
+                    >
+                      {activityCategory.name}
+                    </span>
+                    {activity.quick && (
+                      <span className="px-2 py-0.5 rounded-full bg-muted">
+                        Quick
+                      </span>
+                    )}
+                    {activity.outdoor && (
+                      <span className="px-2 py-0.5 rounded-full bg-muted">
+                        Outdoor
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </button>
           )
         })}
       </div>

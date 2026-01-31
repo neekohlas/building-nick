@@ -1,9 +1,28 @@
 'use client'
 
-import { X, Clock, ExternalLink, Check, CalendarClock } from 'lucide-react'
-import { Activity, CATEGORIES } from '@/lib/activities'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play } from 'lucide-react'
+import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
+
+// Extract YouTube video ID from various URL formats
+function getYouTubeVideoId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /youtube\.com\/shorts\/([^&\n?#]+)/
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
+// Check if URL is a Vimeo video
+function getVimeoVideoId(url: string): string | null {
+  const match = url.match(/vimeo\.com\/(\d+)/)
+  return match ? match[1] : null
+}
 
 interface ActivityDetailModalProps {
   activity: Activity
@@ -12,6 +31,7 @@ interface ActivityDetailModalProps {
   onComplete: () => void
   onSwap: () => void
   onPush?: () => void
+  onRemove?: () => void
 }
 
 export function ActivityDetailModal({
@@ -20,19 +40,27 @@ export function ActivityDetailModal({
   onClose,
   onComplete,
   onSwap,
-  onPush
+  onPush,
+  onRemove
 }: ActivityDetailModalProps) {
   const category = CATEGORIES[activity.category]
 
+  // Get badge color - for mind_body, use mindBodyType gradient if available
+  const getBadgeColor = () => {
+    if (activity.category === 'mind_body' && activity.mindBodyType) {
+      return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
+    }
+    return category.color
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-lg max-h-[80dvh] sm:max-h-[85vh] overflow-hidden rounded-t-2xl sm:rounded-2xl bg-card animate-in fade-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200 flex flex-col"
+        className="w-full sm:max-w-lg max-h-[85dvh] overflow-hidden rounded-2xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxHeight: 'calc(100dvh - 80px)' }}
       >
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4">
@@ -55,7 +83,7 @@ export function ActivityDetailModal({
             </span>
             <span
               className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-white text-xs"
-              style={{ backgroundColor: category.color }}
+              style={{ backgroundColor: getBadgeColor() }}
             >
               {category.name}
             </span>
@@ -65,6 +93,46 @@ export function ActivityDetailModal({
           <div className="rounded-lg bg-muted p-4 text-foreground">
             {activity.description}
           </div>
+
+          {/* Video Preview */}
+          {activity.video && (
+            <div className="space-y-3">
+              {/* YouTube embed */}
+              {getYouTubeVideoId(activity.video) && (
+                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${getYouTubeVideoId(activity.video)}`}
+                    title={`${activity.name} video`}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 w-full h-full"
+                  />
+                </div>
+              )}
+              {/* Vimeo embed */}
+              {getVimeoVideoId(activity.video) && (
+                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
+                  <iframe
+                    src={`https://player.vimeo.com/video/${getVimeoVideoId(activity.video)}`}
+                    title={`${activity.name} video`}
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 w-full h-full"
+                  />
+                </div>
+              )}
+              {/* Open video button (for all video links including non-embeddable) */}
+              <a
+                href={activity.video}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-primary font-medium hover:underline"
+              >
+                <Play className="h-4 w-4" />
+                Open Video
+              </a>
+            </div>
+          )}
 
           {/* Link */}
           {activity.link && (
@@ -119,6 +187,16 @@ export function ActivityDetailModal({
             >
               <CalendarClock className="h-4 w-4 mr-2" />
               Push to Tomorrow
+            </Button>
+          )}
+          {onRemove && (
+            <Button
+              variant="ghost"
+              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={onRemove}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove from Schedule
             </Button>
           )}
         </div>

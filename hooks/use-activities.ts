@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Activity, ACTIVITIES, CATEGORIES, Category, TimeBlock, DayType } from '@/lib/activities'
+import { Activity, ACTIVITIES, CATEGORIES, Category, TimeBlock, DayType, MindBodyType } from '@/lib/activities'
 import { useStorage } from './use-storage'
 
 interface NotionApiResponse {
@@ -28,6 +28,9 @@ interface NotionActivity {
   weekday_only?: boolean
   default_time_block?: TimeBlock
   day_type?: DayType
+  favorite?: boolean
+  sort_order?: number
+  mind_body_type?: MindBodyType
 }
 
 // Convert Notion API response to our Activity type
@@ -52,11 +55,15 @@ function notionToActivity(notion: NotionActivity): Activity {
     quick: notion.quick || notion.duration <= 5,
     instructions: notion.instructions || '',
     link: notion.link,
+    video: notion.video,
     weatherDependent: notion.weather_dependent,
     outdoor: notion.outdoor,
     weekdayOnly: notion.weekday_only,
     defaultTimeBlock: notion.default_time_block,
-    dayType: notion.day_type
+    dayType: notion.day_type,
+    favorite: notion.favorite || false,
+    sortOrder: notion.sort_order,
+    mindBodyType: notion.mind_body_type
   }
 }
 
@@ -175,8 +182,8 @@ export function useActivities() {
         a.category === 'physical' ||
         // Professional activities
         a.category === 'professional' ||
-        // Longer mind-body activities
-        (a.category === 'mind_body' && !a.quick)
+        // All mind-body activities (including quick ones, since Health Coach may suggest them)
+        a.category === 'mind_body'
       )
     )
   }, [activities])

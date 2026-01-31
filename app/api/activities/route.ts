@@ -16,6 +16,8 @@ const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID
 type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
 type DayType = 'heavy' | 'light' | 'both'
 
+type MindBodyType = 1 | 2 | 3 | 4 | 5
+
 interface NotionActivity {
   id: string
   name: string
@@ -31,6 +33,9 @@ interface NotionActivity {
   weekday_only?: boolean
   default_time_block?: TimeBlock
   day_type?: DayType
+  favorite?: boolean
+  sort_order?: number
+  mind_body_type?: MindBodyType
 }
 
 export async function GET() {
@@ -98,6 +103,12 @@ export async function GET() {
         console.log(`Activity "${activityName}": rawTimeBlock="${rawTimeBlock}", rawDayType="${rawDayTypeValue}"`)
       }
 
+      // Debug log for video field
+      if (activityName.toLowerCase().includes('forgiveness') || activityName.toLowerCase().includes('meditation')) {
+        console.log(`Activity "${activityName}" Video field:`, JSON.stringify(props.Video))
+        console.log(`Activity "${activityName}" all props keys:`, Object.keys(props))
+      }
+
       const timeBlockMap: Record<string, TimeBlock> = {
         'before6am': 'before6am',
         'before 6am': 'before6am',
@@ -153,7 +164,15 @@ export async function GET() {
         outdoor: props.Outdoor?.checkbox || false,
         weekday_only: props['Weekday Only']?.checkbox || false,
         default_time_block: defaultTimeBlock,
-        day_type: dayType
+        day_type: dayType,
+        favorite: props['Favorite']?.checkbox || false,
+        sort_order: props['Sort Order']?.number ?? undefined,
+        // Mind-body type: 1=emotional, 2=mind with emotion, 3=balanced, 4=movement with mind, 5=movement
+        mind_body_type: (() => {
+          const value = props['Mind Body Type']?.number
+          if (value && value >= 1 && value <= 5) return value as MindBodyType
+          return undefined
+        })()
       }
     })
 
