@@ -25,6 +25,8 @@ import { Activity, getQuickMindBodyActivities, getPhysicalActivities } from '@/l
 import { useStorage, DailySchedule } from '@/hooks/use-storage'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, WeatherDay } from '@/hooks/use-weather'
+import { useCalendar } from '@/hooks/use-calendar'
+import { CalendarEventCard, CalendarEventListItem } from './calendar-event-card'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { pickRandom } from '@/lib/messages'
 import { Button } from '@/components/ui/button'
@@ -39,6 +41,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const storage = useStorage()
   const { getActivity } = useActivities()
   const { getWeatherForDate, isLoading: weatherLoading, locationName } = useWeather()
+  const { isConnected: calendarConnected, getEventsForDate, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [visibleDates, setVisibleDates] = useState<Date[]>([])
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
@@ -414,6 +417,14 @@ export function WeekView({ onBack }: WeekViewProps) {
                   <span className="text-[10px] text-muted-foreground">{formatTemp(dayWeather.temp.max)}</span>
                 </div>
               )}
+              {calendarConnected && (() => {
+                const eventsForDay = getEventsForDate(formatDateISO(date))
+                return eventsForDay.length > 0 ? (
+                  <span className="text-[10px] text-blue-500 mt-0.5">
+                    {eventsForDay.length} event{eventsForDay.length !== 1 ? 's' : ''}
+                  </span>
+                ) : null
+              })()}
             </button>
           )
         })}
@@ -473,50 +484,82 @@ export function WeekView({ onBack }: WeekViewProps) {
         </Button>
       </div>
 
-      {/* Activities for Selected Day */}
+      {/* Activities for Selected Day - with time dividers */}
       {schedule && (
-        <div className="space-y-6">
+        <div className="space-y-2">
           {(['before6am', 'before9am', 'beforeNoon', 'before230pm', 'before5pm', 'before9pm'] as TimeBlock[]).map(block => {
             const activities = schedule.activities[block] || []
-            if (activities.length === 0) return null
+            const calendarEvents = calendarConnected ? getEventsForTimeBlock(formatDateISO(selectedDate), block) : []
+            const hasContent = activities.length > 0 || calendarEvents.length > 0
+
+            // Time labels for dividers (shown AFTER the content as deadlines)
+            const timeLabel = {
+              before6am: '6 AM',
+              before9am: '9 AM',
+              beforeNoon: '12 PM',
+              before230pm: '2:30 PM',
+              before5pm: '5 PM',
+              before9pm: '9 PM'
+            }[block]
 
             return (
-              <div key={block} className="space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                  {block === 'before6am' && 'Before 6 AM'}
-                  {block === 'before9am' && 'Before 9 AM'}
-                  {block === 'beforeNoon' && 'Before Noon'}
-                  {block === 'before230pm' && 'Afternoon'}
-                  {block === 'before5pm' && 'Before 5 PM'}
-                  {block === 'before9pm' && 'Before 9 PM'}
-                </h3>
-                {activities.map(activityId => {
-                  const activity = getActivity(activityId)
-                  if (!activity) return null
+              <div key={block}>
+                {/* Calendar events for this time block */}
+                {calendarEvents.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {calendarEvents.map(event => (
+                      <CalendarEventCard
+                        key={event.id}
+                        event={event}
+                        compact={true}
+                        formatTime={formatEventTime}
+                        getDuration={getEventDuration}
+                      />
+                    ))}
+                  </div>
+                )}
 
-                  return (
-                    <ActivityCard
-                      key={activityId}
-                      activity={activity}
-                      isCompleted={completedIds.has(activityId)}
-                      timeBlock={block}
-                      onToggleComplete={() => handleToggleComplete(activityId, block)}
-                      onSwap={() => {
-                        setSwapActivity(activity)
-                        setSelectedTimeBlock(block)
-                        setShowSwapModal(true)
-                      }}
-                      onPush={() => {
-                        setPushActivity(activity)
-                        setShowPushModal(true)
-                      }}
-                      onClick={() => {
-                        setSelectedActivity(activity)
-                        setSelectedTimeBlock(block)
-                      }}
-                    />
-                  )
-                })}
+                {/* Activities for this time block */}
+                {activities.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {activities.map(activityId => {
+                      const activity = getActivity(activityId)
+                      if (!activity) return null
+
+                      return (
+                        <ActivityCard
+                          key={activityId}
+                          activity={activity}
+                          isCompleted={completedIds.has(activityId)}
+                          timeBlock={block}
+                          onToggleComplete={() => handleToggleComplete(activityId, block)}
+                          onSwap={() => {
+                            setSwapActivity(activity)
+                            setSelectedTimeBlock(block)
+                            setShowSwapModal(true)
+                          }}
+                          onPush={() => {
+                            setPushActivity(activity)
+                            setShowPushModal(true)
+                          }}
+                          onClick={() => {
+                            setSelectedActivity(activity)
+                            setSelectedTimeBlock(block)
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Time divider line */}
+                <div className="flex items-center gap-3 py-3">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs font-medium text-muted-foreground px-2">
+                    {timeLabel}
+                  </span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
               </div>
             )
           })}

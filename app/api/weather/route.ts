@@ -134,22 +134,29 @@ export async function GET(request: Request) {
         wind_speed: data.current.wind_speed,
         weather: data.current.weather[0]
       },
-      daily: data.daily.slice(0, 8).map((day: any) => ({
-        date: new Date(day.dt * 1000).toISOString().split('T')[0],
-        temp: {
-          min: day.temp.min,
-          max: day.temp.max
-        },
-        feels_like: {
-          day: day.feels_like.day
-        },
-        humidity: day.humidity,
-        wind_speed: day.wind_speed,
-        weather: day.weather[0],
-        pop: day.pop,
-        rain: day.rain,
-        snow: day.snow
-      }))
+      daily: data.daily.slice(0, 8).map((day: any) => {
+        // Convert timestamp to local date (using server timezone, which should match user)
+        const d = new Date(day.dt * 1000)
+        const year = d.getFullYear()
+        const month = String(d.getMonth() + 1).padStart(2, '0')
+        const dayNum = String(d.getDate()).padStart(2, '0')
+        return {
+          date: `${year}-${month}-${dayNum}`,
+          temp: {
+            min: day.temp.min,
+            max: day.temp.max
+          },
+          feels_like: {
+            day: day.feels_like.day
+          },
+          humidity: day.humidity,
+          wind_speed: day.wind_speed,
+          weather: day.weather[0],
+          pop: day.pop,
+          rain: day.rain,
+          snow: day.snow
+        }
+      })
     }
 
     cachedWeather = { data: weatherResponse, timestamp: Date.now() }

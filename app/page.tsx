@@ -13,6 +13,7 @@ import { formatDateFriendly } from '@/lib/date-utils'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<View | 'plan'>('today')
+  const [preSelectedActivities, setPreSelectedActivities] = useState<string[]>([])
   const today = new Date()
   const { hasConnectionError, retryConnection, clearDatabase } = useStorage()
 
@@ -47,18 +48,30 @@ export default function Home() {
           <WeekView onBack={() => setActiveView('today')} />
         )}
         {activeView === 'plan' && (
-          <PlanWeekView 
-            onComplete={() => setActiveView('today')} 
-            onBack={() => setActiveView('menu')}
+          <PlanWeekView
+            onComplete={() => {
+              setActiveView('today')
+              setPreSelectedActivities([])
+            }}
+            onBack={() => {
+              setActiveView('menu')
+              setPreSelectedActivities([])
+            }}
+            preSelectedActivities={preSelectedActivities}
           />
         )}
         {activeView === 'library' && (
           <LibraryView onBack={() => setActiveView('today')} />
         )}
         {activeView === 'menu' && (
-          <MenuView 
-            onBack={() => setActiveView('today')} 
+          <MenuView
+            onBack={() => setActiveView('today')}
             onOpenPlan={() => setActiveView('plan')}
+            onOpenPlanWithActivities={(activityIds) => {
+              setPreSelectedActivities(activityIds)
+              setActiveView('plan')
+            }}
+            onNavigateToToday={() => setActiveView('today')}
           />
         )}
       </main>

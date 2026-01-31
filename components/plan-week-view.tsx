@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Check, ChevronRight, ChevronLeft, ChevronDown, Sparkles, Search,
   ArrowUpDown, Clock, ArrowRightLeft, X, Info,
-  Zap, Leaf, Plus, GripVertical
+  Zap, Leaf, Plus, GripVertical, Star, RefreshCw
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -21,14 +21,18 @@ import {
   type ActivitySelection,
   type Category
 } from '@/lib/activities'
-import { useStorage, DailySchedule } from '@/hooks/use-storage'
+import { useStorage, DailySchedule, SavedPlanConfig } from '@/hooks/use-storage'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor } from '@/hooks/use-weather'
+import { useCalendar } from '@/hooks/use-calendar'
+import { CalendarEventListItem } from './calendar-event-card'
+import { HealthCoachModal } from './health-coach-modal'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
 
 interface PlanWeekViewProps {
   onComplete: () => void
   onBack: () => void
+  preSelectedActivities?: string[]
 }
 
 type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
@@ -78,15 +82,17 @@ const FREQUENCY_OPTIONS: { value: PlanFrequency; label: string }[] = [
   { value: 'light', label: 'Light days' },
   { value: 'everyday', label: 'Every day' },
   { value: 'weekdays', label: 'Weekdays only' },
-  { value: 'weekends', label: 'Weekends only' }
+  { value: 'weekends', label: 'Weekends only' },
+  { value: 'custom', label: 'Custom...' }
 ]
 
 const CATEGORY_ORDER: Category[] = ['physical', 'mind_body', 'professional']
 
-export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
+export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }: PlanWeekViewProps) {
   const storage = useStorage()
   const { activities: notionActivities, isLoading: activitiesLoading, isSyncing, source: activitySource, syncFromNotion, getPlanableActivities } = useActivities()
   const { getWeatherForDate, hasBadWeather } = useWeather()
+  const { isConnected: calendarConnected, getEventsForDate, getEventsForTimeBlock, formatEventTime } = useCalendar()
 
   // New step flow
   const [step, setStep] = useState<PlanStep>('select_activities')
@@ -139,6 +145,16 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false)
+
+  // Health Coach modal
+  const [showHealthCoach, setShowHealthCoach] = useState(false)
+
+  // Custom day picker modal
+  const [customDayPickerActivity, setCustomDayPickerActivity] = useState<string | null>(null)
+
+  // Saved plan config
+  const [savedConfig, setSavedConfig] = useState<SavedPlanConfig | null>(null)
+  const [loadingSavedConfig, setLoadingSavedConfig] = useState(true)
 
   // Touch drag state for template editing
   const [dragState, setDragState] = useState<{
@@ -224,9 +240,15 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
         grouped[a.category].push(a)
       }
     })
-    // Sort each category alphabetically by name
+    // Sort each category: favorites first, then alphabetically by name
     Object.keys(grouped).forEach(key => {
-      grouped[key as Category].sort((a, b) => a.name.localeCompare(b.name))
+      grouped[key as Category].sort((a, b) => {
+        // Favorites come first
+        if (a.favorite && !b.favorite) return -1
+        if (!a.favorite && b.favorite) return 1
+        // Then alphabetically
+        return a.name.localeCompare(b.name)
+      })
     })
     return grouped
   }, [planableActivities])
@@ -241,6 +263,46 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
     setWeekDates(dates)
   }, [])
 
+  // Load saved plan config on mount
+  useEffect(() => {
+    async function loadSavedConfig() {
+      try {
+        const config = await storage.getLastPlanConfig()
+        setSavedConfig(config)
+      } catch (e) {
+        console.error('Failed to load saved plan config:', e)
+      } finally {
+        setLoadingSavedConfig(false)
+      }
+    }
+    if (storage.isReady) {
+      loadSavedConfig()
+    }
+  }, [storage.isReady, storage.getLastPlanConfig])
+
+  // Apply pre-selected activities from Health Coach
+  useEffect(() => {
+    if (preSelectedActivities.length > 0 && !activitiesLoading) {
+      // Add pre-selected activities to selections
+      const newSelections: ActivitySelection[] = preSelectedActivities
+        .filter(actId => getActivity(actId)) // Only include activities that exist
+        .filter(actId => !selections.some(s => s.activityId === actId)) // Avoid duplicates
+        .map(activityId => {
+          const activity = getActivity(activityId)
+          // Default to everyday for mind-body activities from Health Coach
+          return { activityId, frequency: 'everyday' as PlanFrequency }
+        })
+
+      if (newSelections.length > 0) {
+        setSelections(prev => [...prev, ...newSelections])
+        // Expand mind_body category to show the selections
+        if (!expandedCategories.includes('mind_body')) {
+          setExpandedCategories(prev => [...prev, 'mind_body'])
+        }
+      }
+    }
+  }, [preSelectedActivities, activitiesLoading]) // Only run when preSelectedActivities changes or activities finish loading
+
   // Helper: check if activity should appear on a given day
   const shouldActivityAppear = useCallback((
     frequency: PlanFrequency,
@@ -253,6 +315,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
       case 'everyday': return true
       case 'weekdays': return isWeekdayDate
       case 'weekends': return !isWeekdayDate
+      case 'custom': return true  // Custom days are handled separately in generateSchedules
     }
   }, [])
 
@@ -317,6 +380,8 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
       }
     }
 
+    // Activities are added in selection order, which preserves user's intended sequence
+
     return template
   }, [selections, shouldActivityAppear, getSmartTimeBlock, getActivity])
 
@@ -378,6 +443,39 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
         }
       }
 
+      // Handle custom frequency activities - only include on selected days
+      const customSelections = selections.filter(s => s.frequency === 'custom')
+      for (const customSel of customSelections) {
+        const activityIdToCheck = customSel.variantId || customSel.activityId
+        const isCustomDaySelected = customSel.customDays?.includes(dateStr)
+
+        if (!isCustomDaySelected) {
+          // Remove this activity from all time blocks for this day
+          for (const block of VISIBLE_TIME_BLOCKS) {
+            if (activities[block]) {
+              activities[block] = activities[block].filter(id => id !== activityIdToCheck)
+            }
+          }
+        } else {
+          // Make sure it's added if it's a custom selected day
+          // It might not be in template if it didn't match heavy/light days
+          const activity = getActivity(activityIdToCheck)
+          if (activity) {
+            const timeBlock = getSmartTimeBlock(activity)
+            const mappedBlock = (() => {
+              if (timeBlock === 'before12pm') return 'beforeNoon'
+              if (timeBlock === 'before3pm' || timeBlock === 'before6pm') return 'before5pm'
+              if (timeBlock === 'before12am') return 'before9pm'
+              return timeBlock as keyof DailySchedule['activities']
+            })()
+            if (!activities[mappedBlock]?.includes(activityIdToCheck)) {
+              if (!activities[mappedBlock]) activities[mappedBlock] = []
+              activities[mappedBlock].push(activityIdToCheck)
+            }
+          }
+        }
+      }
+
       schedules[dateStr] = { date: dateStr, activities }
       console.log('PlanWeekView: Generated schedule for', dateStr, activities)
     })
@@ -385,7 +483,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
     console.log('PlanWeekView: All generated schedules:', Object.keys(schedules))
     setGeneratedSchedules(schedules)
     setStep('preview')
-  }, [weekDates, heavyDay, lightDay, startWithHeavy, selections])
+  }, [weekDates, heavyDay, lightDay, startWithHeavy, selections, getActivity, getSmartTimeBlock])
 
   // Save schedules with timeout fallback
   const saveSchedules = async () => {
@@ -413,6 +511,35 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
           await storage.saveDailySchedule(schedule)
           console.log('Saved schedule for:', schedule.date)
         }
+
+        // Also save the plan configuration for future recall
+        const planConfig = {
+          selectedActivities: selections.map(s => s.activityId),
+          frequencies: selections.reduce((acc, s) => {
+            acc[s.activityId] = s.frequency
+            return acc
+          }, {} as Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends'>),
+          heavyDaySchedule: {
+            before6am: heavyDay.before6am,
+            before9am: heavyDay.before9am,
+            beforeNoon: [...heavyDay.beforeNoon, ...heavyDay.before12pm],
+            before230pm: [...heavyDay.before230pm, ...heavyDay.before3pm],
+            before5pm: [...heavyDay.before5pm, ...heavyDay.before6pm],
+            before9pm: [...heavyDay.before9pm, ...heavyDay.before12am]
+          },
+          lightDaySchedule: {
+            before6am: lightDay.before6am,
+            before9am: lightDay.before9am,
+            beforeNoon: [...lightDay.beforeNoon, ...lightDay.before12pm],
+            before230pm: [...lightDay.before230pm, ...lightDay.before3pm],
+            before5pm: [...lightDay.before5pm, ...lightDay.before6pm],
+            before9pm: [...lightDay.before9pm, ...lightDay.before12am]
+          },
+          startWithHeavy
+        }
+        await storage.savePlanConfig(planConfig)
+        console.log('Plan config saved')
+
         return 'success'
       })()
 
@@ -466,10 +593,39 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
 
   // Update frequency for an activity
   const updateFrequency = (activityId: string, frequency: PlanFrequency) => {
+    if (frequency === 'custom') {
+      // Open the custom day picker modal
+      setCustomDayPickerActivity(activityId)
+      // Still update to 'custom' frequency, but customDays will be set via the picker
+      setSelections(prev =>
+        prev.map(s => s.activityId === activityId ? { ...s, frequency, customDays: s.customDays || [] } : s)
+      )
+    } else {
+      setSelections(prev =>
+        prev.map(s => s.activityId === activityId ? { ...s, frequency, customDays: undefined } : s)
+      )
+    }
+  }
+
+  // Update custom days for an activity
+  const updateCustomDays = (activityId: string, days: string[]) => {
     setSelections(prev =>
-      prev.map(s => s.activityId === activityId ? { ...s, frequency } : s)
+      prev.map(s => s.activityId === activityId ? { ...s, customDays: days } : s)
     )
   }
+
+  // Get next 7 days starting from tomorrow
+  const getNext7Days = useMemo(() => {
+    const days: Date[] = []
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(tomorrow)
+      day.setDate(tomorrow.getDate() + i)
+      days.push(day)
+    }
+    return days
+  }, [])
 
   // Update variant for an activity
   const updateVariant = (activityId: string, variantId: string | undefined) => {
@@ -484,6 +640,76 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
       prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
     )
   }
+
+  // Handle coach suggestion acceptance
+  const handleCoachSuggestion = (activityId: string) => {
+    // Check if already selected
+    const existing = selections.find(s => s.activityId === activityId)
+    if (!existing) {
+      // Add with everyday frequency for mind-body activities
+      setSelections(prev => [...prev, { activityId, frequency: 'everyday' as PlanFrequency }])
+      // Expand mind_body category to show the selection
+      if (!expandedCategories.includes('mind_body')) {
+        setExpandedCategories(prev => [...prev, 'mind_body'])
+      }
+    }
+  }
+
+  // Apply saved plan configuration
+  const applySavedConfig = useCallback(() => {
+    if (!savedConfig) return
+
+    // Restore selections with frequencies
+    const restoredSelections: ActivitySelection[] = savedConfig.selectedActivities
+      .filter(actId => getActivity(actId)) // Only include activities that still exist
+      .map(activityId => ({
+        activityId,
+        frequency: savedConfig.frequencies[activityId] || 'everyday'
+      }))
+
+    setSelections(restoredSelections)
+    setStartWithHeavy(savedConfig.startWithHeavy)
+
+    // Restore day templates
+    const emptyTemplate: DayTemplate = {
+      before6am: [],
+      before9am: [],
+      before12pm: [],
+      before3pm: [],
+      before5pm: [],
+      before6pm: [],
+      before9pm: [],
+      before12am: [],
+      beforeNoon: [],
+      before230pm: []
+    }
+
+    setHeavyDay({
+      ...emptyTemplate,
+      before6am: savedConfig.heavyDaySchedule.before6am || [],
+      before9am: savedConfig.heavyDaySchedule.before9am || [],
+      beforeNoon: savedConfig.heavyDaySchedule.beforeNoon || [],
+      before230pm: savedConfig.heavyDaySchedule.before230pm || [],
+      before5pm: savedConfig.heavyDaySchedule.before5pm || [],
+      before9pm: savedConfig.heavyDaySchedule.before9pm || []
+    })
+
+    setLightDay({
+      ...emptyTemplate,
+      before6am: savedConfig.lightDaySchedule.before6am || [],
+      before9am: savedConfig.lightDaySchedule.before9am || [],
+      beforeNoon: savedConfig.lightDaySchedule.beforeNoon || [],
+      before230pm: savedConfig.lightDaySchedule.before230pm || [],
+      before5pm: savedConfig.lightDaySchedule.before5pm || [],
+      before9pm: savedConfig.lightDaySchedule.before9pm || []
+    })
+
+    // Expand all categories that have selected activities
+    const categoriesWithSelections = new Set(
+      restoredSelections.map(s => getActivity(s.activityId)?.category).filter(Boolean)
+    )
+    setExpandedCategories(Array.from(categoriesWithSelections) as string[])
+  }, [savedConfig, getActivity])
 
   // Toggle variant expansion
   const toggleVariantExpansion = (activityId: string) => {
@@ -1098,6 +1324,44 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
           </p>
         </div>
 
+        {/* Health Coach suggestion button */}
+        <button
+          onClick={() => setShowHealthCoach(true)}
+          className="w-full p-4 rounded-xl border bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-purple-200 dark:border-purple-800 hover:shadow-md transition-all text-left"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center shrink-0">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <p className="font-medium text-sm">Ask your Health Coach</p>
+              <p className="text-xs text-muted-foreground">Get personalized mind-body activity suggestions</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
+          </div>
+        </button>
+
+        {/* Use Previous Plan button - only show if config exists and nothing selected yet */}
+        {savedConfig && !loadingSavedConfig && selections.length === 0 && (
+          <button
+            onClick={applySavedConfig}
+            className="w-full p-4 rounded-xl border bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800 hover:shadow-md transition-all text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shrink-0">
+                <RefreshCw className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">Use Previous Plan</p>
+                <p className="text-xs text-muted-foreground">
+                  {savedConfig.selectedActivities.length} activities from {new Date(savedConfig.savedAt).toLocaleDateString()}
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
+            </div>
+          </button>
+        )}
+
         {activitiesLoading ? (
           <div className="flex items-center justify-center py-12">
             <p className="text-muted-foreground">Loading activities...</p>
@@ -1141,7 +1405,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                 </button>
 
                 {isExpanded && (
-                  <div className="border-t px-3 py-2 space-y-1">
+                  <div className="border-t px-3 py-2 divide-y divide-border/50">
                     {activities.map(activity => {
                       const selection = selections.find(s => s.activityId === activity.id)
                       const isSelected = !!selection
@@ -1150,7 +1414,7 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                       const variants = hasVariants ? getVariantsForActivity(activity.id) : []
 
                       return (
-                        <div key={activity.id} className="space-y-1">
+                        <div key={activity.id} className="py-1 first:pt-0 last:pb-0">
                           <div className={cn(
                             "flex items-center gap-3 p-2 rounded-lg transition-all",
                             isSelected && "bg-primary/5"
@@ -1173,8 +1437,13 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                               className="flex-1 min-w-0 cursor-pointer"
                               onClick={() => toggleActivitySelection(activity.id)}
                             >
-                              <span className="font-medium text-sm">{activity.name}</span>
-                              <span className="text-xs text-muted-foreground ml-2">{activity.duration} min</span>
+                              <span className="flex items-center gap-1.5">
+                                {activity.favorite && (
+                                  <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 shrink-0" />
+                                )}
+                                <span className="font-medium text-sm">{activity.name}</span>
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-5">{activity.duration} min</span>
                             </div>
 
                             {/* Info button */}
@@ -1278,14 +1547,14 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
             onClick={() => setViewingActivity(null)}
           >
             <div
-              className="w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-2xl bg-card animate-in zoom-in-95 duration-200"
+              className="w-full max-w-md max-h-[70vh] overflow-y-auto rounded-2xl bg-card animate-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4">
-                <div>
+              <div className="sticky top-0 z-10 flex items-start justify-between border-b bg-card p-4">
+                <div className="flex-1 min-w-0 pr-2">
                   <h2 className="text-lg font-semibold">{viewingActivity.name}</h2>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span
                       className="text-xs px-2 py-0.5 rounded-full"
                       style={{ backgroundColor: `${CATEGORIES[viewingActivity.category].color}20`, color: CATEGORIES[viewingActivity.category].color }}
@@ -1300,14 +1569,14 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                 </div>
                 <button
                   onClick={() => setViewingActivity(null)}
-                  className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
+                  className="rounded-lg p-2 text-muted-foreground hover:bg-muted shrink-0"
                 >
                   <X className="h-5 w-5" />
                 </button>
               </div>
 
               {/* Content */}
-              <div className="p-4 space-y-4 pb-[env(safe-area-inset-bottom)]">
+              <div className="p-4 space-y-4">
                 {viewingActivity.description && (
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-1">Description</h3>
@@ -1370,6 +1639,102 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
             </div>
           </div>
         )}
+
+        {/* Health Coach Modal */}
+        {showHealthCoach && (
+          <HealthCoachModal
+            onClose={() => setShowHealthCoach(false)}
+            onAcceptSuggestion={handleCoachSuggestion}
+            onAddToToday={(activityIds) => {
+              // In planning context, "Add to Today" just adds to selections
+              activityIds.forEach(id => handleCoachSuggestion(id))
+              setShowHealthCoach(false)
+            }}
+            onFocusForWeek={(activityIds) => {
+              // "Focus for Week" adds to selections (we're already in planning)
+              activityIds.forEach(id => handleCoachSuggestion(id))
+              setShowHealthCoach(false)
+            }}
+          />
+        )}
+
+        {/* Custom Day Picker Modal */}
+        {customDayPickerActivity && (() => {
+          const selection = selections.find(s => s.activityId === customDayPickerActivity)
+          const activity = notionActivities.find(a => a.id === customDayPickerActivity)
+          const selectedDays = selection?.customDays || []
+
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => setCustomDayPickerActivity(null)}
+            >
+              <div
+                className="w-full max-w-sm rounded-2xl bg-card animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between border-b p-4">
+                  <div>
+                    <h2 className="text-lg font-semibold">Select Days</h2>
+                    <p className="text-sm text-muted-foreground">{activity?.name}</p>
+                  </div>
+                  <button
+                    onClick={() => setCustomDayPickerActivity(null)}
+                    className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Day picker grid */}
+                <div className="p-4">
+                  <p className="text-sm text-muted-foreground mb-3">Tap the days you want to do this activity:</p>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {getNext7Days.map(day => {
+                      const dateStr = formatDateISO(day)
+                      const isSelected = selectedDays.includes(dateStr)
+                      const dayName = getShortDayName(day)
+                      const dayNum = getDayNumber(day)
+
+                      return (
+                        <button
+                          key={dateStr}
+                          onClick={() => {
+                            const newDays = isSelected
+                              ? selectedDays.filter(d => d !== dateStr)
+                              : [...selectedDays, dateStr]
+                            updateCustomDays(customDayPickerActivity, newDays)
+                          }}
+                          className={cn(
+                            "flex flex-col items-center p-2 rounded-lg transition-all",
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted hover:bg-muted/80"
+                          )}
+                        >
+                          <span className="text-xs font-medium">{dayName}</span>
+                          <span className="text-lg font-semibold">{dayNum}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t p-4">
+                  <Button
+                    className="w-full"
+                    onClick={() => setCustomDayPickerActivity(null)}
+                    disabled={selectedDays.length === 0}
+                  >
+                    Done ({selectedDays.length} day{selectedDays.length !== 1 ? 's' : ''} selected)
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -1657,6 +2022,12 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                             <span key={actId} className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORIES[activity.category].color }} />
                           )
                         })}
+                        {calendarConnected && (() => {
+                          const eventsForDay = getEventsForDate(dateStr)
+                          return eventsForDay.length > 0 ? (
+                            <span className="text-[10px] text-blue-500 ml-1">{eventsForDay.length} event{eventsForDay.length !== 1 ? 's' : ''}</span>
+                          ) : null
+                        })()}
                         {badWeather && hasOutdoorActivities && (
                           <span className="text-[10px] text-amber-600 ml-1">outdoor activities may be affected</span>
                         )}
@@ -1677,6 +2048,8 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                       const activities = schedule.activities[block] || []
                       const deadlineLabel = TIME_BLOCK_DEADLINE_LABELS[block]
                       const isBlockDropTarget = previewDropTarget?.block === block && previewDragState?.sourceBlock !== block
+                      // Get calendar events for this specific time block
+                      const blockEvents = calendarConnected ? getEventsForTimeBlock(dateStr, block) : []
 
                       const showDropAtEnd = previewDropTarget &&
                         previewDropTarget.block === block &&
@@ -1693,6 +2066,19 @@ export function PlanWeekView({ onComplete, onBack }: PlanWeekViewProps) {
                             isBlockDropTarget && "bg-primary/10 rounded-lg"
                           )}
                         >
+                          {/* Calendar events for this time block */}
+                          {blockEvents.length > 0 && (
+                            <div className="space-y-1 mb-1">
+                              {blockEvents.map(event => (
+                                <CalendarEventListItem
+                                  key={event.id}
+                                  event={event}
+                                  formatTime={formatEventTime}
+                                />
+                              ))}
+                            </div>
+                          )}
+
                           {/* Activities for this time block */}
                           <div className="space-y-1">
                             {activities.map((actId, idx) => renderPreviewActivityItem(actId, block, idx, dateStr))}

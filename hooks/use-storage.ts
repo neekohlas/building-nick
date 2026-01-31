@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
  */
 
 const DB_NAME = 'BuildingNickDB'
-const DB_VERSION = 3  // Bumped for activities store + new time blocks
+const DB_VERSION = 4  // Bumped for savedPlanConfigs store
 const OPERATION_TIMEOUT = 5000 // 5 seconds
 
 export interface Completion {
@@ -38,12 +38,25 @@ export interface WeekPlan {
   createdAt: string
 }
 
+export type TimeBlock = 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'before5pm' | 'before9pm'
+
+export interface SavedPlanConfig {
+  id: string  // 'latest' or a unique id
+  savedAt: string
+  selectedActivities: string[]  // Activity IDs
+  frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends'>
+  heavyDaySchedule: DailySchedule['activities']
+  lightDaySchedule: DailySchedule['activities']
+  startWithHeavy: boolean
+}
+
 // Single shared promise for database connection
 let dbPromise: Promise<IDBDatabase> | null = null
 let currentDb: IDBDatabase | null = null
 
 function getDB(): Promise<IDBDatabase> {
   if (dbPromise) {
+    console.log('getDB: returning existing promise')
     return dbPromise
   }
 
@@ -53,6 +66,18 @@ function getDB(): Promise<IDBDatabase> {
 
   dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     console.log('Opening IndexedDB v' + DB_VERSION + '...')
+
+    let resolved = false
+
+    // Timeout after 5 seconds
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        console.error('IndexedDB open timed out after 5s')
+        dbPromise = null
+        resolved = true
+        reject(new Error('IndexedDB open timed out'))
+      }
+    }, 5000)
 
     // Close any existing connection first
     if (currentDb) {
@@ -64,18 +89,24 @@ function getDB(): Promise<IDBDatabase> {
     const request = indexedDB.open(DB_NAME, DB_VERSION)
 
     request.onerror = () => {
+      if (resolved) return
+      resolved = true
+      clearTimeout(timeoutId)
       console.error('IndexedDB open error:', request.error)
       dbPromise = null
       reject(request.error)
     }
 
     request.onsuccess = () => {
+      if (resolved) return
+      resolved = true
+      clearTimeout(timeoutId)
       console.log('IndexedDB opened successfully, version:', request.result.version)
       const db = request.result
       currentDb = db
 
       // Verify all stores exist
-      const requiredStores = ['completions', 'schedules', 'weekPlans', 'activities', 'metadata']
+      const requiredStores = ['completions', 'schedules', 'weekPlans', 'activities', 'metadata', 'savedPlanConfigs']
       const missingStores = requiredStores.filter(s => !db.objectStoreNames.contains(s))
       if (missingStores.length > 0) {
         console.warn('Missing stores after open:', missingStores)
@@ -142,11 +173,20 @@ function getDB(): Promise<IDBDatabase> {
         console.log('Creating metadata store')
         database.createObjectStore('metadata', { keyPath: 'key' })
       }
+
+      // Saved plan configurations (v4+)
+      if (!database.objectStoreNames.contains('savedPlanConfigs')) {
+        console.log('Creating savedPlanConfigs store')
+        database.createObjectStore('savedPlanConfigs', { keyPath: 'id' })
+      }
     }
 
     request.onblocked = () => {
       console.warn('IndexedDB open blocked by another tab - please close other tabs')
+      // Don't reject here - wait for unblock or timeout
     }
+
+    console.log('IndexedDB open request created, waiting for callbacks...')
   })
 
   return dbPromise
@@ -418,10 +458,13 @@ export function useStorage() {
   const [hasConnectionError, setHasConnectionError] = useState(false)
 
   useEffect(() => {
+    console.log('useStorage useEffect running, window:', typeof window)
     if (typeof window === 'undefined') return
 
+    console.log('useStorage: calling getDB()...')
     getDB()
       .then(() => {
+        console.log('useStorage: getDB() resolved, setting isReady=true')
         setIsReady(true)
         setHasConnectionError(false)
       })
@@ -537,6 +580,46 @@ export function useStorage() {
     return meta?.value || null
   }, [])
 
+  // Saved Plan Configs
+  const savePlanConfig = useCallback(async (config: Omit<SavedPlanConfig, 'id' | 'savedAt'>): Promise<void> => {
+    const fullConfig: SavedPlanConfig = {
+      ...config,
+      id: 'latest',  // Always overwrite the 'latest' config
+      savedAt: new Date().toISOString()
+    }
+    await dbPut('savedPlanConfigs', fullConfig, 'id')
+  }, [])
+
+  const getLastPlanConfig = useCallback(async (): Promise<SavedPlanConfig | null> => {
+    return dbGet<SavedPlanConfig>('savedPlanConfigs', 'latest')
+  }, [])
+
+  // Check if there are scheduled activities in the next N days
+  const getScheduledActivitiesForRange = useCallback(async (startDate: string, days: number): Promise<Record<string, string[]>> => {
+    const result: Record<string, string[]> = {}
+    const start = new Date(startDate)
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(start)
+      date.setDate(date.getDate() + i)
+      const dateStr = date.toISOString().split('T')[0]
+
+      const schedule = await getDailySchedule(dateStr)
+      if (schedule) {
+        // Collect all activities from all time blocks
+        const allActivities: string[] = []
+        for (const block of Object.values(schedule.activities)) {
+          allActivities.push(...block)
+        }
+        if (allActivities.length > 0) {
+          result[dateStr] = allActivities
+        }
+      }
+    }
+
+    return result
+  }, [getDailySchedule])
+
   // Recovery utilities
   const clearDatabase = useCallback(async () => {
     await deleteDatabase()
@@ -577,6 +660,10 @@ export function useStorage() {
     saveActivities,
     getCachedActivities,
     getActivitiesSyncTime,
+    // Plan configs
+    savePlanConfig,
+    getLastPlanConfig,
+    getScheduledActivitiesForRange,
     clearDatabase,
     retryConnection
   }
