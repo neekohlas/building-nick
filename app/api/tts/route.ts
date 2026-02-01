@@ -5,6 +5,9 @@ import { join } from 'path'
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 
+// Check if we're running on Vercel (serverless with read-only filesystem)
+const IS_VERCEL = process.env.VERCEL === '1'
+
 // ElevenLabs voice IDs - these are pre-made voices
 // Rachel is a calm, warm female voice good for meditation/guidance
 const ELEVENLABS_VOICES = {
@@ -17,8 +20,8 @@ const ELEVENLABS_VOICES = {
   sarah: 'EXAVITQu4vr4xnSDxMaL',  // Default premade
 }
 
-// Cache directory for audio files
-const CACHE_DIR = join(process.cwd(), '.audio-cache')
+// Cache directory for audio files (only works locally, not on Vercel)
+const CACHE_DIR = IS_VERCEL ? '/tmp/.audio-cache' : join(process.cwd(), '.audio-cache')
 
 // Generate a hash for the text to use as filename
 function getAudioHash(text: string, voice: string): string {
@@ -26,9 +29,15 @@ function getAudioHash(text: string, voice: string): string {
 }
 
 // Ensure cache directory exists
-function ensureCacheDir() {
-  if (!existsSync(CACHE_DIR)) {
-    mkdirSync(CACHE_DIR, { recursive: true })
+function ensureCacheDir(): boolean {
+  try {
+    if (!existsSync(CACHE_DIR)) {
+      mkdirSync(CACHE_DIR, { recursive: true })
+    }
+    return true
+  } catch {
+    // Filesystem might be read-only (Vercel)
+    return false
   }
 }
 
@@ -40,32 +49,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 })
     }
 
-    // Check if we have a cached version
-    ensureCacheDir()
-    const hash = getAudioHash(text, voice)
-    const cachePath = join(CACHE_DIR, `${hash}.mp3`)
-
-    if (existsSync(cachePath)) {
-      // Return cached audio
-      console.log('TTS cache hit:', hash)
-      const audioData = readFileSync(cachePath)
-      return new NextResponse(audioData, {
-        headers: {
-          'Content-Type': 'audio/mpeg',
-          'X-Cache': 'HIT',
-        },
-      })
-    }
-
-    // No cache - generate with ElevenLabs
+    // Check API key first
     if (!ELEVENLABS_API_KEY) {
+      console.error('TTS: ELEVENLABS_API_KEY not configured')
       return NextResponse.json(
         { error: 'ElevenLabs API key not configured', fallback: true },
         { status: 503 }
       )
     }
 
-    console.log('TTS cache miss, generating:', hash)
+    const hash = getAudioHash(text, voice)
+    const cachePath = join(CACHE_DIR, `${hash}.mp3`)
+    const canCache = ensureCacheDir()
+
+    // Check if we have a cached version (only if caching is available)
+    if (canCache) {
+      try {
+        if (existsSync(cachePath)) {
+          console.log('TTS cache hit:', hash)
+          const audioData = readFileSync(cachePath)
+          return new NextResponse(audioData, {
+            headers: {
+              'Content-Type': 'audio/mpeg',
+              'X-Cache': 'HIT',
+            },
+          })
+        }
+      } catch (cacheReadError) {
+        console.log('TTS cache read failed, generating fresh:', cacheReadError)
+      }
+    }
+
+    console.log('TTS generating:', hash, '(cache available:', canCache, ')')
 
     const voiceId = ELEVENLABS_VOICES[voice as keyof typeof ELEVENLABS_VOICES] || ELEVENLABS_VOICES.rachel
 
@@ -90,7 +105,7 @@ export async function POST(request: Request) {
       const errorText = await response.text()
       console.error('ElevenLabs TTS error:', response.status, errorText)
       return NextResponse.json(
-        { error: 'TTS generation failed', fallback: true },
+        { error: `TTS generation failed: ${response.status}`, details: errorText, fallback: true },
         { status: 502 }
       )
     }
@@ -99,19 +114,22 @@ export async function POST(request: Request) {
     const audioBuffer = await response.arrayBuffer()
     const audioData = Buffer.from(audioBuffer)
 
-    // Cache it for future use
-    try {
-      writeFileSync(cachePath, audioData)
-      console.log('TTS cached:', hash)
-    } catch (cacheError) {
-      console.error('Failed to cache TTS:', cacheError)
-      // Continue anyway - just won't be cached
+    console.log('TTS generated successfully, size:', audioData.length)
+
+    // Cache it for future use (only if caching is available)
+    if (canCache) {
+      try {
+        writeFileSync(cachePath, audioData)
+        console.log('TTS cached:', hash)
+      } catch (cacheError) {
+        console.log('TTS cache write failed (expected on Vercel):', cacheError)
+      }
     }
 
     return new NextResponse(audioData, {
       headers: {
         'Content-Type': 'audio/mpeg',
-        'X-Cache': 'MISS',
+        'X-Cache': canCache ? 'MISS' : 'DISABLED',
       },
     })
   } catch (error) {
