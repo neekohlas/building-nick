@@ -87,16 +87,24 @@ Connect to Google Calendar to display calendar events alongside the activity sch
 **Completed:** January 31, 2026
 
 ### Description
-Visual triangular radar chart showing the balance of Heart (emotional), Mind (cognitive), and Body (physical) components for each activity.
+Visual indicator showing the balance of Heart (emotional), Mind (cognitive), and Body (physical) components for each activity.
 
 ### What Was Implemented
 - `/lib/activities.tsx` - Added `SpectrumScores` interface with heart/mind/body (0-1 each)
-- `/components/spectrum-triangle.tsx` - SVG-based triangular radar visualization
+- `/components/spectrum-bar.tsx` - Horizontal gradient bar with repeating icon patterns
 - `/app/api/activities/route.ts` - Updated to read Heart/Mind/Body number columns from Notion
 - `/hooks/use-activities.ts` - Updated to pass spectrum scores through
-- `/components/library-view.tsx` - Shows small spectrum triangle on each activity card
-- `/components/activity-detail-modal.tsx` - Shows medium spectrum with labels in modal
-- `/scripts/populate-spectrum-scores.ts` - Script to populate initial scores in Notion
+- Activity cards: Spectrum bar at top showing colored segments with embedded icons
+- Activity detail modal: Larger spectrum bar at top
+- Library view: Spectrum bar on each activity card
+- Plan week view: Spectrum bar on activity cards
+
+### Spectrum Bar Design
+- Horizontal gradient bar with smooth transitions between color segments
+- Repeating icon pattern within each segment (heart, lightbulb, dumbbell)
+- Segments sorted by value (largest first/leftmost)
+- Icons rendered in semi-transparent white for contrast
+- Dimensions below 0.2 threshold are hidden
 
 ### Notion Database Setup
 Add three Number columns to the activities database:
@@ -111,110 +119,168 @@ Add three Number columns to the activities database:
 
 ---
 
-## Feature 5: Claude AI Health Coach
+## Feature 4: Claude AI Health Coach
 
-**Status:** Not Started
+**Status:** COMPLETE
 **Priority:** High
 **Complexity:** Medium-High
+**Completed:** January 29, 2026
 
 ### Description
-Integrate Claude AI (free tier) to provide personalized activity suggestions during the Plan Week flow. The AI analyzes recent activity patterns and user feedback to recommend mind-body activities.
+Integrate Claude AI to provide personalized activity suggestions during the Plan Week flow. The AI analyzes recent activity patterns and user feedback to recommend mind-body activities.
 
-### Claude Free Tier Details
-- Model: `claude-3-haiku` (fast, cost-effective)
-- Free tier: Up to 4,000 API calls/month (should be plenty for personal use)
-- Alternative: Claude Sonnet if more reasoning needed
-
-### Implementation Notes
-- Trigger during Plan Week View (Step 1 or new dedicated step)
-- Gather context: last 2-4 weeks of completions, patterns, streaks
-- Ask user: "How have you been feeling?" or "Want to try something different?"
-- Suggest 2-3 mind-body activities with brief explanations
-- User can accept suggestions or stick with current plan
+### What Was Implemented
+- `/app/api/coach/suggest/route.ts` - API route that calls Claude with activity context
+- `/components/plan-week-view.tsx` - "Get AI Suggestions" button in Step 1 (Mind-Body selection)
+- `/components/ai-suggestions-modal.tsx` - Modal displaying AI recommendations with accept/dismiss actions
+- Context gathering: Recent completions, current week's plan, available activities
+- Personalized suggestions with reasoning for each recommendation
 
 ### User Flow
-1. User enters Plan Week View
-2. App fetches recent activity history
-3. Prompt: "Would you like AI suggestions for this week's mind-body activities?"
-4. If yes: Claude analyzes patterns, asks follow-up question about how user is feeling
-5. Claude provides personalized recommendations with reasoning
-6. User accepts, modifies, or declines suggestions
+1. User enters Plan Week View Step 1 (Mind-Body Activities)
+2. User taps "Get AI Suggestions" button
+3. App gathers context (recent history, available activities)
+4. Claude analyzes patterns and provides 2-3 recommendations
+5. User can accept suggestions (adds to plan) or dismiss
 
-### Technical Requirements
+### Technical Details
+- Model: Claude 3 Haiku (fast, cost-effective)
 - Environment variable: `ANTHROPIC_API_KEY`
-- API route: `/api/coach/suggest`
-- Context window: Summarize 2-4 weeks of activity data
-- Prompt engineering for consistent, helpful responses
-- Rate limiting to stay within free tier
-
-### Sample Prompt Structure
-```
-You are a health coach helping someone plan their week.
-
-Recent activity patterns:
-- [summary of completions, streaks, variety]
-
-The user wants suggestions for mind-body activities.
-Available activities: [list from activities.tsx]
-
-Ask how they've been feeling, then suggest 2-3 activities with brief reasoning.
-```
+- Prompt includes activity metadata, recent completion history, and Heart-Mind-Body spectrum data
 
 ---
 
-## Feature 6: Audio Instruction Mode
+## Feature 5: Audio Instruction Mode
 
-**Status:** Not Started
+**Status:** COMPLETE
 **Priority:** Medium
 **Complexity:** High
+**Completed:** January 30, 2026
 
 ### Description
-Add hands-free audio guidance for activities with step-by-step instructions (e.g., Hargrove movement exercises). The app reads instructions aloud and responds to voice commands.
+Hands-free audio guidance for activities with step-by-step instructions. The app reads instructions aloud using high-quality TTS and responds to voice commands.
 
-### Implementation Notes
-- Use Web Speech API for text-to-speech (TTS)
-- Use Web Speech API for speech recognition (STT)
-- Voice commands: "next", "repeat", "back", "pause", "stop"
-- Visual indicator for listening state
-- Works with existing `instructions` field on activities
+### What Was Implemented
+- `/app/api/tts/route.ts` - ElevenLabs TTS API integration for natural-sounding voice
+- `/hooks/use-audio-instructions.ts` - State machine for audio mode (speaking, listening, paused)
+- `/components/audio-instructions-overlay.tsx` - Full-screen overlay with step display and controls
+- `/app/api/audio-command/route.ts` - Claude-powered voice command interpretation
+- Activity detail modal: "Start Audio Guide" button for activities with multi-step instructions
+- Visual indicators: Current step, progress, speaking/listening state
+- Manual fallback buttons: Next, Repeat, Back, Stop
 
-### User Flow
-1. User opens Activity Detail Modal
-2. User taps "Start Audio Mode" button
-3. App reads first instruction step aloud
-4. Visual: current step highlighted, microphone indicator
-5. App pauses and listens for command
-6. User says "next" → App reads next step
-7. User says "repeat" → App re-reads current step
-8. User says "stop" → Exit audio mode
-
-### Technical Requirements
-- Parse `instructions` HTML into discrete steps
-- Web Speech API: `SpeechSynthesis` for TTS
-- Web Speech API: `SpeechRecognition` for STT
-- Fallback: manual "Next" / "Repeat" buttons if voice not available
-- Consider wake word or always-listening mode
-
-### Supported Commands
+### Voice Commands (via Claude interpretation)
 | Command | Action |
 |---------|--------|
-| "next" / "continue" | Advance to next step |
-| "repeat" / "again" | Re-read current step |
-| "back" / "previous" | Go to previous step |
-| "pause" | Stop reading, keep position |
-| "stop" / "done" | Exit audio mode |
+| "next" / "continue" / "go on" | Advance to next step |
+| "repeat" / "again" / "say that again" | Re-read current step |
+| "back" / "previous" / "go back" | Go to previous step |
+| "pause" / "wait" | Stop reading, keep position |
+| "stop" / "done" / "exit" | Exit audio mode |
 
-### Activities to Support Initially
-- Hargrove movement exercises (have detailed instructions)
-- Breathing exercises
-- Meditation guides
-- Any activity with multi-step `instructions`
+### Technical Details
+- TTS: ElevenLabs API with Rachel voice (natural, clear)
+- STT: Web Speech API (SpeechRecognition)
+- Command parsing: Claude interprets natural language commands
+- Environment variable: `ELEVENLABS_API_KEY`
 
 ### Browser Compatibility
-- Chrome: Full support
-- Safari: Partial (may need polyfill)
-- Firefox: Limited STT support
-- Consider fallback UI for unsupported browsers
+- Chrome: Full support (TTS + STT)
+- Safari: TTS works, STT partial
+- Firefox: TTS works, STT limited
+- Fallback: Manual buttons always available
+
+---
+
+## Feature 6: Advanced AI Health Coach (Voice Agent)
+
+**Status:** Not Started
+**Priority:** High
+**Complexity:** Very High
+
+### Description
+A conversational voice agent that users can talk to naturally. The agent can discuss how you're feeling, suggest activities based on the conversation, and take actions like opening and launching activities.
+
+### Planned Capabilities
+
+**Conversational Interface:**
+- Open the agent from anywhere in the app (floating button or menu item)
+- Natural back-and-forth conversation about how you're feeling
+- Agent remembers context within the session
+- Warm, supportive coaching tone
+
+**Activity Suggestions:**
+- Proactively suggests activities based on conversation
+- Explains why each suggestion might help
+- Can browse and describe activities from the library
+- Considers recent history, time of day, and user preferences
+
+**Action Taking:**
+- "Let's do that one" → Opens activity detail modal
+- "Start the audio guide" → Launches audio instruction mode
+- "Add this to my plan" → Adds activity to today's schedule
+- "What's on my schedule?" → Reads today's activities
+- "Mark that as complete" → Completes the current activity
+
+### User Flow Example
+1. User taps "Talk to Coach" button
+2. Agent: "Hey! How are you feeling today?"
+3. User: "I'm feeling a bit stressed and tight in my shoulders"
+4. Agent: "I hear you. Stress can really build up in the body. I have a few ideas that might help..."
+5. Agent suggests 2-3 activities with brief explanations
+6. User: "The shoulder stretches sound good"
+7. Agent: "Great choice! Want me to start the audio guide for that?"
+8. User: "Yes please"
+9. Agent opens the activity and starts audio mode
+
+### Technical Requirements
+- Real-time speech-to-speech (or near real-time TTS + STT)
+- Claude for conversation and reasoning
+- Tool use / function calling for app actions
+- Session state management
+- Interrupt handling (user can speak mid-response)
+
+### Implementation Options
+
+**Option A: Turn-based (Simpler)**
+- User speaks → transcribed → Claude responds → TTS plays
+- Clear turn-taking, easier to implement
+- Slight latency between turns
+
+**Option B: Streaming (More Natural)**
+- Real-time transcription as user speaks
+- Claude streams response, TTS plays chunks
+- More complex but feels more conversational
+
+### Available Actions (Tool Definitions)
+```
+- open_activity(activity_id) - Opens activity detail modal
+- start_audio_guide(activity_id) - Launches audio instruction mode
+- add_to_schedule(activity_id, time_block) - Adds to today's plan
+- mark_complete(activity_id) - Marks activity as done
+- get_schedule(date) - Returns activities for a date
+- get_activity_suggestions(mood, needs) - Gets personalized suggestions
+- search_activities(query) - Searches activity library
+```
+
+### Context to Provide Claude
+- User's recent activity history (last 2 weeks)
+- Today's schedule and completion status
+- Current time and time block
+- Weather (for outdoor activity suggestions)
+- Available activities with descriptions and spectrum scores
+
+### UI Considerations
+- Floating action button or dedicated "Coach" tab
+- Full-screen overlay when active
+- Visual feedback for listening/speaking states
+- Transcript display (optional, for accessibility)
+- "Type instead" fallback for quiet environments
+
+### Privacy & Data
+- Conversations not stored long-term (session only)
+- No audio recordings saved
+- Activity data stays local (not sent to external services except Claude API)
 
 ---
 
@@ -224,18 +290,16 @@ Add hands-free audio guidance for activities with step-by-step instructions (e.g
 1. **OpenWeather Integration** ✓
 2. **Google Calendar Integration** ✓
 3. **Heart-Mind-Body Spectrum** ✓
+4. **Claude AI Health Coach** ✓
+5. **Audio Instruction Mode** ✓
 
 ### Remaining Features
 
-4. **Claude AI Health Coach** (2-3 sessions)
-   - Builds on existing activity data
-   - Free tier makes it low-risk
-   - Can iterate on prompts over time
-
-5. **Audio Instruction Mode** (3-4 sessions)
-   - Most complex (speech APIs)
-   - Browser compatibility challenges
-   - Can be scoped to subset of activities initially
+6. **Advanced AI Health Coach (Voice Agent)** (4-6 sessions)
+   - Most ambitious feature
+   - Builds on existing audio and AI infrastructure
+   - Could start with turn-based and evolve to streaming
+   - Consider starting with text chat, then adding voice
 
 ---
 
@@ -259,6 +323,9 @@ GOOGLE_CLIENT_SECRET=
 
 # Claude AI
 ANTHROPIC_API_KEY=
+
+# ElevenLabs TTS
+ELEVENLABS_API_KEY=
 ```
 
 ---
@@ -266,10 +333,10 @@ ANTHROPIC_API_KEY=
 ## Notes & Ideas
 
 - Consider a "Settings" view for managing integrations
-- Could combine weather + calendar + AI into a "Smart Planning" mode
-- Audio mode could eventually support custom activities with user-provided instructions
+- Voice agent could eventually support custom activities with user-provided instructions
 - Track which AI suggestions users accept vs decline to improve prompts
+- Voice agent could integrate with calendar to help plan around meetings
 
 ---
 
-*Last Updated: January 26, 2026*
+*Last Updated: January 31, 2026*
