@@ -60,6 +60,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [pushActivity, setPushActivity] = useState<Activity | null>(null)
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [weatherDetailData, setWeatherDetailData] = useState<WeatherDay | null>(null)
+  const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
 
   // Initialize extended dates for scrolling (2 weeks before and after)
   useEffect(() => {
@@ -347,6 +348,24 @@ export function WeekView({ onBack }: WeekViewProps) {
     setPushActivity(null)
   }
 
+  // Remove activity from schedule
+  const handleRemoveActivity = async (activityId: string, timeBlock: TimeBlock) => {
+    if (!schedule) return
+
+    // Remove from schedule
+    const newSchedule: DailySchedule = {
+      ...schedule,
+      activities: {
+        ...schedule.activities,
+        [timeBlock]: schedule.activities[timeBlock].filter(id => id !== activityId)
+      }
+    }
+    await storage.saveDailySchedule(newSchedule)
+    setSchedule(newSchedule)
+    setSelectedActivity(null)
+    setDeleteConfirmActivity(null)
+  }
+
   // Calculate incomplete count
   const incompleteActivities = schedule
     ? Object.values(schedule.activities).flat().filter(id => !completedIds.has(id))
@@ -546,6 +565,7 @@ export function WeekView({ onBack }: WeekViewProps) {
                             setSelectedActivity(activity)
                             setSelectedTimeBlock(block)
                           }}
+                          onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
                         />
                       )
                     })}
@@ -637,6 +657,38 @@ export function WeekView({ onBack }: WeekViewProps) {
             setWeatherDetailData(null)
           }}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmActivity && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDeleteConfirmActivity(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-card p-6 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Remove Activity?</h3>
+            <p className="text-muted-foreground mb-6">
+              Remove <span className="font-medium text-foreground">{deleteConfirmActivity.name}</span> from this day's schedule?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmActivity(null)}
+                className="flex-1 py-2.5 rounded-lg border border-border font-medium hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemoveActivity(deleteConfirmActivity.id, deleteConfirmActivity.block)}
+                className="flex-1 py-2.5 rounded-lg bg-destructive text-destructive-foreground font-medium hover:bg-destructive/90 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

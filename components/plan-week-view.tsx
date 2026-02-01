@@ -217,6 +217,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
     previewItemRefs.current.clear()
   }, [generatedSchedules, expandedDay])
 
+  // Scroll to top when step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [step])
+
   // Merged activities lookup - use Notion activities, fallback to local
   const allActivities = useMemo(() => {
     return { ...ACTIVITIES, ...notionActivities }
