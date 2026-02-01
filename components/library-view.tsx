@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
-import { SpectrumTriangle } from './spectrum-triangle'
+import { SpectrumIcons } from './spectrum-icons'
 import { useActivities } from '@/hooks/use-activities'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
@@ -148,10 +148,10 @@ export function LibraryView({ onBack }: LibraryViewProps) {
                     )}
                   </div>
                 </div>
-                {/* Spectrum triangle visualization */}
+                {/* Spectrum icons visualization */}
                 {activity.spectrum && (
                   <div className="shrink-0">
-                    <SpectrumTriangle spectrum={activity.spectrum} size="sm" />
+                    <SpectrumIcons spectrum={activity.spectrum} size="sm" />
                   </div>
                 )}
               </div>

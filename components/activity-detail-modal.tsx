@@ -6,7 +6,7 @@ import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/acti
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
-import { SpectrumTriangle } from '@/components/spectrum-triangle'
+import { SpectrumIcons } from '@/components/spectrum-icons'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
@@ -115,9 +115,9 @@ export function ActivityDetailModal({
             >
               {category.name}
             </span>
-            {/* Spectrum triangle visualization */}
+            {/* Spectrum icons visualization */}
             {activity.spectrum && (
-              <SpectrumTriangle spectrum={activity.spectrum} size="md" showLabels />
+              <SpectrumIcons spectrum={activity.spectrum} size="md" />
             )}
           </div>
 
