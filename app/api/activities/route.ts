@@ -150,13 +150,49 @@ export async function GET() {
       }
       const dayType = dayTypeMap[rawDayType.toLowerCase()] || undefined
 
+      // Handle Steps column - convert to HTML instructions format
+      // Steps can be rich_text with newlines, or we fall back to Instructions
+      let instructions = ''
+
+      // First try "Steps" column (preferred for audio mode)
+      const stepsRichText = props.Steps?.rich_text || []
+      if (stepsRichText.length > 0) {
+        // Combine all rich text blocks
+        const stepsText = stepsRichText.map((rt: any) => rt.plain_text || '').join('')
+
+        if (stepsText.trim()) {
+          // Split by newlines and convert to HTML list
+          const stepLines = stepsText.split('\n').filter((line: string) => line.trim())
+          if (stepLines.length > 0) {
+            instructions = `<h4>Instructions</h4>\n<ol>\n${stepLines.map((step: string) => `<li>${step.trim()}</li>`).join('\n')}\n</ol>`
+          }
+        }
+      }
+
+      // Fall back to Instructions column if no Steps
+      if (!instructions) {
+        const rawInstructions = props.Instructions?.rich_text?.[0]?.plain_text || ''
+        // If it already looks like HTML, use as-is; otherwise wrap in basic structure
+        if (rawInstructions.includes('<')) {
+          instructions = rawInstructions
+        } else if (rawInstructions.trim()) {
+          // Plain text - convert newlines to list items
+          const lines = rawInstructions.split('\n').filter((line: string) => line.trim())
+          if (lines.length > 1) {
+            instructions = `<h4>Instructions</h4>\n<ol>\n${lines.map((line: string) => `<li>${line.trim()}</li>`).join('\n')}\n</ol>`
+          } else {
+            instructions = `<p>${rawInstructions}</p>`
+          }
+        }
+      }
+
       return {
         id: props['ID']?.rich_text?.[0]?.plain_text || props['userDefined:ID']?.rich_text?.[0]?.plain_text || page.id,
         name: props.Name?.title?.[0]?.plain_text || 'Untitled',
         description: props.Description?.rich_text?.[0]?.plain_text || '',
         category: props.Category?.select?.name?.toLowerCase().replace('-', '_') || 'mind_body',
         duration: props.Duration?.number || 5,
-        instructions: props.Instructions?.rich_text?.[0]?.plain_text || '',
+        instructions,
         quick: props.Quick?.checkbox || false,
         link: props.Link?.url || undefined,
         video: props.Video?.url || undefined,

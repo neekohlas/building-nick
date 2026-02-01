@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { getAllActivities, Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
+import { Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
 import { formatDuration, formatDateShort } from '@/lib/date-utils'
+import { useActivities } from '@/hooks/use-activities'
 
 interface AddActivityModalProps {
   targetDate: Date
@@ -29,6 +30,7 @@ const TIME_BLOCKS: { value: TimeBlock; label: string }[] = [
 ]
 
 export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModalProps) {
+  const { getAllActivities } = useActivities()
   const [filter, setFilter] = useState<'all' | Category>('all')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock>('before9pm')
@@ -42,9 +44,20 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
     }
   }
 
-  const activities = getAllActivities().filter(
-    a => filter === 'all' || a.category === filter
-  )
+  // Get activities from Notion (via useActivities hook) and filter
+  const allActivities = getAllActivities()
+  const activities = allActivities
+    .filter(a => filter === 'all' || a.category === filter)
+    .filter(a => a.name !== 'Untitled') // Exclude empty entries
+    .sort((a, b) => {
+      // Sort by sortOrder if available, then by name
+      if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
+        return a.sortOrder - b.sortOrder
+      }
+      if (a.sortOrder !== undefined) return -1
+      if (b.sortOrder !== undefined) return 1
+      return a.name.localeCompare(b.name)
+    })
 
   const handleAdd = () => {
     if (selectedActivity) {

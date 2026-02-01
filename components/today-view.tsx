@@ -363,8 +363,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       }
     }
 
-    // Calculate immediately
-    calculateTimePosition()
+    // Calculate after a brief delay to ensure layout is complete
+    const initialTimeout = setTimeout(calculateTimePosition, 100)
+
+    // Also recalculate after a longer delay for any async content
+    const secondTimeout = setTimeout(calculateTimePosition, 500)
 
     // Update every minute
     const interval = setInterval(calculateTimePosition, 60000)
@@ -374,6 +377,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     window.addEventListener('resize', handleResize)
 
     return () => {
+      clearTimeout(initialTimeout)
+      clearTimeout(secondTimeout)
       clearInterval(interval)
       window.removeEventListener('resize', handleResize)
     }

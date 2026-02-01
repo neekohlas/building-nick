@@ -1,9 +1,12 @@
 'use client'
 
-import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp } from 'lucide-react'
 import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
+import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
+import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
 function getYouTubeVideoId(url: string): string | null {
@@ -43,7 +46,15 @@ export function ActivityDetailModal({
   onPush,
   onRemove
 }: ActivityDetailModalProps) {
+  const [showAudioMode, setShowAudioMode] = useState(false)
+  const [showAudioButton, setShowAudioButton] = useState(false)
+  const [showDetails, setShowDetails] = useState(false)
   const category = CATEGORIES[activity.category]
+
+  // Check for multi-step instructions on client side only
+  useEffect(() => {
+    setShowAudioButton(hasMultipleSteps(activity.instructions))
+  }, [activity.instructions])
 
   // Get badge color - for mind_body, use mindBodyType gradient if available
   const getBadgeColor = () => {
@@ -89,69 +100,107 @@ export function ActivityDetailModal({
             </span>
           </div>
 
-          {/* Description */}
-          <div className="rounded-lg bg-muted p-4 text-foreground">
-            {activity.description}
-          </div>
-
-          {/* Video Preview */}
-          {activity.video && (
-            <div className="space-y-3">
-              {/* YouTube embed */}
-              {getYouTubeVideoId(activity.video) && (
-                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${getYouTubeVideoId(activity.video)}`}
-                    title={`${activity.name} video`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full"
-                  />
-                </div>
-              )}
-              {/* Vimeo embed */}
-              {getVimeoVideoId(activity.video) && (
-                <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
-                  <iframe
-                    src={`https://player.vimeo.com/video/${getVimeoVideoId(activity.video)}`}
-                    title={`${activity.name} video`}
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full"
-                  />
-                </div>
-              )}
-              {/* Open video button (for all video links including non-embeddable) */}
-              <a
-                href={activity.video}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-primary font-medium hover:underline"
-              >
-                <Play className="h-4 w-4" />
-                Open Video
-              </a>
-            </div>
-          )}
-
-          {/* Link */}
-          {activity.link && (
-            <a
-              href={activity.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-primary font-medium hover:underline"
+          {/* Audio Mode Button - prominent position for activities with steps */}
+          {showAudioButton && (
+            <Button
+              variant="default"
+              size="lg"
+              className="w-full"
+              onClick={() => setShowAudioMode(true)}
             >
-              <ExternalLink className="h-4 w-4" />
-              Open Resource
-            </a>
+              <Volume2 className="h-5 w-5 mr-2" />
+              Start Audio Guide
+            </Button>
           )}
 
-          {/* Instructions */}
-          <div
-            className="prose prose-sm max-w-none text-muted-foreground [&_h4]:text-xs [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:text-muted-foreground [&_h4]:font-semibold [&_h4]:mb-2 [&_ol]:pl-5 [&_li]:mb-2 [&_p]:mt-3 [&_p]:text-sm"
-            dangerouslySetInnerHTML={{ __html: activity.instructions }}
-          />
+          {/* Description with expandable details */}
+          <div className="rounded-lg bg-muted p-3 text-foreground text-sm">
+            <p className={showDetails ? '' : 'line-clamp-2'}>{activity.description}</p>
+
+            {/* Expandable instructions */}
+            {showDetails && (
+              <div className="mt-3 pt-3 border-t border-border/50">
+                {/* Video Preview */}
+                {activity.video && (
+                  <div className="space-y-2 mb-3">
+                    {/* YouTube embed */}
+                    {getYouTubeVideoId(activity.video) && (
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-background">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${getYouTubeVideoId(activity.video)}`}
+                          title={`${activity.name} video`}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          className="absolute inset-0 w-full h-full"
+                        />
+                      </div>
+                    )}
+                    {/* Vimeo embed */}
+                    {getVimeoVideoId(activity.video) && (
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-background">
+                        <iframe
+                          src={`https://player.vimeo.com/video/${getVimeoVideoId(activity.video)}`}
+                          title={`${activity.name} video`}
+                          allow="autoplay; fullscreen; picture-in-picture"
+                          allowFullScreen
+                          className="absolute inset-0 w-full h-full"
+                        />
+                      </div>
+                    )}
+                    {/* Open video button */}
+                    <a
+                      href={activity.video}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 text-primary text-xs font-medium hover:underline"
+                    >
+                      <Play className="h-3 w-3" />
+                      Open Video
+                    </a>
+                  </div>
+                )}
+
+                {/* Link */}
+                {activity.link && (
+                  <a
+                    href={activity.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-primary text-xs font-medium hover:underline mb-3"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open Resource
+                  </a>
+                )}
+
+                {/* Instructions */}
+                {activity.instructions && (
+                  <div
+                    className="prose prose-sm max-w-none text-muted-foreground [&_h4]:text-xs [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:text-muted-foreground [&_h4]:font-semibold [&_h4]:mb-2 [&_ol]:pl-4 [&_ol]:text-xs [&_li]:mb-1.5 [&_p]:mt-2 [&_p]:text-xs"
+                    dangerouslySetInnerHTML={{ __html: activity.instructions }}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Show more/less toggle */}
+            <button
+              onClick={() => setShowDetails(!showDetails)}
+              className="flex items-center gap-1 text-xs text-primary font-medium mt-2 hover:underline"
+            >
+              {showDetails ? (
+                <>
+                  <ChevronUp className="h-3 w-3" />
+                  Show less
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3 w-3" />
+                  Show more
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Actions - Fixed at bottom */}
@@ -201,6 +250,15 @@ export function ActivityDetailModal({
           )}
         </div>
       </div>
+
+      {/* Audio Instructions Overlay */}
+      {showAudioMode && (
+        <AudioInstructionsOverlay
+          instructions={activity.instructions}
+          activityName={activity.name}
+          onClose={() => setShowAudioMode(false)}
+        />
+      )}
     </div>
   )
 }
