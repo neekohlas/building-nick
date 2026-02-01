@@ -21,10 +21,26 @@ function getYouTubeVideoId(url: string): string | null {
   return null
 }
 
-// Check if URL is a Vimeo video
-function getVimeoVideoId(url: string): string | null {
-  const match = url.match(/vimeo\.com\/(\d+)/)
-  return match ? match[1] : null
+// Extract Vimeo video ID and optional privacy hash
+// Handles: vimeo.com/123456789 and vimeo.com/123456789/abc123hash (unlisted)
+function getVimeoEmbedUrl(url: string): string | null {
+  // Match vimeo.com/VIDEO_ID or vimeo.com/VIDEO_ID/HASH
+  const match = url.match(/vimeo\.com\/(\d+)(?:\/([a-zA-Z0-9]+))?/)
+  if (!match) return null
+
+  const videoId = match[1]
+  const hash = match[2]
+
+  // For unlisted videos, include the hash parameter
+  if (hash) {
+    return `https://player.vimeo.com/video/${videoId}?h=${hash}`
+  }
+  return `https://player.vimeo.com/video/${videoId}`
+}
+
+// Check if URL is a Vimeo video (for conditional rendering)
+function isVimeoUrl(url: string): boolean {
+  return /vimeo\.com\/\d+/.test(url)
 }
 
 interface ActivityDetailModalProps {
@@ -136,10 +152,10 @@ export function ActivityDetailModal({
                       </div>
                     )}
                     {/* Vimeo embed */}
-                    {getVimeoVideoId(activity.video) && (
+                    {isVimeoUrl(activity.video) && (
                       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-background">
                         <iframe
-                          src={`https://player.vimeo.com/video/${getVimeoVideoId(activity.video)}`}
+                          src={getVimeoEmbedUrl(activity.video) || ''}
                           title={`${activity.name} video`}
                           allow="autoplay; fullscreen; picture-in-picture"
                           allowFullScreen
