@@ -317,7 +317,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
       case 'everyday': return true
       case 'weekdays': return isWeekdayDate
       case 'weekends': return !isWeekdayDate
-      case 'custom': return true  // Custom days are handled separately in generateSchedules
+      case 'custom': return false  // Custom days have their own specific dates, not heavy/light templates
     }
   }, [])
 
@@ -1709,6 +1709,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                       const isSelected = selectedDays.includes(dateStr)
                       const dayName = getShortDayName(day)
                       const dayNum = getDayNumber(day)
+                      const dayWeather = getWeatherForDate(dateStr)
 
                       return (
                         <button
@@ -1728,6 +1729,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                         >
                           <span className="text-xs font-medium">{dayName}</span>
                           <span className="text-lg font-semibold">{dayNum}</span>
+                          {dayWeather && (
+                            <span className="text-sm mt-0.5">
+                              {getWeatherEmoji(dayWeather.weather.main, dayWeather.weather.id)}
+                            </span>
+                          )}
                         </button>
                       )
                     })}

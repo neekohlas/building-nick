@@ -26,8 +26,15 @@ export default function Home() {
           onClear={clearDatabase}
         />
       )}
-      {/* Main Content - safe area padding for iOS notch */}
-      <main className="flex-1 px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-6">
+
+      {/* Header */}
+      <header className="bg-gradient-to-br from-primary to-blue-500 text-primary-foreground px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-3">
+        <h1 className="text-xl font-bold tracking-tight">Building Nick</h1>
+        <p className="text-sm opacity-90">{formatDateFriendly(today)}</p>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 px-4 pt-4 pb-6">
         {activeView === 'today' && (
           <TodayView onOpenMenu={() => setActiveView('menu')} />
         )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2 } from 'lucide-react'
+import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2, GripVertical, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
@@ -21,6 +21,8 @@ interface ActivityCardProps {
   onSwap: () => void
   onPush: () => void
   onClick: () => void
+  onReorder?: () => void
+  onDelete?: () => void
 }
 
 export function ActivityCard({
@@ -29,7 +31,9 @@ export function ActivityCard({
   onToggleComplete,
   onSwap,
   onPush,
-  onClick
+  onClick,
+  onReorder,
+  onDelete
 }: ActivityCardProps) {
   return (
     <div
@@ -112,6 +116,21 @@ export function ActivityCard({
               <CalendarClock className="h-4 w-4 mr-2" />
               Push to Tomorrow
             </DropdownMenuItem>
+            {onReorder && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReorder(); }}>
+                <GripVertical className="h-4 w-4 mr-2" />
+                Reorder
+              </DropdownMenuItem>
+            )}
+            {onDelete && (
+              <DropdownMenuItem
+                onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove from Today
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

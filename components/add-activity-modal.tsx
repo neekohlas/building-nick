@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
 import { formatDuration, formatDateShort } from '@/lib/date-utils'
 import { useActivities } from '@/hooks/use-activities'
+import { SpectrumBar } from './spectrum-bar'
 
 interface AddActivityModalProps {
   targetDate: Date
@@ -67,11 +68,11 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto rounded-t-2xl bg-card animate-in slide-in-from-bottom duration-300"
+        className="w-full max-w-lg max-h-[65vh] overflow-hidden rounded-2xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -109,9 +110,8 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
         </div>
 
         {/* Activity List */}
-        <div className="p-4 space-y-2">
+        <div className="p-4 space-y-2 overflow-y-auto flex-1">
           {activities.map(activity => {
-            const category = CATEGORIES[activity.category]
             const isSelected = selectedActivity?.id === activity.id
 
             return (
@@ -119,22 +119,22 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
                 key={activity.id}
                 onClick={() => handleSelectActivity(activity)}
                 className={cn(
-                  'w-full text-left rounded-xl border p-4 transition-all',
+                  'w-full text-left rounded-xl border overflow-hidden transition-all',
                   isSelected
                     ? 'border-primary bg-primary/5'
                     : 'hover:border-muted-foreground/30'
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{activity.name}</span>
-                  <div
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: category.color }}
-                  />
-                </div>
-                <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5" />
-                  {formatDuration(activity.duration)}
+                {/* Spectrum bar at top */}
+                {activity.spectrum && (
+                  <SpectrumBar spectrum={activity.spectrum} size="sm" />
+                )}
+                <div className="p-4">
+                  <div className="font-medium">{activity.name}</div>
+                  <div className="flex items-center gap-1 mt-1 text-sm text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatDuration(activity.duration)}
+                  </div>
                 </div>
               </button>
             )
@@ -144,22 +144,17 @@ export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModa
         {/* Time Block Selection & Add Button */}
         {selectedActivity && (
           <div className="sticky bottom-0 border-t bg-card p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-            <p className="text-sm font-medium mb-3">Schedule for:</p>
-            <div className="flex gap-2 mb-4">
-              {TIME_BLOCKS.map(tb => (
-                <button
-                  key={tb.value}
-                  onClick={() => setSelectedTimeBlock(tb.value)}
-                  className={cn(
-                    'flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                    selectedTimeBlock === tb.value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  )}
-                >
-                  {tb.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-sm text-muted-foreground">When:</span>
+              <select
+                value={selectedTimeBlock}
+                onChange={(e) => setSelectedTimeBlock(e.target.value as TimeBlock)}
+                className="flex-1 px-3 py-2 rounded-lg border bg-background text-sm font-medium"
+              >
+                {TIME_BLOCKS.map(tb => (
+                  <option key={tb.value} value={tb.value}>{tb.label}</option>
+                ))}
+              </select>
             </div>
             <button
               onClick={handleAdd}

@@ -9,7 +9,7 @@ import { Celebration } from './celebration'
 import { AddActivityModal } from './add-activity-modal'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { Button } from '@/components/ui/button'
-import { CalendarClock, Plus, GripVertical, ChevronLeft, ChevronRight, Pencil, Check as CheckIcon } from 'lucide-react'
+import { CalendarClock, Plus, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Activity,
@@ -82,6 +82,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -444,15 +445,17 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   }
 
   // Remove activity from schedule
-  const handleRemoveActivity = async (activityId: string) => {
+  const handleRemoveActivity = async (activityId: string, timeBlock?: TimeBlock) => {
     if (!schedule) return
 
-    // Find which time block the activity is in
-    let activityTimeBlock: TimeBlock | null = null
-    for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
-      if (schedule.activities[block].includes(activityId)) {
-        activityTimeBlock = block
-        break
+    // Find which time block the activity is in if not provided
+    let activityTimeBlock: TimeBlock | null = timeBlock || null
+    if (!activityTimeBlock) {
+      for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
+        if (schedule.activities[block].includes(activityId)) {
+          activityTimeBlock = block
+          break
+        }
       }
     }
     if (!activityTimeBlock) return
@@ -470,6 +473,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     await storage.saveDailySchedule(newSchedule)
     setSchedule(newSchedule)
     setSelectedActivity(null)
+    setDeleteConfirmActivity(null)
   }
 
   // Get next day's date string relative to selected date
@@ -836,6 +840,19 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Edit Mode Banner - sticky at top when reordering */}
+      {isEditMode && (
+        <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-primary text-primary-foreground flex items-center justify-between shadow-md">
+          <span className="font-medium">Drag activities to reorder</span>
+          <button
+            onClick={() => setIsEditMode(false)}
+            className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 font-medium transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      )}
+
       {/* Date Navigation Header */}
       <div className="flex items-center justify-between">
         <button
@@ -861,25 +878,13 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           )}
         </button>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setIsEditMode(!isEditMode)}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              isEditMode ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-            )}
-            aria-label={isEditMode ? "Done editing" : "Edit schedule"}
-          >
-            {isEditMode ? <CheckIcon className="h-5 w-5" /> : <Pencil className="h-5 w-5" />}
-          </button>
-          <button
-            onClick={navigateToNextDay}
-            className="p-2 rounded-full hover:bg-muted transition-colors"
-            aria-label="Next day"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
-        </div>
+        <button
+          onClick={navigateToNextDay}
+          className="p-2 rounded-full hover:bg-muted transition-colors"
+          aria-label="Next day"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
       </div>
 
       {/* Weather + Motivation Card */}
@@ -1014,6 +1019,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                                 setSelectedActivity(activity)
                                 setSelectedTimeBlock(block)
                               }}
+                              onReorder={() => setIsEditMode(true)}
+                              onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
                             />
                           </div>
                         </div>
@@ -1167,6 +1174,38 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           locationName={locationName}
           onClose={() => setShowWeatherDetail(false)}
         />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmActivity && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setDeleteConfirmActivity(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-card p-6 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Remove Activity?</h3>
+            <p className="text-muted-foreground mb-6">
+              Remove <span className="font-medium text-foreground">{deleteConfirmActivity.name}</span> from today's schedule?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirmActivity(null)}
+                className="flex-1 py-2.5 rounded-lg border border-border font-medium hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemoveActivity(deleteConfirmActivity.id, deleteConfirmActivity.block)}
+                className="flex-1 py-2.5 rounded-lg bg-destructive text-destructive-foreground font-medium hover:bg-destructive/90 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
