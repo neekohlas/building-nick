@@ -20,7 +20,7 @@ const NAV_ITEMS: { view: View; label: string; icon: typeof Calendar }[] = [
 export function BottomNav({ activeView, onViewChange }: BottomNavProps) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around px-4 py-2">
+      <div className="max-w-lg mx-auto flex justify-around px-4 py-2">
         {NAV_ITEMS.map(({ view, label, icon: Icon }) => (
           <button
             key={view}

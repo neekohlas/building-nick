@@ -17,6 +17,7 @@ interface MenuViewProps {
   onOpenPlan: () => void
   onOpenPlanWithActivities?: (activityIds: string[]) => void
   onNavigateToToday?: () => void
+  onShowToast?: (message: string) => void
 }
 
 interface MenuItem {
@@ -28,7 +29,7 @@ interface MenuItem {
   connected?: boolean
 }
 
-export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavigateToToday }: MenuViewProps) {
+export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavigateToToday, onShowToast }: MenuViewProps) {
   const router = useRouter()
   const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
   const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
@@ -110,10 +111,11 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
 
   // Handle "Focus for Week" from Health Coach
   const handleFocusForWeek = (activityIds: string[]) => {
-    // Show toast informing user to complete 7-day planning
-    if (activityIds.length > 0) {
-      setToast(`${activityIds.length} activit${activityIds.length === 1 ? 'y' : 'ies'} added — complete your 7-day plan`)
-      setTimeout(() => setToast(null), 4000)
+    console.log('handleFocusForWeek called with:', activityIds, 'onShowToast:', !!onShowToast)
+    // Show toast informing user to complete 7-day planning (use global toast for persistence)
+    if (activityIds.length > 0 && onShowToast) {
+      console.log('Calling onShowToast')
+      onShowToast(`${activityIds.length} activit${activityIds.length === 1 ? 'y' : 'ies'} added — complete your 7-day plan`)
     }
 
     // Open planning view with pre-selected activities

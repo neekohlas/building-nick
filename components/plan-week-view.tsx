@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Sparkles, Search,
   ArrowUpDown, Clock, ArrowRightLeft, X, Info,
-  Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play
+  Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play, Video, Volume2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventListItem } from './calendar-event-card'
 import { HealthCoachModal } from './health-coach-modal'
 import { SpectrumBar } from './spectrum-bar'
+import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
 
 interface PlanWeekViewProps {
@@ -1437,7 +1438,18 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                                 )}
                                 <span className="font-medium text-sm">{activity.name}</span>
                               </span>
-                              <span className="text-xs text-muted-foreground">{activity.duration} min</span>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{activity.duration} min</span>
+                                {activity.video && (
+                                  <Video className="h-3 w-3" title="Has video" />
+                                )}
+                                {!activity.video && activity.link && (
+                                  <ExternalLink className="h-3 w-3" title="External link" />
+                                )}
+                                {hasMultipleSteps(activity.instructions || '') && (
+                                  <Volume2 className="h-3 w-3" title="Audio guide available" />
+                                )}
+                              </div>
                             </div>
 
                             {/* Info button */}
@@ -1454,16 +1466,30 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
 
                             {/* Frequency dropdown (only when selected) */}
                             {isSelected && (
-                              <select
-                                value={selection.frequency}
-                                onChange={(e) => updateFrequency(activity.id, e.target.value as PlanFrequency)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-xs px-2 py-1 rounded border border-border bg-background"
-                              >
-                                {FREQUENCY_OPTIONS.map(opt => (
-                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                ))}
-                              </select>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={selection.frequency}
+                                  onChange={(e) => updateFrequency(activity.id, e.target.value as PlanFrequency)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-xs px-2 py-1 rounded border border-border bg-background"
+                                >
+                                  {FREQUENCY_OPTIONS.map(opt => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                                {/* Edit button for custom days */}
+                                {selection.frequency === 'custom' && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setCustomDayPickerActivity(activity.id)
+                                    }}
+                                    className="text-xs px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20"
+                                  >
+                                    {selection.customDays?.length || 0}d
+                                  </button>
+                                )}
+                              </div>
                             )}
 
                               {/* Variant toggle */}
@@ -1856,18 +1882,19 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
 
     return (
       <div className="space-y-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Step 3 of 5</span>
+        {/* Prominent day type banner with animation */}
+        <div className={cn(
+          "rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-top-2 fade-in duration-300",
+          isHeavy
+            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
+            : "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
+        )}>
+          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center animate-in zoom-in duration-500">
+            <Icon className="h-6 w-6" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full bg-${color}-500/20 flex items-center justify-center`}>
-              <Icon className={`h-4 w-4 text-${color}-600`} />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">Design Your {isHeavy ? 'Heavy' : 'Light'} Day</h2>
-              <p className="text-muted-foreground text-sm">This is tomorrow's plan</p>
-            </div>
+          <div className="flex-1">
+            <div className="text-sm opacity-90">Step 3 of 5 · Tomorrow</div>
+            <h2 className="text-xl font-bold">{isHeavy ? '⚡ Heavy Day' : '🌿 Light Day'}</h2>
           </div>
         </div>
 
@@ -1914,18 +1941,19 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
 
     return (
       <div className="space-y-4">
-        <div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Step 4 of 5</span>
+        {/* Prominent day type banner with animation */}
+        <div className={cn(
+          "rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-top-2 fade-in duration-300",
+          isHeavy
+            ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
+            : "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
+        )}>
+          <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center animate-in zoom-in duration-500">
+            <Icon className="h-6 w-6" />
           </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full bg-${color}-500/20 flex items-center justify-center`}>
-              <Icon className={`h-4 w-4 text-${color}-600`} />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold">Design Your {isHeavy ? 'Heavy' : 'Light'} Day</h2>
-              <p className="text-muted-foreground text-sm">Your alternate day template</p>
-            </div>
+          <div className="flex-1">
+            <div className="text-sm opacity-90">Step 4 of 5 · Alternate Days</div>
+            <h2 className="text-xl font-bold">{isHeavy ? '⚡ Heavy Day' : '🌿 Light Day'}</h2>
           </div>
         </div>
 

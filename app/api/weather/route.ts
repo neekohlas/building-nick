@@ -135,11 +135,13 @@ export async function GET(request: Request) {
         weather: data.current.weather[0]
       },
       daily: data.daily.slice(0, 8).map((day: any) => {
-        // Convert timestamp to local date (using server timezone, which should match user)
-        const d = new Date(day.dt * 1000)
-        const year = d.getFullYear()
-        const month = String(d.getMonth() + 1).padStart(2, '0')
-        const dayNum = String(d.getDate()).padStart(2, '0')
+        // Use timezone_offset from OpenWeather API to get local date for user's location
+        const localTimestamp = (day.dt + data.timezone_offset) * 1000
+        const d = new Date(localTimestamp)
+        // Use UTC methods since we already adjusted for timezone
+        const year = d.getUTCFullYear()
+        const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+        const dayNum = String(d.getUTCDate()).padStart(2, '0')
         return {
           date: `${year}-${month}-${dayNum}`,
           temp: {
