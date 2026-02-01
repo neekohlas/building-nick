@@ -9,7 +9,7 @@ import { Celebration } from './celebration'
 import { AddActivityModal } from './add-activity-modal'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { Button } from '@/components/ui/button'
-import { CalendarClock, Plus, GripVertical, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { CalendarClock, Plus, GripVertical, ChevronLeft, ChevronRight, Pencil, Check as CheckIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Activity,
@@ -81,6 +81,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [pushActivity, setPushActivity] = useState<Activity | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
+  const [isEditMode, setIsEditMode] = useState(false)
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -859,17 +860,29 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           )}
         </button>
 
-        <button
-          onClick={navigateToNextDay}
-          className="p-2 rounded-full hover:bg-muted transition-colors"
-          aria-label="Next day"
-        >
-          <ChevronRight className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setIsEditMode(!isEditMode)}
+            className={cn(
+              "p-2 rounded-full transition-colors",
+              isEditMode ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+            )}
+            aria-label={isEditMode ? "Done editing" : "Edit schedule"}
+          >
+            {isEditMode ? <CheckIcon className="h-5 w-5" /> : <Pencil className="h-5 w-5" />}
+          </button>
+          <button
+            onClick={navigateToNextDay}
+            className="p-2 rounded-full hover:bg-muted transition-colors"
+            aria-label="Next day"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
       </div>
 
       {/* Weather + Motivation Card */}
-      <div className="rounded-2xl border-l-4 border-l-[var(--accent)] bg-card p-6 shadow-sm">
+      <div className="rounded-xl border bg-card p-5 shadow-sm">
         {selectedDateWeather && (
           <button
             onClick={() => setShowWeatherDetail(true)}
@@ -934,19 +947,13 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                 return calendarEvents.length > 0 ? (
                   <div className="space-y-2 mb-2">
                     {calendarEvents.map(event => (
-                      <div key={event.id} className="flex items-center gap-2">
-                        {/* Spacer to align with activity drag handles */}
-                        <div className="flex-shrink-0 w-7" />
-                        {/* Calendar event card */}
-                        <div className="flex-1">
-                          <CalendarEventCard
-                            event={event}
-                            compact={true}
-                            formatTime={formatEventTime}
-                            getDuration={getEventDuration}
-                          />
-                        </div>
-                      </div>
+                      <CalendarEventCard
+                        key={event.id}
+                        event={event}
+                        compact={true}
+                        formatTime={formatEventTime}
+                        getDuration={getEventDuration}
+                      />
                     ))}
                   </div>
                 ) : null
@@ -974,15 +981,17 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                             isDragging && 'opacity-50'
                           )}
                         >
-                          {/* Drag handle */}
-                          <div
-                            onPointerDown={(e) => handlePointerDown(e, activityId, block, index)}
-                            onPointerMove={handlePointerMove}
-                            onPointerUp={handlePointerUp}
-                            className="flex-shrink-0 p-1 cursor-grab active:cursor-grabbing text-muted-foreground touch-none"
-                          >
-                            <GripVertical className="h-5 w-5" />
-                          </div>
+                          {/* Drag handle - only visible in edit mode */}
+                          {isEditMode && (
+                            <div
+                              onPointerDown={(e) => handlePointerDown(e, activityId, block, index)}
+                              onPointerMove={handlePointerMove}
+                              onPointerUp={handlePointerUp}
+                              className="flex-shrink-0 p-1 cursor-grab active:cursor-grabbing text-muted-foreground touch-none"
+                            >
+                              <GripVertical className="h-5 w-5" />
+                            </div>
+                          )}
 
                           {/* Activity card */}
                           <div className="flex-1">

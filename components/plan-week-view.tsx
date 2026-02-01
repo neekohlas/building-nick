@@ -4,9 +4,9 @@ import React, { useRef } from "react"
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  Check, ChevronRight, ChevronLeft, ChevronDown, Sparkles, Search,
+  Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Sparkles, Search,
   ArrowUpDown, Clock, ArrowRightLeft, X, Info,
-  Zap, Leaf, Plus, GripVertical, Star, RefreshCw
+  Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,7 @@ import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor } from 
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventListItem } from './calendar-event-card'
 import { HealthCoachModal } from './health-coach-modal'
+import { SpectrumBar } from './spectrum-bar'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
 
 interface PlanWeekViewProps {
@@ -142,6 +143,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
 
   // Activity detail view (for step 1)
   const [viewingActivity, setViewingActivity] = useState<Activity | null>(null)
+  const [showActivityDetails, setShowActivityDetails] = useState(false)
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false)
@@ -1150,32 +1152,29 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
             }
           }}
           className={cn(
-            "flex items-center gap-3 py-2 px-1 rounded-lg transition-all select-none",
-            isDragging && "opacity-50 scale-95 bg-muted"
+            "rounded-lg border bg-card overflow-hidden transition-all select-none",
+            isDragging && "opacity-50 scale-95"
           )}
           style={{ touchAction: 'none' }}
           onPointerDown={(e) => handlePointerDown(e, activityId, block, index)}
         >
-          <div className="text-muted-foreground/50 cursor-grab active:cursor-grabbing">
-            <GripVertical className="h-5 w-5" />
+          {/* Spectrum bar at top */}
+          {activity.spectrum && (
+            <SpectrumBar spectrum={activity.spectrum} size="sm" />
+          )}
+          <div className="flex items-center gap-3 py-2 px-2">
+            <div className="text-muted-foreground/50 cursor-grab active:cursor-grabbing">
+              <GripVertical className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium flex-1">{activity.name}</span>
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemove() }}
+              className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0"
-            style={{ backgroundColor: categoryColor }}
-          >
-            {activity.name.charAt(0)}
-          </div>
-
-          <span className="text-sm font-medium flex-1">{activity.name}</span>
-
-          <button
-            onClick={(e) => { e.stopPropagation(); onRemove() }}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
       </div>
     )
@@ -1211,40 +1210,36 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
             }
           }}
           className={cn(
-            "flex items-center gap-3 py-2 px-1 rounded-lg transition-all select-none",
-            isDragging && "opacity-50 scale-95 bg-muted"
+            "rounded-lg border bg-card overflow-hidden transition-all select-none",
+            isDragging && "opacity-50 scale-95"
           )}
           style={{ touchAction: 'none' }}
           onPointerDown={(e) => handlePreviewPointerDown(e, activityId, block, index, dateStr)}
         >
-          <div className="text-muted-foreground/50 cursor-grab active:cursor-grabbing">
-            <GripVertical className="h-5 w-5" />
+          {/* Spectrum bar at top */}
+          {activity.spectrum && (
+            <SpectrumBar spectrum={activity.spectrum} size="sm" />
+          )}
+          <div className="flex items-center gap-3 py-2 px-2">
+            <div className="text-muted-foreground/50 cursor-grab active:cursor-grabbing">
+              <GripVertical className="h-5 w-5" />
+            </div>
+            <span className="text-sm font-medium flex-1">{activity.name}</span>
+            <button
+              onClick={() => setSwappingActivity({ dateStr, activityId, timeBlock: block })}
+              className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <ArrowRightLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => handleRemoveFromPreview(dateStr, activityId, block)}
+              className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-
-          <div
-            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0"
-            style={{ backgroundColor: categoryColor }}
-          >
-            {activity.name.charAt(0)}
-          </div>
-
-          <span className="text-sm font-medium flex-1">{activity.name}</span>
-
-          <button
-            onClick={() => setSwappingActivity({ dateStr, activityId, timeBlock: block })}
-            className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <ArrowRightLeft className="h-4 w-4" />
-          </button>
-
-          <button
-            onClick={() => handleRemoveFromPreview(dateStr, activityId, block)}
-            className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
       </div>
     )
@@ -1416,21 +1411,26 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                       return (
                         <div key={activity.id} className="py-1 first:pt-0 last:pb-0">
                           <div className={cn(
-                            "flex items-center gap-3 p-2 rounded-lg transition-all",
+                            "rounded-lg overflow-hidden transition-all",
                             isSelected && "bg-primary/5"
                           )}>
-                            {/* Checkbox */}
-                            <button
-                              onClick={() => toggleActivitySelection(activity.id)}
-                              className={cn(
-                                "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all",
-                                isSelected
-                                  ? "border-primary bg-primary text-primary-foreground"
-                                  : "border-muted-foreground/30"
-                              )}
-                            >
-                              {isSelected && <Check className="h-3 w-3" />}
-                            </button>
+                            {/* Spectrum bar at top */}
+                            {activity.spectrum && (
+                              <SpectrumBar spectrum={activity.spectrum} size="sm" />
+                            )}
+                            <div className="flex items-center gap-3 p-2">
+                              {/* Checkbox */}
+                              <button
+                                onClick={() => toggleActivitySelection(activity.id)}
+                                className={cn(
+                                  "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all",
+                                  isSelected
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-muted-foreground/30"
+                                )}
+                              >
+                                {isSelected && <Check className="h-3 w-3" />}
+                              </button>
 
                             {/* Activity info */}
                             <div
@@ -1443,7 +1443,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                                 )}
                                 <span className="font-medium text-sm">{activity.name}</span>
                               </span>
-                              <span className="text-xs text-muted-foreground ml-5">{activity.duration} min</span>
+                              <span className="text-xs text-muted-foreground">{activity.duration} min</span>
                             </div>
 
                             {/* Info button */}
@@ -1472,18 +1472,19 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                               </select>
                             )}
 
-                            {/* Variant toggle */}
-                            {hasVariants && isSelected && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleVariantExpansion(activity.id)
-                                }}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground"
-                              >
-                                <ChevronDown className={cn("h-4 w-4 transition-transform", isVariantExpanded && "rotate-180")} />
-                              </button>
-                            )}
+                              {/* Variant toggle */}
+                              {hasVariants && isSelected && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleVariantExpansion(activity.id)
+                                  }}
+                                  className="p-1 rounded hover:bg-muted text-muted-foreground"
+                                >
+                                  <ChevronDown className={cn("h-4 w-4 transition-transform", isVariantExpanded && "rotate-180")} />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {/* Variant selection */}
@@ -1544,31 +1545,22 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
         {viewingActivity && (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-            onClick={() => setViewingActivity(null)}
+            onClick={() => { setViewingActivity(null); setShowActivityDetails(false) }}
           >
             <div
-              className="w-full max-w-md max-h-[70vh] overflow-y-auto rounded-2xl bg-card animate-in zoom-in-95 duration-200"
+              className="w-full max-w-md max-h-[85dvh] overflow-hidden rounded-xl bg-card animate-in zoom-in-95 duration-200 flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Spectrum bar at top */}
+              {viewingActivity.spectrum && (
+                <SpectrumBar spectrum={viewingActivity.spectrum} size="md" />
+              )}
+
               {/* Header */}
-              <div className="sticky top-0 z-10 flex items-start justify-between border-b bg-card p-4">
-                <div className="flex-1 min-w-0 pr-2">
-                  <h2 className="text-lg font-semibold">{viewingActivity.name}</h2>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: `${CATEGORIES[viewingActivity.category].color}20`, color: CATEGORIES[viewingActivity.category].color }}
-                    >
-                      {CATEGORIES[viewingActivity.category].name}
-                    </span>
-                    <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      {viewingActivity.duration} min
-                    </span>
-                  </div>
-                </div>
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4">
+                <h2 className="text-lg font-semibold">{viewingActivity.name}</h2>
                 <button
-                  onClick={() => setViewingActivity(null)}
+                  onClick={() => { setViewingActivity(null); setShowActivityDetails(false) }}
                   className="rounded-lg p-2 text-muted-foreground hover:bg-muted shrink-0"
                 >
                   <X className="h-5 w-5" />
@@ -1576,52 +1568,83 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
               </div>
 
               {/* Content */}
-              <div className="p-4 space-y-4">
-                {viewingActivity.description && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Description</h3>
-                    <p className="text-sm">{viewingActivity.description}</p>
-                  </div>
-                )}
+              <div className="p-4 space-y-4 overflow-y-auto flex-1">
+                {/* Meta info */}
+                <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="h-4 w-4" />
+                    {viewingActivity.duration} min
+                  </span>
+                  <span className="text-xs">{CATEGORIES[viewingActivity.category].name}</span>
+                </div>
 
-                {viewingActivity.instructions && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">Instructions</h3>
-                    <div
-                      className="text-sm prose prose-sm dark:prose-invert max-w-none"
-                      dangerouslySetInnerHTML={{ __html: viewingActivity.instructions }}
-                    />
-                  </div>
-                )}
+                {/* Description with expandable details */}
+                <div className="rounded-lg bg-muted p-3 text-foreground text-sm">
+                  <p className={showActivityDetails ? '' : 'line-clamp-2'}>{viewingActivity.description}</p>
 
-                {(viewingActivity.link || viewingActivity.video) && (
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-2">Resources</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {viewingActivity.link && (
-                        <a
-                          href={viewingActivity.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm px-3 py-1.5 rounded-lg border bg-card hover:bg-muted transition-colors"
-                        >
-                          Open Link
-                        </a>
-                      )}
+                  {/* Expandable instructions */}
+                  {showActivityDetails && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      {/* Video link */}
                       {viewingActivity.video && (
                         <a
                           href={viewingActivity.video}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm px-3 py-1.5 rounded-lg border bg-card hover:bg-muted transition-colors"
+                          className="flex items-center gap-2 text-primary text-xs font-medium hover:underline mb-3"
                         >
+                          <Play className="h-3 w-3" />
                           Watch Video
                         </a>
                       )}
-                    </div>
-                  </div>
-                )}
 
+                      {/* Link */}
+                      {viewingActivity.link && !viewingActivity.video && (
+                        <a
+                          href={viewingActivity.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-primary text-xs font-medium hover:underline mb-3"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                          Open Resource
+                        </a>
+                      )}
+
+                      {/* Instructions */}
+                      {viewingActivity.instructions && (
+                        <div
+                          className="prose prose-sm max-w-none text-muted-foreground [&_h4]:text-xs [&_h4]:uppercase [&_h4]:tracking-wide [&_h4]:text-muted-foreground [&_h4]:font-semibold [&_h4]:mb-2 [&_ol]:pl-4 [&_ol]:text-xs [&_li]:mb-1.5 [&_p]:mt-2 [&_p]:text-xs"
+                          dangerouslySetInnerHTML={{ __html: viewingActivity.instructions }}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {/* Show more/less toggle */}
+                  {(viewingActivity.instructions || viewingActivity.link || viewingActivity.video) && (
+                    <button
+                      onClick={() => setShowActivityDetails(!showActivityDetails)}
+                      className="flex items-center gap-1 text-xs text-primary font-medium mt-2 hover:underline"
+                    >
+                      {showActivityDetails ? (
+                        <>
+                          <ChevronUp className="h-3 w-3" />
+                          Show less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3" />
+                          Show more
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Action button - fixed at bottom */}
+              <div className="p-4 border-t bg-card shrink-0">
                 <Button
                   className="w-full"
                   onClick={() => {
@@ -1631,6 +1654,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                       toggleActivitySelection(viewingActivity.id)
                     }
                     setViewingActivity(null)
+                    setShowActivityDetails(false)
                   }}
                 >
                   {selections.some(s => s.activityId === viewingActivity.id) ? 'Done' : 'Select Activity'}
@@ -2122,12 +2146,12 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                   <button
                     key={activity.id}
                     onClick={() => handleSwapInPreview(swappingActivity.dateStr, swappingActivity.activityId, activity.id, swappingActivity.timeBlock)}
-                    className="w-full p-3 rounded-lg border bg-card hover:border-primary text-left flex items-center gap-3"
+                    className="w-full rounded-lg border bg-card hover:border-primary text-left overflow-hidden"
                   >
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium" style={{ backgroundColor: CATEGORIES[activity.category].color }}>
-                      {activity.name.charAt(0)}
-                    </div>
-                    <div>
+                    {activity.spectrum && (
+                      <SpectrumBar spectrum={activity.spectrum} size="sm" />
+                    )}
+                    <div className="p-3">
                       <span className="font-medium">{activity.name}</span>
                       <span className="text-xs text-muted-foreground block">{activity.duration} min</span>
                     </div>
@@ -2206,12 +2230,12 @@ function AddActivityModal({
             <button
               key={activity.id}
               onClick={() => onAdd(activity.id)}
-              className="w-full p-3 rounded-lg border bg-card hover:border-primary text-left flex items-center gap-3"
+              className="w-full rounded-lg border bg-card hover:border-primary text-left overflow-hidden"
             >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium" style={{ backgroundColor: CATEGORIES[activity.category].color }}>
-                {activity.name.charAt(0)}
-              </div>
-              <div className="flex-1">
+              {activity.spectrum && (
+                <SpectrumBar spectrum={activity.spectrum} size="sm" />
+              )}
+              <div className="p-3">
                 <span className="font-medium">{activity.name}</span>
                 <span className="text-xs text-muted-foreground block">{CATEGORIES[activity.category].name}</span>
               </div>

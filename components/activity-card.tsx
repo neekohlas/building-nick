@@ -2,9 +2,10 @@
 
 import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
+import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
+import { SpectrumBar } from './spectrum-bar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,27 +31,22 @@ export function ActivityCard({
   onPush,
   onClick
 }: ActivityCardProps) {
-  const category = CATEGORIES[activity.category]
-
-  // Get the left border color - for mind_body, use mindBodyType gradient if available
-  const getBorderColor = () => {
-    if (activity.category === 'mind_body' && activity.mindBodyType) {
-      return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
-    }
-    return category.color
-  }
-
   return (
     <div
       className={cn(
-        'flex items-center gap-4 rounded-xl border bg-card p-4 transition-all cursor-pointer',
-        'hover:border-muted-foreground/30 hover:shadow-md',
-        'active:scale-[0.98]',
+        'rounded-lg border bg-card overflow-hidden transition-all cursor-pointer',
+        'hover:border-muted-foreground/30 hover:shadow-sm',
+        'active:scale-[0.99]',
         isCompleted && 'bg-muted/50 opacity-70'
       )}
-      style={{ borderLeftWidth: '4px', borderLeftColor: getBorderColor() }}
       onClick={onClick}
     >
+      {/* Spectrum bar at top */}
+      {activity.spectrum && (
+        <SpectrumBar spectrum={activity.spectrum} size="sm" />
+      )}
+
+      <div className="flex items-center gap-4 p-3">
       {/* Checkbox */}
       <button
         onClick={(e) => {
@@ -97,27 +93,28 @@ export function ActivityCard({
         </div>
       </div>
 
-      {/* Actions menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            onClick={(e) => e.stopPropagation()}
-            className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            <MoreVertical className="h-5 w-5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
-            <ArrowRightLeft className="h-4 w-4 mr-2" />
-            Swap Activity
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
-            <CalendarClock className="h-4 w-4 mr-2" />
-            Push to Tomorrow
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        {/* Actions menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
+              <ArrowRightLeft className="h-4 w-4 mr-2" />
+              Swap Activity
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
+              <CalendarClock className="h-4 w-4 mr-2" />
+              Push to Tomorrow
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   )
 }

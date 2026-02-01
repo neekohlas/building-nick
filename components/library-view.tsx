@@ -3,10 +3,10 @@
 import { useState } from 'react'
 import { Clock, ExternalLink, Star, Loader2, Video, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Activity, CATEGORIES, Category, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
+import { Activity, CATEGORIES, Category } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
-import { SpectrumIcons } from './spectrum-icons'
+import { SpectrumBar } from './spectrum-bar'
 import { useActivities } from '@/hooks/use-activities'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
@@ -82,78 +82,58 @@ export function LibraryView({ onBack }: LibraryViewProps) {
         {sortedActivities.map(activity => {
           const activityCategory = CATEGORIES[activity.category]
 
-          // Get category badge color - use mindBodyType gradient for mind_body activities
-          const getBadgeColor = () => {
-            if (activity.category === 'mind_body' && activity.mindBodyType) {
-              return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
-            }
-            return activityCategory.color
-          }
-
           return (
             <button
               key={activity.id}
               onClick={() => setSelectedActivity(activity)}
               className={cn(
-                'w-full text-left rounded-xl border bg-card p-4 transition-all',
-                'hover:border-muted-foreground/30 hover:shadow-md'
+                'w-full text-left rounded-lg border bg-card overflow-hidden transition-all',
+                'hover:border-muted-foreground/30 hover:shadow-sm'
               )}
-              style={{
-                borderLeftWidth: '4px',
-                borderLeftColor: getBadgeColor()
-              }}
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {activity.favorite && (
-                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
-                    )}
-                    <span className="font-medium text-foreground">
-                      {activity.name}
-                    </span>
-                    {activity.video && (
-                      <Video className="h-3.5 w-3.5 text-muted-foreground" title="Has video" />
-                    )}
-                    {!activity.video && activity.link && (
-                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" title="External link" />
-                    )}
-                    {hasMultipleSteps(activity.instructions) && (
-                      <Volume2 className="h-3.5 w-3.5 text-muted-foreground" title="Audio guide available" />
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                    {activity.description}
-                  </p>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      {formatDuration(activity.duration)}
-                    </span>
-                    <span
-                      className="px-2 py-0.5 rounded-full text-white"
-                      style={{ backgroundColor: getBadgeColor() }}
-                    >
-                      {activityCategory.name}
-                    </span>
-                    {activity.quick && (
-                      <span className="px-2 py-0.5 rounded-full bg-muted">
-                        Quick
-                      </span>
-                    )}
-                    {activity.outdoor && (
-                      <span className="px-2 py-0.5 rounded-full bg-muted">
-                        Outdoor
-                      </span>
-                    )}
-                  </div>
+              {/* Spectrum bar at top */}
+              {activity.spectrum && (
+                <SpectrumBar spectrum={activity.spectrum} size="sm" />
+              )}
+
+              <div className="p-4">
+                <div className="flex items-center gap-2">
+                  {activity.favorite && (
+                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 shrink-0" />
+                  )}
+                  <span className="font-medium text-foreground">
+                    {activity.name}
+                  </span>
+                  {activity.video && (
+                    <Video className="h-3.5 w-3.5 text-muted-foreground" title="Has video" />
+                  )}
+                  {!activity.video && activity.link && (
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" title="External link" />
+                  )}
+                  {hasMultipleSteps(activity.instructions) && (
+                    <Volume2 className="h-3.5 w-3.5 text-muted-foreground" title="Audio guide available" />
+                  )}
                 </div>
-                {/* Spectrum icons visualization */}
-                {activity.spectrum && (
-                  <div className="shrink-0">
-                    <SpectrumIcons spectrum={activity.spectrum} size="sm" />
-                  </div>
-                )}
+                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                  {activity.description}
+                </p>
+                <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatDuration(activity.duration)}
+                  </span>
+                  <span>{activityCategory.name}</span>
+                  {activity.quick && (
+                    <span className="px-2 py-0.5 rounded-full bg-muted">
+                      Quick
+                    </span>
+                  )}
+                  {activity.outdoor && (
+                    <span className="px-2 py-0.5 rounded-full bg-muted">
+                      Outdoor
+                    </span>
+                  )}
+                </div>
               </div>
             </button>
           )

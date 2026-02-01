@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp } from 'lucide-react'
-import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
+import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
-import { SpectrumIcons } from '@/components/spectrum-icons'
+import { SpectrumBar } from '@/components/spectrum-bar'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
@@ -73,23 +73,20 @@ export function ActivityDetailModal({
     setShowAudioButton(hasMultipleSteps(activity.instructions))
   }, [activity.instructions])
 
-  // Get badge color - for mind_body, use mindBodyType gradient if available
-  const getBadgeColor = () => {
-    if (activity.category === 'mind_body' && activity.mindBodyType) {
-      return MIND_BODY_COLORS[activity.mindBodyType as MindBodyType]
-    }
-    return category.color
-  }
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-lg max-h-[85dvh] overflow-hidden rounded-2xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
+        className="w-full sm:max-w-lg max-h-[85dvh] overflow-hidden rounded-xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Spectrum bar at top */}
+        {activity.spectrum && (
+          <SpectrumBar spectrum={activity.spectrum} size="md" />
+        )}
+
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card p-4">
           <h2 className="text-lg font-semibold">{activity.name}</h2>
@@ -104,21 +101,14 @@ export function ActivityDetailModal({
         {/* Body */}
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Meta info */}
-          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
               {formatDuration(activity.duration)}
             </span>
-            <span
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-white text-xs"
-              style={{ backgroundColor: getBadgeColor() }}
-            >
+            <span className="text-xs text-muted-foreground">
               {category.name}
             </span>
-            {/* Spectrum icons visualization */}
-            {activity.spectrum && (
-              <SpectrumIcons spectrum={activity.spectrum} size="md" />
-            )}
           </div>
 
           {/* Audio Mode Button - prominent position for activities with steps */}
@@ -144,40 +134,42 @@ export function ActivityDetailModal({
                 {/* Video Preview */}
                 {activity.video && (
                   <div className="space-y-2 mb-3">
-                    {/* YouTube embed */}
+                    {/* YouTube - click to open fullscreen */}
                     {getYouTubeVideoId(activity.video) && (
-                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-background">
-                        <iframe
-                          src={`https://www.youtube.com/embed/${getYouTubeVideoId(activity.video)}`}
-                          title={`${activity.name} video`}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          className="absolute inset-0 w-full h-full"
+                      <a
+                        href={activity.video}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative w-full aspect-video rounded-lg overflow-hidden bg-background block group"
+                      >
+                        <img
+                          src={`https://img.youtube.com/vi/${getYouTubeVideoId(activity.video)}/hqdefault.jpg`}
+                          alt={`${activity.name} video thumbnail`}
+                          className="absolute inset-0 w-full h-full object-cover"
                         />
-                      </div>
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
+                          <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center">
+                            <Play className="h-8 w-8 text-white ml-1" fill="white" />
+                          </div>
+                        </div>
+                      </a>
                     )}
-                    {/* Vimeo embed */}
+                    {/* Vimeo - click to open fullscreen */}
                     {isVimeoUrl(activity.video) && (
-                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-background">
-                        <iframe
-                          src={getVimeoEmbedUrl(activity.video) || ''}
-                          title={`${activity.name} video`}
-                          allow="autoplay; fullscreen; picture-in-picture"
-                          allowFullScreen
-                          className="absolute inset-0 w-full h-full"
-                        />
-                      </div>
+                      <a
+                        href={activity.video}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted block group"
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-16 h-16 rounded-full bg-[#1ab7ea] flex items-center justify-center">
+                            <Play className="h-8 w-8 text-white ml-1" fill="white" />
+                          </div>
+                        </div>
+                        <span className="absolute bottom-2 left-2 text-xs text-white/80">Click to play on Vimeo</span>
+                      </a>
                     )}
-                    {/* Open video button */}
-                    <a
-                      href={activity.video}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-primary text-xs font-medium hover:underline"
-                    >
-                      <Play className="h-3 w-3" />
-                      Open Video
-                    </a>
                   </div>
                 )}
 
