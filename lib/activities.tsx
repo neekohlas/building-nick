@@ -31,12 +31,13 @@ export interface ActivitySelection {
   customDays?: string[]  // ISO date strings for custom frequency (e.g., ['2024-01-15', '2024-01-17'])
 }
 
-// Heart-Mind-Body spectrum scores (0-1 each axis)
-// Used for triangular radar visualization
+// Heart-Mind-Body-Learn spectrum scores (0-1 each axis)
+// Used for bar visualization with repeating icons
 export interface SpectrumScores {
   heart: number  // Emotional/relational (journaling, gratitude, connection)
-  mind: number   // Cognitive/focus (education, meditation, planning)
+  mind: number   // Mindfulness/calming (meditation, breathing, body scans)
   body: number   // Movement/physical (exercises, stretches, outdoor)
+  learn: number  // Learning/professional (courses, job search, structured programs)
 }
 
 export interface Activity {

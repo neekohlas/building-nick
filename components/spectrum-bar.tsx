@@ -11,8 +11,9 @@ interface SpectrumBarProps {
 // Colors for each dimension
 const COLORS = {
   heart: '#F43F5E',  // Rose - emotional/relational
-  mind: '#8B5CF6',   // Purple - cognitive/focus
+  mind: '#8B5CF6',   // Purple - mindfulness/calming
   body: '#10B981',   // Emerald - movement/physical
+  learn: '#F59E0B',  // Amber - learning/professional
 }
 
 // Threshold below which we don't show a segment
@@ -28,10 +29,10 @@ function HeartIcon({ className }: { className?: string }) {
 }
 
 function MindIcon({ className }: { className?: string }) {
-  // Lightbulb icon
+  // Brain icon for mindfulness/calming
   return (
     <svg className={className} viewBox="0 0 24 24" fill="currentColor">
-      <path d="M9 21c0 .5.4 1 1 1h4c.6 0 1-.5 1-1v-1H9v1zm3-19C8.1 2 5 5.1 5 9c0 2.4 1.2 4.5 3 5.7V17c0 .5.4 1 1 1h6c.6 0 1-.5 1-1v-2.3c1.8-1.3 3-3.4 3-5.7 0-3.9-3.1-7-7-7z"/>
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86zm2-15.86c1.03.13 2 .45 2.87.93H13v-.93zM13 7h5.24c.25.31.48.65.68 1H13V7zm0 3h6.74c.08.33.15.66.19 1H13v-1zm0 9.93V19h2.87c-.87.48-1.84.8-2.87.93zM18.24 17H13v-1h5.92c-.2.35-.43.69-.68 1zm1.5-3H13v-1h6.93c-.04.34-.11.67-.19 1z"/>
     </svg>
   )
 }
@@ -45,20 +46,31 @@ function BodyIcon({ className }: { className?: string }) {
   )
 }
 
+function LearnIcon({ className }: { className?: string }) {
+  // Lightbulb icon for learning/professional
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M9 21c0 .5.4 1 1 1h4c.6 0 1-.5 1-1v-1H9v1zm3-19C8.1 2 5 5.1 5 9c0 2.4 1.2 4.5 3 5.7V17c0 .5.4 1 1 1h6c.6 0 1-.5 1-1v-2.3c1.8-1.3 3-3.4 3-5.7 0-3.9-3.1-7-7-7z"/>
+    </svg>
+  )
+}
+
 const ICONS = {
   heart: HeartIcon,
   mind: MindIcon,
   body: BodyIcon,
+  learn: LearnIcon,
 }
+
+type DimensionKey = 'heart' | 'mind' | 'body' | 'learn'
 
 export function SpectrumBar({ spectrum, size = 'sm', className = '' }: SpectrumBarProps) {
   // Bar height and icon sizes based on size prop - thicker bars to embed icons
   const barHeight = size === 'sm' ? 14 : size === 'md' ? 18 : 22
   const iconSize = size === 'sm' ? 10 : size === 'md' ? 12 : 16
-  const iconPadding = (barHeight - iconSize) / 2
 
   // Filter out dimensions below threshold
-  const dimensions: { key: 'heart' | 'mind' | 'body'; value: number }[] = []
+  const dimensions: { key: DimensionKey; value: number }[] = []
 
   if (spectrum.heart > MIN_THRESHOLD) {
     dimensions.push({ key: 'heart', value: spectrum.heart })
@@ -68,6 +80,9 @@ export function SpectrumBar({ spectrum, size = 'sm', className = '' }: SpectrumB
   }
   if (spectrum.body > MIN_THRESHOLD) {
     dimensions.push({ key: 'body', value: spectrum.body })
+  }
+  if ((spectrum.learn ?? 0) > MIN_THRESHOLD) {
+    dimensions.push({ key: 'learn', value: spectrum.learn ?? 0 })
   }
 
   if (dimensions.length === 0) {
@@ -110,19 +125,8 @@ export function SpectrumBar({ spectrum, size = 'sm', className = '' }: SpectrumB
     currentPercent = endPercent
   })
 
-  // Calculate icon positions (at the center of each segment)
-  const iconPositions: { key: 'heart' | 'mind' | 'body'; percent: number; width: number }[] = []
-  currentPercent = 0
-
-  sortedDimensions.forEach((dim) => {
-    const width = (dim.value / total) * 100
-    const centerPercent = currentPercent + width / 2
-    iconPositions.push({ key: dim.key, percent: centerPercent, width })
-    currentPercent += width
-  })
-
   // Calculate segment positions for icon pattern overlay
-  const segmentPositions: { key: 'heart' | 'mind' | 'body'; startPercent: number; endPercent: number }[] = []
+  const segmentPositions: { key: DimensionKey; startPercent: number; endPercent: number }[] = []
   currentPercent = 0
   sortedDimensions.forEach((dim) => {
     const width = (dim.value / total) * 100
