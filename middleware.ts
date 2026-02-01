@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/api/auth/login', '/api/auth/logout', '/api/auth/google/callback']
+const publicRoutes = [
+  '/login',
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/auth/google/callback',
+  '/auth/callback', // Supabase OAuth callback
+]
 
 // API routes that need protection
 const protectedApiRoutes = ['/api/activities', '/api/calendar', '/api/weather', '/api/coach']
@@ -21,7 +27,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check for auth token
+  // Check for auth token (existing password-based auth)
   const authToken = request.cookies.get('auth-token')?.value
 
   // Check if token is dev-mode (set when no password was configured at login time)
@@ -29,20 +35,25 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Check if token exists and is valid (basic check)
-  if (!authToken) {
-    // For API routes, return 401
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  // Check for Supabase session (cookie-based)
+  // Supabase stores session in cookies prefixed with 'sb-'
+  const hasSupabaseSession = Array.from(request.cookies.getAll())
+    .some(cookie => cookie.name.includes('-auth-token'))
 
-    // For page routes, redirect to login
-    const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+  // Allow if either auth method is present
+  if (authToken || hasSupabaseSession) {
+    return NextResponse.next()
   }
 
-  // Token exists - allow the request
-  return NextResponse.next()
+  // No authentication found
+  // For API routes, return 401
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // For page routes, redirect to login
+  const loginUrl = new URL('/login', request.url)
+  return NextResponse.redirect(loginUrl)
 }
 
 export const config = {

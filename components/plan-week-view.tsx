@@ -21,7 +21,8 @@ import {
   type ActivitySelection,
   type Category
 } from '@/lib/activities'
-import { useStorage, DailySchedule, SavedPlanConfig } from '@/hooks/use-storage'
+import { DailySchedule, SavedPlanConfig } from '@/hooks/use-storage'
+import { useSync } from '@/hooks/use-sync'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor } from '@/hooks/use-weather'
 import { useCalendar } from '@/hooks/use-calendar'
@@ -91,7 +92,7 @@ const FREQUENCY_OPTIONS: { value: PlanFrequency; label: string }[] = [
 const CATEGORY_ORDER: Category[] = ['physical', 'mind_body', 'professional']
 
 export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }: PlanWeekViewProps) {
-  const storage = useStorage()
+  const storage = useSync()
   const { activities: notionActivities, isLoading: activitiesLoading, isSyncing, source: activitySource, syncFromNotion, getPlanableActivities } = useActivities()
   const { getWeatherForDate, hasBadWeather } = useWeather()
   const { isConnected: calendarConnected, getEventsForDate, getEventsForTimeBlock, formatEventTime } = useCalendar()

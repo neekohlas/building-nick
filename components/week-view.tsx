@@ -22,7 +22,8 @@ import {
   formatDateShort
 } from '@/lib/date-utils'
 import { Activity, getQuickMindBodyActivities, getPhysicalActivities } from '@/lib/activities'
-import { useStorage, DailySchedule } from '@/hooks/use-storage'
+import { DailySchedule } from '@/hooks/use-storage'
+import { useSync } from '@/hooks/use-sync'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, WeatherDay } from '@/hooks/use-weather'
 import { useCalendar } from '@/hooks/use-calendar'
@@ -38,7 +39,7 @@ interface WeekViewProps {
 type TimeBlock = 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'before5pm' | 'before9pm'
 
 export function WeekView({ onBack }: WeekViewProps) {
-  const storage = useStorage()
+  const storage = useSync()
   const { getActivity } = useActivities()
   const { getWeatherForDate, isLoading: weatherLoading, locationName } = useWeather()
   const { isConnected: calendarConnected, getEventsForDate, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()

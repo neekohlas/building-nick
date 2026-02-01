@@ -22,7 +22,8 @@ import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventCard } from './calendar-event-card'
 import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
 import { getRandomMessage, getStreakMessage, pickRandom } from '@/lib/messages'
-import { useStorage, DailySchedule } from '@/hooks/use-storage'
+import { DailySchedule } from '@/hooks/use-storage'
+import { useSync } from '@/hooks/use-sync'
 
 interface TodayViewProps {
   onOpenMenu: () => void
@@ -62,7 +63,7 @@ const TIME_BLOCK_HOURS: Record<TimeBlock, number> = {
 }
 
 export function TodayView({ onOpenMenu }: TodayViewProps) {
-  const storage = useStorage()
+  const storage = useSync()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
   const { weather, getWeatherForDate, locationName } = useWeather()
   const { isConnected: calendarConnected, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()

@@ -2,15 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, RefreshCw, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut } from 'lucide-react'
+import { CalendarDays, BarChart3, RefreshCw, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
 import { useCalendar } from '@/hooks/use-calendar'
 import { useStorage, type TimeBlock } from '@/hooks/use-storage'
+import { useAuth } from '@/hooks/use-auth'
+import { useSync } from '@/hooks/use-sync'
 import { LocationModal } from './location-modal'
 import { CalendarSettingsModal } from './calendar-settings-modal'
 import { HealthCoachModal } from './health-coach-modal'
+import { MigrationModal } from './migration-modal'
 
 interface MenuViewProps {
   onBack: () => void
@@ -43,11 +46,17 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
     refetch: refetchCalendar,
     setSelectedCalendars
   } = useCalendar()
+  const { user, isAuthenticated, isSupabaseEnabled, signInWithGoogle, signOut: signOutSupabase } = useAuth()
+  const { syncStatus, lastSyncTime: cloudSyncTime, hasPendingMigration, pullFromCloud, migrateToCloud, dismissMigration } = useSync()
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [showCalendarModal, setShowCalendarModal] = useState(false)
   const [showHealthCoach, setShowHealthCoach] = useState(false)
+  const [showMigrationModal, setShowMigrationModal] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const storage = useStorage()
+
+  // Show migration modal when user just signed in and has local data
+  const shouldShowMigrationPrompt = hasPendingMigration && isAuthenticated
 
   // Get next available time block based on current hour
   const getNextAvailableTimeBlock = (): TimeBlock => {
@@ -144,12 +153,47 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
 
   const handleLogout = async () => {
     try {
+      // Sign out from Supabase if authenticated
+      if (isAuthenticated) {
+        await signOutSupabase()
+      }
+      // Also sign out from legacy auth
       await fetch('/api/auth/logout', { method: 'POST' })
       router.push('/login')
       router.refresh()
     } catch (error) {
       console.error('Logout error:', error)
     }
+  }
+
+  const handleCloudSync = async () => {
+    if (!isAuthenticated) {
+      await signInWithGoogle()
+    } else {
+      await pullFromCloud()
+      setToast('Synced with cloud')
+      setTimeout(() => setToast(null), 3000)
+    }
+  }
+
+  // Get cloud sync status description
+  const getCloudSyncDescription = () => {
+    if (!isSupabaseEnabled) return 'Cloud sync not configured'
+    if (!isAuthenticated) return 'Sign in to sync across devices'
+    if (syncStatus === 'syncing') return 'Syncing...'
+    if (syncStatus === 'error') return 'Sync error - tap to retry'
+    if (cloudSyncTime) {
+      return `Last synced ${cloudSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    }
+    return 'Tap to sync'
+  }
+
+  // Get cloud sync icon
+  const getCloudIcon = () => {
+    if (!isAuthenticated) return Cloud
+    if (syncStatus === 'syncing') return Loader2
+    if (syncStatus === 'error') return CloudOff
+    return Cloud
   }
 
   const menuItems: MenuItem[] = [
@@ -188,16 +232,17 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
       disabled: isSyncing
     },
     {
+      icon: getCloudIcon(),
+      label: isAuthenticated ? 'Cloud Sync' : 'Sign In',
+      description: getCloudSyncDescription(),
+      onClick: handleCloudSync,
+      connected: isAuthenticated,
+      disabled: !isSupabaseEnabled
+    },
+    {
       icon: BarChart3,
       label: 'Statistics',
       description: 'View your progress and streaks',
-      onClick: () => {},
-      disabled: true
-    },
-    {
-      icon: RefreshCw,
-      label: 'Sync Data',
-      description: 'Sync your progress across devices',
       onClick: () => {},
       disabled: true
     },
@@ -219,9 +264,44 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
+      <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">More</h2>
+        {isAuthenticated && user && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <User className="h-4 w-4" />
+            <span className="truncate max-w-[150px]">{user.email}</span>
+          </div>
+        )}
       </div>
+
+      {/* Migration Banner */}
+      {shouldShowMigrationPrompt && (
+        <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-start gap-3">
+            <Cloud className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-medium text-blue-900 dark:text-blue-100">Sync your data to the cloud</p>
+              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                We found local data on this device. Would you like to sync it to your account?
+              </p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setShowMigrationModal(true)}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700"
+                >
+                  Sync Now
+                </button>
+                <button
+                  onClick={dismissMigration}
+                  className="px-3 py-1.5 text-blue-600 dark:text-blue-400 text-sm font-medium hover:underline"
+                >
+                  Not Now
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Menu Items */}
       <div className="space-y-3">
@@ -237,8 +317,14 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
                 : 'hover:border-muted-foreground/30 hover:shadow-md'
             )}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <item.icon className="h-5 w-5" />
+            <div className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary",
+              syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-pulse'
+            )}>
+              <item.icon className={cn(
+                "h-5 w-5",
+                syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-spin'
+              )} />
             </div>
             <div className="flex-1">
               <span className="font-medium text-foreground">{item.label}</span>
@@ -257,7 +343,7 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
 
       {/* Coming Soon Note */}
       <p className="text-xs text-center text-muted-foreground">
-        Statistics, Sync, and Settings coming soon in future updates.
+        Statistics and Settings coming soon in future updates.
       </p>
 
       {/* Location Modal */}
@@ -295,6 +381,22 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
           onFocusForWeek={(activityIds) => {
             setShowHealthCoach(false)
             handleFocusForWeek(activityIds)
+          }}
+        />
+      )}
+
+      {/* Migration Modal */}
+      {showMigrationModal && (
+        <MigrationModal
+          onClose={() => setShowMigrationModal(false)}
+          onMigrate={async () => {
+            const result = await migrateToCloud()
+            if (result.success) {
+              setShowMigrationModal(false)
+              setToast('Data synced to cloud successfully!')
+              setTimeout(() => setToast(null), 3000)
+            }
+            return result
           }}
         />
       )}
