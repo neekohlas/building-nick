@@ -167,9 +167,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
   const handleTouchEnd = () => {
     const diff = touchEndX.current - touchStartX.current
-    const threshold = 50 // Minimum swipe distance
+    const threshold = 100 // Minimum swipe distance (increased to avoid accidental navigation)
 
-    if (Math.abs(diff) > threshold) {
+    // Only navigate if there was a clear horizontal swipe (not just a tap)
+    if (touchEndX.current !== 0 && Math.abs(diff) > threshold) {
       if (diff > 0) {
         navigateToPreviousDay() // Swipe right = go to previous day
       } else {

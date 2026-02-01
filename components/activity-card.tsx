@@ -64,7 +64,7 @@ export function ActivityCard({
       </button>
 
       {/* Info */}
-      <div className="flex-1 min-w-0" onClick={onClick}>
+      <div className="flex-1 min-w-0">
         <div className={cn(
           'font-medium text-foreground',
           isCompleted && 'line-through text-muted-foreground'

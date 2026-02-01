@@ -79,7 +79,7 @@ export function ActivityDetailModal({
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-lg max-h-[85dvh] overflow-hidden rounded-xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
+        className="w-full sm:max-w-lg max-h-[75dvh] overflow-hidden rounded-xl bg-card animate-in fade-in zoom-in-95 duration-200 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Spectrum bar at top */}

@@ -1131,7 +1131,6 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
   ) => {
     const activity = getActivity(activityId)
     if (!activity) return null
-    const categoryColor = CATEGORIES[activity.category].color
     const isDragging = dragState?.activityId === activityId && dragState?.isDragging
 
     const showDropBefore = dropTarget &&
@@ -1189,7 +1188,6 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
   ) => {
     const activity = getActivity(activityId)
     if (!activity) return null
-    const categoryColor = CATEGORIES[activity.category].color
     const isDragging = previewDragState?.activityId === activityId && previewDragState?.isDragging
 
     const showDropBefore = previewDropTarget &&
@@ -1380,15 +1378,6 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                   className="w-full p-3 flex items-center justify-between hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div
-                      className="w-8 h-8 rounded-full flex items-center justify-center"
-                      style={{ backgroundColor: `${category.color}20` }}
-                    >
-                      <div
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: category.color }}
-                      />
-                    </div>
                     <span className="font-medium">{category.name}</span>
                     {selectedCount > 0 && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">
@@ -1548,7 +1537,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
             onClick={() => { setViewingActivity(null); setShowActivityDetails(false) }}
           >
             <div
-              className="w-full max-w-md max-h-[85dvh] overflow-hidden rounded-xl bg-card animate-in zoom-in-95 duration-200 flex flex-col"
+              className="w-full max-w-md max-h-[75dvh] overflow-hidden rounded-xl bg-card animate-in zoom-in-95 duration-200 flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Spectrum bar at top */}
@@ -1685,7 +1674,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
         {/* Custom Day Picker Modal */}
         {customDayPickerActivity && (() => {
           const selection = selections.find(s => s.activityId === customDayPickerActivity)
-          const activity = notionActivities.find(a => a.id === customDayPickerActivity)
+          const activity = getActivity(customDayPickerActivity)
           const selectedDays = selection?.customDays || []
 
           return (
@@ -2039,13 +2028,9 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-1 mt-1">
-                        {allActivitiesForDay.map(actId => {
-                          const activity = getActivity(actId)
-                          if (!activity) return null
-                          return (
-                            <span key={actId} className="w-2 h-2 rounded-full" style={{ backgroundColor: CATEGORIES[activity.category].color }} />
-                          )
-                        })}
+                        {allActivitiesForDay.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground">{allActivitiesForDay.length} activities</span>
+                        )}
                         {calendarConnected && (() => {
                           const eventsForDay = getEventsForDate(dateStr)
                           return eventsForDay.length > 0 ? (
