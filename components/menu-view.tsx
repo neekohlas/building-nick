@@ -110,6 +110,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
 
   // Handle "Focus for Week" from Health Coach
   const handleFocusForWeek = (activityIds: string[]) => {
+    // Show toast informing user to complete 7-day planning
+    if (activityIds.length > 0) {
+      setToast(`${activityIds.length} activit${activityIds.length === 1 ? 'y' : 'ies'} added — complete your 7-day plan`)
+      setTimeout(() => setToast(null), 4000)
+    }
+
     // Open planning view with pre-selected activities
     if (onOpenPlanWithActivities && activityIds.length > 0) {
       onOpenPlanWithActivities(activityIds)
