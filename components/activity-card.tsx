@@ -1,9 +1,10 @@
 'use client'
 
-import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Play } from 'lucide-react'
+import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
+import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,10 +86,13 @@ export function ActivityCard({
             </span>
           )}
           {activity.video && (
-            <Play className="h-3 w-3" />
+            <Video className="h-3 w-3" title="Has video" />
           )}
-          {activity.link && (
-            <ExternalLink className="h-3 w-3" />
+          {!activity.video && activity.link && (
+            <ExternalLink className="h-3 w-3" title="External link" />
+          )}
+          {hasMultipleSteps(activity.instructions) && (
+            <Volume2 className="h-3 w-3" title="Audio guide available" />
           )}
         </div>
       </div>

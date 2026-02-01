@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, ExternalLink, Star, Loader2, Play } from 'lucide-react'
+import { Clock, ExternalLink, Star, Loader2, Video, Volume2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, MIND_BODY_COLORS, MindBodyType } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { useActivities } from '@/hooks/use-activities'
+import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 interface LibraryViewProps {
   onBack: () => void
@@ -111,10 +112,13 @@ export function LibraryView({ onBack }: LibraryViewProps) {
                       {activity.name}
                     </span>
                     {activity.video && (
-                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Video className="h-3.5 w-3.5 text-muted-foreground" title="Has video" />
                     )}
-                    {activity.link && (
-                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                    {!activity.video && activity.link && (
+                      <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" title="External link" />
+                    )}
+                    {hasMultipleSteps(activity.instructions) && (
+                      <Volume2 className="h-3.5 w-3.5 text-muted-foreground" title="Audio guide available" />
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
