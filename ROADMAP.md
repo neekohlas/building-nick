@@ -339,4 +339,182 @@ ELEVENLABS_API_KEY=
 
 ---
 
-*Last Updated: January 31, 2026*
+## Feature 7: Multi-User Support
+
+**Status:** Foundation Complete (Single-User Mode Active)
+**Priority:** Low (Future Enhancement)
+**Complexity:** Medium
+
+### Current Architecture (Single User)
+
+The app currently uses a simple password-based authentication system with cloud sync via Supabase. All data syncs to a single "default user" in Supabase, identified by a fixed UUID.
+
+**How It Works:**
+1. User enters `APP_PASSWORD` to access the app
+2. All data (completions, schedules, plan configs) syncs to Supabase
+3. Data is tagged with `NEXT_PUBLIC_DEFAULT_USER_ID` (a fixed UUID)
+4. IndexedDB serves as local cache; Supabase is the cloud backup
+
+**Key Files:**
+- `lib/supabase.ts` - Supabase client setup
+- `lib/sync-service.ts` - Sync logic using fixed user ID
+- `hooks/use-sync.ts` - React hook wrapping storage with sync
+- `hooks/use-auth.tsx` - Auth context (minimal for single-user)
+
+### Migration to Multi-User
+
+To support multiple users (e.g., pre-approved friends/family), the following changes would be needed:
+
+#### Phase 1: User Identity via Google OAuth
+
+**Goal:** Each user has their own Supabase identity, data isolated via RLS.
+
+**1.1 Enable Supabase Google OAuth**
+- Already configured in Supabase project (Google provider)
+- OAuth callback route exists at `/auth/callback`
+
+**1.2 Modify Login Flow**
+```
+Current:  Password → App access (fixed user ID for all data)
+New:      Password → App access → Google sign-in prompt → User's Supabase ID
+```
+
+**Files to modify:**
+- `app/login/page.tsx` - Add "Continue with Google" after password verification
+- `hooks/use-auth.tsx` - Expose `signInWithGoogle()`, track real Supabase user
+- `lib/sync-service.ts` - Use `user.id` from Supabase auth instead of `DEFAULT_USER_ID`
+- `hooks/use-sync.ts` - Pass real user ID to sync functions
+
+**1.3 Update Sync Service**
+```typescript
+// Current (single user):
+const userId = process.env.NEXT_PUBLIC_DEFAULT_USER_ID
+
+// Multi-user:
+const { data: { user } } = await supabase.auth.getUser()
+const userId = user?.id
+```
+
+#### Phase 2: Per-User Password (Optional)
+
+If you want different passwords for different users:
+
+**Option A: Password per Google Account**
+- Store allowed email → password mapping in Supabase `allowed_users` table
+- After Google sign-in, verify their email is in allowed list
+- Each user has their own password
+
+```sql
+CREATE TABLE public.allowed_users (
+  email TEXT PRIMARY KEY,
+  password_hash TEXT NOT NULL,
+  name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Option B: Invite Codes**
+- Generate unique invite codes
+- User enters invite code + sets up Google account
+- Code is single-use, ties to their Google identity
+
+**Option C: Keep Single Password (Recommended for Small Groups)**
+- Keep `APP_PASSWORD` as the gate for everyone
+- Google sign-in differentiates users after they're "inside"
+- Simplest approach for trusted users (family/friends)
+
+#### Phase 3: Data Migration
+
+When transitioning from single-user to multi-user:
+
+**Step 1: Sign in with your Google account first**
+
+**Step 2: Migrate existing data to your real user ID**
+```sql
+-- Run in Supabase SQL Editor after you sign in with Google
+-- Replace 'your-new-google-user-id' with your actual Supabase user ID
+-- Replace 'old-fixed-uuid' with your NEXT_PUBLIC_DEFAULT_USER_ID value
+
+UPDATE completions
+SET user_id = 'your-new-google-user-id'
+WHERE user_id = 'old-fixed-uuid';
+
+UPDATE schedules
+SET user_id = 'your-new-google-user-id'
+WHERE user_id = 'old-fixed-uuid';
+
+UPDATE saved_plan_configs
+SET user_id = 'your-new-google-user-id'
+WHERE user_id = 'old-fixed-uuid';
+```
+
+**Step 3: Remove DEFAULT_USER_ID from environment**
+- Delete `NEXT_PUBLIC_DEFAULT_USER_ID` from Vercel environment variables
+
+**Step 4: Update sync service to require real user**
+```typescript
+// In lib/sync-service.ts, remove the fallback:
+// Before:
+const userId = user?.id || process.env.NEXT_PUBLIC_DEFAULT_USER_ID
+
+// After:
+if (!user?.id) {
+  throw new Error('User must be authenticated to sync')
+}
+const userId = user.id
+```
+
+#### Phase 4: User Management UI (Optional)
+
+For managing who can access the app:
+
+- Admin view to see all users
+- Ability to invite new users (generate invite links)
+- Revoke access
+- View per-user statistics
+
+### Environment Variables
+
+**Current (Single User):**
+```env
+APP_PASSWORD=your-password
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
+NEXT_PUBLIC_DEFAULT_USER_ID=a-fixed-uuid-for-single-user
+```
+
+**Future (Multi-User):**
+```env
+APP_PASSWORD=your-password  # Keep as gate, or remove for per-user passwords
+NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
+# No DEFAULT_USER_ID - uses real Supabase auth user IDs
+```
+
+### Implementation Checklist
+
+**Single User (Current) ✓**
+- [x] Supabase tables with RLS policies
+- [x] Fixed user ID for all data (`DEFAULT_USER_ID`)
+- [x] Password protects app access
+- [x] Cloud sync works automatically after password login
+- [x] IndexedDB as local cache
+
+**Multi-User (Future)**
+- [ ] Add Google sign-in prompt after password (in `use-auth.tsx`)
+- [ ] Remove `DEFAULT_USER_ID` fallback in sync service
+- [ ] Migrate existing data to real user ID (SQL script)
+- [ ] Test RLS isolation between users
+- [ ] (Optional) Per-user passwords via `allowed_users` table
+- [ ] (Optional) User management UI
+
+### Notes
+
+- Supabase RLS policies already enforce `user_id = auth.uid()`, so multi-user isolation is built-in once real user IDs are used
+- The password gate (`APP_PASSWORD`) can remain as an extra layer even with multi-user
+- Google Calendar integration is separate from Supabase auth - each user would need to connect their own calendar
+- The migration is non-destructive; you can test multi-user on a branch first
+
+---
+
+*Last Updated: February 1, 2026*

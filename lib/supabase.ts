@@ -83,10 +83,11 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> | null {
   return browserClient
 }
 
-// Check if Supabase is configured
+// Check if Supabase is configured (including default user ID for single-user mode)
 export function isSupabaseConfigured(): boolean {
   return !!(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    process.env.NEXT_PUBLIC_DEFAULT_USER_ID
   )
 }

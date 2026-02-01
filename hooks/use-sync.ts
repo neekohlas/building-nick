@@ -25,7 +25,7 @@ interface SyncState {
 }
 
 export function useSync() {
-  const { user, isAuthenticated, isSupabaseEnabled } = useAuth()
+  const { userId, isAuthenticated, isSupabaseEnabled } = useAuth()
   const storage = useStorage()
 
   const [syncState, setSyncState] = useState<SyncState>({
@@ -39,13 +39,13 @@ export function useSync() {
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingOpsRef = useRef<Map<string, () => Promise<void>>>(new Map())
 
-  // Check for migration on first auth
+  // Check for migration on first load (when cloud sync is enabled)
   useEffect(() => {
-    if (!isAuthenticated || !user || !isSupabaseEnabled) return
+    if (!isAuthenticated || !userId || !isSupabaseEnabled) return
 
     const checkMigration = async () => {
       // Check if user has cloud data
-      const hasCloud = await hasCloudData(user.id)
+      const hasCloud = await hasCloudData(userId)
 
       if (!hasCloud) {
         // Check if there's local data to migrate
@@ -64,11 +64,11 @@ export function useSync() {
     }
 
     checkMigration()
-  }, [isAuthenticated, user, isSupabaseEnabled])
+  }, [isAuthenticated, userId, isSupabaseEnabled])
 
   // Queue a sync operation with debouncing
   const queueSync = useCallback((key: string, operation: () => Promise<void>) => {
-    if (!isAuthenticated || !user) return
+    if (!isAuthenticated || !userId) return
 
     pendingOpsRef.current.set(key, operation)
     setSyncState(prev => ({ ...prev, pendingOperations: pendingOpsRef.current.size }))
@@ -102,7 +102,7 @@ export function useSync() {
         }))
       }
     }, SYNC_DEBOUNCE)
-  }, [isAuthenticated, user])
+  }, [isAuthenticated, userId])
 
   // Sync-aware save completion
   const saveCompletionWithSync = useCallback(async (
@@ -112,17 +112,17 @@ export function useSync() {
     await storage.saveCompletion(completion)
 
     // Queue cloud sync
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userId) {
       const fullCompletion: Completion = {
         ...completion,
         id: `${completion.date}_${completion.activityId}`,
         completedAt: new Date().toISOString(),
       }
       queueSync(`completion-${fullCompletion.id}`, () =>
-        syncCompletion(fullCompletion, user.id).then(() => {})
+        syncCompletion(fullCompletion, userId).then(() => {})
       )
     }
-  }, [storage.saveCompletion, isAuthenticated, user, queueSync])
+  }, [storage.saveCompletion, isAuthenticated, userId, queueSync])
 
   // Sync-aware remove completion
   const removeCompletionWithSync = useCallback(async (date: string, activityId: string) => {
@@ -130,13 +130,13 @@ export function useSync() {
     await storage.removeCompletion(date, activityId)
 
     // Queue cloud sync
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userId) {
       const completionId = `${date}_${activityId}`
       queueSync(`remove-${completionId}`, () =>
-        removeCompletionFromCloud(completionId, user.id).then(() => {})
+        removeCompletionFromCloud(completionId, userId).then(() => {})
       )
     }
-  }, [storage.removeCompletion, isAuthenticated, user, queueSync])
+  }, [storage.removeCompletion, isAuthenticated, userId, queueSync])
 
   // Sync-aware save schedule
   const saveDailyScheduleWithSync = useCallback(async (schedule: DailySchedule) => {
@@ -144,12 +144,12 @@ export function useSync() {
     await storage.saveDailySchedule(schedule)
 
     // Queue cloud sync
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userId) {
       queueSync(`schedule-${schedule.date}`, () =>
-        syncSchedule(schedule, user.id).then(() => {})
+        syncSchedule(schedule, userId).then(() => {})
       )
     }
-  }, [storage.saveDailySchedule, isAuthenticated, user, queueSync])
+  }, [storage.saveDailySchedule, isAuthenticated, userId, queueSync])
 
   // Sync-aware save plan config
   const savePlanConfigWithSync = useCallback(async (
@@ -159,26 +159,26 @@ export function useSync() {
     await storage.savePlanConfig(config)
 
     // Queue cloud sync
-    if (isAuthenticated && user) {
+    if (isAuthenticated && userId) {
       const fullConfig: SavedPlanConfig = {
         ...config,
         id: 'latest',
         savedAt: new Date().toISOString(),
       }
       queueSync('planConfig-latest', () =>
-        syncPlanConfig(fullConfig, user.id).then(() => {})
+        syncPlanConfig(fullConfig, userId).then(() => {})
       )
     }
-  }, [storage.savePlanConfig, isAuthenticated, user, queueSync])
+  }, [storage.savePlanConfig, isAuthenticated, userId, queueSync])
 
   // Pull all data from cloud and merge into local storage
   const pullFromCloud = useCallback(async () => {
-    if (!isAuthenticated || !user) return
+    if (!isAuthenticated || !userId) return
 
     setSyncState(prev => ({ ...prev, status: 'syncing' }))
 
     try {
-      const cloudData = await pullAllFromCloud(user.id)
+      const cloudData = await pullAllFromCloud(userId)
 
       if (cloudData) {
         // Merge completions - cloud data overwrites local for same IDs
@@ -225,11 +225,11 @@ export function useSync() {
       console.error('Pull from cloud error:', error)
       setSyncState(prev => ({ ...prev, status: 'error' }))
     }
-  }, [isAuthenticated, user, storage])
+  }, [isAuthenticated, userId, storage])
 
   // Migrate local data to cloud (first-time sync)
   const migrateToCloud = useCallback(async () => {
-    if (!isAuthenticated || !user) return { success: false }
+    if (!isAuthenticated || !userId) return { success: false }
 
     setSyncState(prev => ({ ...prev, status: 'syncing' }))
 
@@ -239,7 +239,7 @@ export function useSync() {
       const schedules = await getAllSchedules()
       const planConfig = await storage.getLastPlanConfig()
 
-      const result = await pushAllToCloud(user.id, {
+      const result = await pushAllToCloud(userId, {
         completions,
         schedules,
         planConfig,
@@ -262,7 +262,7 @@ export function useSync() {
       setSyncState(prev => ({ ...prev, status: 'error' }))
       return { success: false, error: String(error) }
     }
-  }, [isAuthenticated, user, storage])
+  }, [isAuthenticated, userId, storage])
 
   // Helper to get all completions (not exposed by storage hook directly)
   const getAllCompletions = useCallback(async (): Promise<Completion[]> => {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, RefreshCw, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, User } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -46,7 +46,7 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
     refetch: refetchCalendar,
     setSelectedCalendars
   } = useCalendar()
-  const { user, isAuthenticated, isSupabaseEnabled, signInWithGoogle, signOut: signOutSupabase } = useAuth()
+  const { isAuthenticated, isSupabaseEnabled } = useAuth()
   const { syncStatus, lastSyncTime: cloudSyncTime, hasPendingMigration, pullFromCloud, migrateToCloud, dismissMigration } = useSync()
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [showCalendarModal, setShowCalendarModal] = useState(false)
@@ -153,11 +153,6 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
 
   const handleLogout = async () => {
     try {
-      // Sign out from Supabase if authenticated
-      if (isAuthenticated) {
-        await signOutSupabase()
-      }
-      // Also sign out from legacy auth
       await fetch('/api/auth/logout', { method: 'POST' })
       router.push('/login')
       router.refresh()
@@ -167,30 +162,26 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
   }
 
   const handleCloudSync = async () => {
-    if (!isAuthenticated) {
-      await signInWithGoogle()
-    } else {
-      await pullFromCloud()
-      setToast('Synced with cloud')
-      setTimeout(() => setToast(null), 3000)
-    }
+    if (!isAuthenticated) return
+    await pullFromCloud()
+    setToast('Synced with cloud')
+    setTimeout(() => setToast(null), 3000)
   }
 
   // Get cloud sync status description
   const getCloudSyncDescription = () => {
-    if (!isSupabaseEnabled) return 'Cloud sync not configured'
-    if (!isAuthenticated) return 'Sign in to sync across devices'
+    if (!isSupabaseEnabled) return 'Not configured'
+    if (!isAuthenticated) return 'Not configured'
     if (syncStatus === 'syncing') return 'Syncing...'
     if (syncStatus === 'error') return 'Sync error - tap to retry'
     if (cloudSyncTime) {
       return `Last synced ${cloudSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
     }
-    return 'Tap to sync'
+    return 'Tap to sync now'
   }
 
   // Get cloud sync icon
   const getCloudIcon = () => {
-    if (!isAuthenticated) return Cloud
     if (syncStatus === 'syncing') return Loader2
     if (syncStatus === 'error') return CloudOff
     return Cloud
@@ -233,11 +224,11 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
     },
     {
       icon: getCloudIcon(),
-      label: isAuthenticated ? 'Cloud Sync' : 'Sign In',
+      label: 'Cloud Sync',
       description: getCloudSyncDescription(),
       onClick: handleCloudSync,
-      connected: isAuthenticated,
-      disabled: !isSupabaseEnabled
+      connected: isAuthenticated && syncStatus !== 'error',
+      disabled: !isAuthenticated
     },
     {
       icon: BarChart3,
@@ -266,12 +257,6 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">More</h2>
-        {isAuthenticated && user && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="h-4 w-4" />
-            <span className="truncate max-w-[150px]">{user.email}</span>
-          </div>
-        )}
       </div>
 
       {/* Migration Banner */}
