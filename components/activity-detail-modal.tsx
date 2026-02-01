@@ -6,6 +6,7 @@ import { Activity, CATEGORIES, MIND_BODY_COLORS, MindBodyType } from '@/lib/acti
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
+import { SpectrumTriangle } from '@/components/spectrum-triangle'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
@@ -103,7 +104,7 @@ export function ActivityDetailModal({
         {/* Body */}
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Meta info */}
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
               {formatDuration(activity.duration)}
@@ -114,6 +115,10 @@ export function ActivityDetailModal({
             >
               {category.name}
             </span>
+            {/* Spectrum triangle visualization */}
+            {activity.spectrum && (
+              <SpectrumTriangle spectrum={activity.spectrum} size="md" showLabels />
+            )}
           </div>
 
           {/* Audio Mode Button - prominent position for activities with steps */}

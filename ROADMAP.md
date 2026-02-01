@@ -39,39 +39,79 @@ Integrate OpenWeather API to display weather forecasts in the Week View and Plan
 
 ## Feature 2: Google Calendar Integration
 
-**Status:** Not Started
+**Status:** COMPLETE
 **Priority:** High
 **Complexity:** Medium
+**Completed:** January 27, 2026
 
 ### Description
 Connect to Google Calendar to display calendar events alongside the activity schedule in Today View, Week View, and Plan Week View.
 
-### Implementation Notes
-- Use Google Calendar API with OAuth 2.0
-- Read-only access to user's calendars
-- Display events as distinct blocks (different styling from activities)
-- Show event title, time, and duration
-- Consider: Allow marking time blocks as "busy" based on calendar
+### What Was Implemented
+- `/app/api/auth/google/route.ts` - OAuth 2.0 initiation, redirects to Google consent screen
+- `/app/api/auth/google/callback/route.ts` - OAuth callback, exchanges code for tokens, stores refresh token in HttpOnly cookie
+- `/app/api/auth/google/status/route.ts` - Returns connection status, email, and list of calendars
+- `/app/api/auth/google/disconnect/route.ts` - Revokes tokens and clears cookies
+- `/app/api/calendar/events/route.ts` - Fetches events from selected calendars with 15-minute server-side caching
+- `/hooks/use-calendar.ts` - React hook managing connection state, calendar selection, and events
+- `/components/calendar-event-card.tsx` - Event cards (compact and full variants) styled distinctly from activities
+- `/components/calendar-settings-modal.tsx` - Modal for managing connection, selecting calendars, and refreshing events
+- Today View: Calendar events shown inline in each time block
+- Week View: Event count badges in day selector, events listed at top of day detail
+- Plan Week View: Event count shown on day cards, events listed when day is expanded in preview
+- Menu View: "Google Calendar" menu item to connect or manage settings
 
-### User Stories
-- As a user, I want to see my calendar events when viewing my day so I know what time slots are available for activities
-- As a user, I want to see my calendar when planning the week so I can schedule around meetings and appointments
+### Security Features
+- Refresh tokens stored in HttpOnly secure cookies (protected from XSS)
+- Access tokens never exposed to client, refreshed server-side
+- CSRF protection via state parameter in OAuth flow
+- Read-only scope (`calendar.readonly`)
 
-### Technical Requirements
-- OAuth 2.0 flow with Google
-- Environment variables: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- API routes: `/api/auth/google`, `/api/calendar/events`
-- Store refresh token securely (consider encryption at rest)
-- Calendar event caching with invalidation
+### Calendar Selection
+- Users can select which calendars to display
+- Preferences saved in localStorage
+- All visible calendars shown by default with color coding
 
-### Open Questions
-- Should we write back to Google Calendar? (e.g., block time for activities)
-- Multiple calendar support?
-- Event filtering (work vs personal)?
+### Answers to Open Questions
+- **Write back to Google Calendar?** No - kept read-only for v1 (simpler, more secure)
+- **Multiple calendar support?** Yes - fetches all user-visible calendars with selection UI
+- **Event filtering?** Implemented via calendar selection in settings modal
 
 ---
 
-## Feature 3: Claude AI Health Coach
+## Feature 3: Heart-Mind-Body Spectrum
+
+**Status:** COMPLETE
+**Priority:** Medium
+**Complexity:** Low-Medium
+**Completed:** January 31, 2026
+
+### Description
+Visual triangular radar chart showing the balance of Heart (emotional), Mind (cognitive), and Body (physical) components for each activity.
+
+### What Was Implemented
+- `/lib/activities.tsx` - Added `SpectrumScores` interface with heart/mind/body (0-1 each)
+- `/components/spectrum-triangle.tsx` - SVG-based triangular radar visualization
+- `/app/api/activities/route.ts` - Updated to read Heart/Mind/Body number columns from Notion
+- `/hooks/use-activities.ts` - Updated to pass spectrum scores through
+- `/components/library-view.tsx` - Shows small spectrum triangle on each activity card
+- `/components/activity-detail-modal.tsx` - Shows medium spectrum with labels in modal
+- `/scripts/populate-spectrum-scores.ts` - Script to populate initial scores in Notion
+
+### Notion Database Setup
+Add three Number columns to the activities database:
+- **Heart** (0-1): Emotional/relational content (journaling, gratitude, connection)
+- **Mind** (0-1): Cognitive/focus content (education, meditation, planning)
+- **Body** (0-1): Movement/physical content (exercises, stretches, outdoor)
+
+### Colors
+- Heart: Rose (#F43F5E)
+- Mind: Purple (#8B5CF6)
+- Body: Emerald (#10B981)
+
+---
+
+## Feature 5: Claude AI Health Coach
 
 **Status:** Not Started
 **Priority:** High
@@ -122,7 +162,7 @@ Ask how they've been feeling, then suggest 2-3 activities with brief reasoning.
 
 ---
 
-## Feature 4: Audio Instruction Mode
+## Feature 6: Audio Instruction Mode
 
 **Status:** Not Started
 **Priority:** Medium
@@ -180,24 +220,19 @@ Add hands-free audio guidance for activities with step-by-step instructions (e.g
 
 ## Implementation Priority
 
-### Recommended Order
+### Completed Features
+1. **OpenWeather Integration** ✓
+2. **Google Calendar Integration** ✓
+3. **Heart-Mind-Body Spectrum** ✓
 
-1. **OpenWeather Integration** (1-2 sessions)
-   - Simplest to implement
-   - Immediate value for planning
-   - Good warm-up for API integration patterns
+### Remaining Features
 
-2. **Google Calendar Integration** (2-3 sessions)
-   - High value for daily use
-   - OAuth flow is well-documented
-   - Read-only simplifies implementation
-
-3. **Claude AI Health Coach** (2-3 sessions)
+4. **Claude AI Health Coach** (2-3 sessions)
    - Builds on existing activity data
    - Free tier makes it low-risk
    - Can iterate on prompts over time
 
-4. **Audio Instruction Mode** (3-4 sessions)
+5. **Audio Instruction Mode** (3-4 sessions)
    - Most complex (speech APIs)
    - Browser compatibility challenges
    - Can be scoped to subset of activities initially

@@ -31,6 +31,14 @@ export interface ActivitySelection {
   customDays?: string[]  // ISO date strings for custom frequency (e.g., ['2024-01-15', '2024-01-17'])
 }
 
+// Heart-Mind-Body spectrum scores (0-1 each axis)
+// Used for triangular radar visualization
+export interface SpectrumScores {
+  heart: number  // Emotional/relational (journaling, gratitude, connection)
+  mind: number   // Cognitive/focus (education, meditation, planning)
+  body: number   // Movement/physical (exercises, stretches, outdoor)
+}
+
 export interface Activity {
   id: string
   name: string
@@ -52,6 +60,8 @@ export interface Activity {
   sortOrder?: number           // Custom sort order from Notion (lower numbers appear first)
   // Mind-body spectrum for visual indicator (1=emotional, 3=mind, 5=movement)
   mindBodyType?: MindBodyType  // Only used for mind_body category activities
+  // Heart-Mind-Body triangular spectrum (0-1 for each axis)
+  spectrum?: SpectrumScores    // New triangular radar visualization
   // Generic activity support
   isGeneric?: boolean           // true for parent activities like 'run', 'walk'
   variants?: string[]           // e.g., ['run_green_lake', 'run_neighborhood']

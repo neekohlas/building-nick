@@ -18,6 +18,13 @@ type DayType = 'heavy' | 'light' | 'both'
 
 type MindBodyType = 1 | 2 | 3 | 4 | 5
 
+// Heart-Mind-Body spectrum scores (0-1 each axis)
+interface SpectrumScores {
+  heart: number  // Emotional/relational
+  mind: number   // Cognitive/focus
+  body: number   // Movement/physical
+}
+
 interface NotionActivity {
   id: string
   name: string
@@ -36,6 +43,7 @@ interface NotionActivity {
   favorite?: boolean
   sort_order?: number
   mind_body_type?: MindBodyType
+  spectrum?: SpectrumScores
 }
 
 export async function GET() {
@@ -207,6 +215,21 @@ export async function GET() {
         mind_body_type: (() => {
           const value = props['Mind Body Type']?.number
           if (value && value >= 1 && value <= 5) return value as MindBodyType
+          return undefined
+        })(),
+        // Heart-Mind-Body triangular spectrum (0-1 for each axis)
+        spectrum: (() => {
+          const heart = props['Heart']?.number
+          const mind = props['Mind']?.number
+          const body = props['Body']?.number
+          // Only return spectrum if at least one value is set
+          if (heart !== undefined || mind !== undefined || body !== undefined) {
+            return {
+              heart: typeof heart === 'number' ? Math.max(0, Math.min(1, heart)) : 0,
+              mind: typeof mind === 'number' ? Math.max(0, Math.min(1, mind)) : 0,
+              body: typeof body === 'number' ? Math.max(0, Math.min(1, body)) : 0,
+            }
+          }
           return undefined
         })()
       }
