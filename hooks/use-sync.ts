@@ -159,6 +159,12 @@ export function useSync() {
   const pullFromCloud = useCallback(async () => {
     if (!isAuthenticated || !userId) return
 
+    // Don't pull while there are pending sync operations to avoid conflicts
+    if (pendingOpsRef.current.size > 0) {
+      console.log('[useSync] Skipping pull - pending operations:', pendingOpsRef.current.size)
+      return
+    }
+
     setSyncState(prev => ({ ...prev, status: 'syncing' }))
 
     try {
