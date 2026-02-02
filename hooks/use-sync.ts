@@ -181,8 +181,18 @@ export function useSync() {
         }
 
         // Merge schedules - cloud data overwrites local for same dates
+        // Deduplicate activities within each time block
         for (const schedule of cloudData.schedules) {
-          await storage.saveDailySchedule(schedule)
+          const deduplicatedSchedule = {
+            ...schedule,
+            activities: Object.fromEntries(
+              Object.entries(schedule.activities).map(([block, activityIds]) => [
+                block,
+                [...new Set(activityIds as string[])]
+              ])
+            )
+          }
+          await storage.saveDailySchedule(deduplicatedSchedule)
         }
 
         // Use latest plan config from cloud

@@ -683,6 +683,14 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const handleAddActivity = async (activityId: string, timeBlock: TimeBlock) => {
     if (!schedule) return
 
+    // Check if activity is already in this time block to prevent duplicates
+    if (schedule.activities[timeBlock]?.includes(activityId)) {
+      console.log('[TodayView] Activity already in time block, skipping add')
+      setShowAddModal(false)
+      setAddActivityDefaultBlock(null)
+      return
+    }
+
     const newSchedule: DailySchedule = {
       ...schedule,
       activities: {
@@ -985,7 +993,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           </div>
         )}
         {TIME_BLOCKS.map((block, blockIndex) => {
-          const activities = schedule.activities[block] || []
+          // Deduplicate activities in case of sync issues
+          const activities = [...new Set(schedule.activities[block] || [])]
           const hasActivities = activities.length > 0
           const deadlineLabel = TIME_BLOCK_DEADLINE_LABELS[block]
 
