@@ -182,7 +182,11 @@ export function RoutinesView({ onBack, onLoadRoutine }: RoutinesViewProps) {
         )}
       >
         {editingId === routine.id ? (
-          <div className="p-4">
+          <div className="p-4 space-y-3">
+            {/* Show routine info above the input */}
+            <div className="text-sm text-muted-foreground">
+              {routine.selectedActivities.length} activities • {formatDate(routine.savedAt)}
+            </div>
             <div className="flex items-center gap-2">
               <Input
                 value={editName}

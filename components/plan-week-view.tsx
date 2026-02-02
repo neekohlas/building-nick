@@ -62,6 +62,8 @@ type PlanStep =
   | 'design_alternate'   // Step 4: Edit other day type template
   | 'preview'            // Step 5: See the full 7-day plan
   | 'done'               // Step 6: Save confirmation
+  | 'quick_add_type'     // Quick Add: Just pick heavy/light for tomorrow
+  | 'quick_add_custom'   // Quick Add: Select custom days (if any)
 
 const TIME_BLOCKS: TimeBlock[] = ['before6am', 'before9am', 'before12pm', 'before3pm', 'before5pm', 'before6pm', 'before9pm', 'before12am', 'beforeNoon', 'before230pm']
 
@@ -756,13 +758,13 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     setShowRoutinesPicker(false)
   }, [])
 
-  // Quick add routine - apply and skip to tomorrow_type step
+  // Quick add routine - apply and go to quick add flow
   const quickAddRoutine = useCallback((routine: SavedPlanConfig) => {
     applyConfig(routine)
     setShowRoutineChoiceModal(false)
     setRoutineToApply(null)
-    // Skip to tomorrow_type step (heavy/light day selection)
-    setStep('tomorrow_type')
+    // Go to quick add type selection (heavy/light day)
+    setStep('quick_add_type')
   }, [applyConfig])
 
   // Customize routine - apply and stay on step 1
@@ -2113,6 +2115,197 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
           </Button>
           <Button className="flex-1" onClick={() => setStep('design_tomorrow')}>
             Design Tomorrow <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ QUICK ADD: Type Selection ============
+  if (step === 'quick_add_type') {
+    // Check if there are custom day activities
+    const customDayActivities = selections.filter(s => s.frequency === 'custom')
+    const hasCustomDays = customDayActivities.length > 0
+
+    const handleQuickAddNext = () => {
+      if (hasCustomDays) {
+        setStep('quick_add_custom')
+      } else {
+        // Generate schedules and save directly
+        generateSchedules()
+        // Small delay to ensure schedules are generated before saving
+        setTimeout(() => {
+          saveSchedules()
+        }, 100)
+      }
+    }
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Quick Add</span>
+          </div>
+          <h2 className="text-xl font-semibold">What type of day is tomorrow?</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Your week will alternate between heavy and light days
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <button
+            onClick={() => setStartWithHeavy(true)}
+            className={cn(
+              'w-full p-4 rounded-xl border text-left transition-all',
+              startWithHeavy
+                ? 'border-orange-500 bg-orange-500/5 ring-2 ring-orange-500'
+                : 'border-border bg-card hover:border-orange-500/50'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'w-12 h-12 rounded-full flex items-center justify-center',
+                startWithHeavy ? 'bg-orange-500 text-white' : 'bg-orange-500/20 text-orange-600'
+              )}>
+                <Zap className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Heavy Day</span>
+                  {startWithHeavy && <Check className="h-4 w-4 text-orange-500" />}
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Intense workouts and challenging activities
+                </p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setStartWithHeavy(false)}
+            className={cn(
+              'w-full p-4 rounded-xl border text-left transition-all',
+              !startWithHeavy
+                ? 'border-green-500 bg-green-500/5 ring-2 ring-green-500'
+                : 'border-border bg-card hover:border-green-500/50'
+            )}
+          >
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                'w-12 h-12 rounded-full flex items-center justify-center',
+                !startWithHeavy ? 'bg-green-500 text-white' : 'bg-green-500/20 text-green-600'
+              )}>
+                <Leaf className="h-6 w-6" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Light Day</span>
+                  {!startWithHeavy && <Check className="h-4 w-4 text-green-500" />}
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Recovery, learning, and lighter activities
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setStep('select_activities')}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Customize
+          </Button>
+          <Button className="flex-1" onClick={handleQuickAddNext} disabled={isSaving}>
+            {isSaving ? 'Saving...' : (hasCustomDays ? 'Next' : 'Save Plan')}
+            {!isSaving && <ChevronRight className="h-4 w-4 ml-1" />}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ============ QUICK ADD: Custom Days ============
+  if (step === 'quick_add_custom') {
+    const customDayActivities = selections.filter(s => s.frequency === 'custom')
+
+    const handleQuickAddSave = () => {
+      generateSchedules()
+      setTimeout(() => {
+        saveSchedules()
+      }, 100)
+    }
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">Quick Add</span>
+          </div>
+          <h2 className="text-xl font-semibold">Custom Day Activities</h2>
+          <p className="text-muted-foreground text-sm mt-1">
+            Select which days for these activities
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {customDayActivities.map(selection => {
+            const activity = getActivity(selection.activityId)
+            if (!activity) return null
+
+            return (
+              <div key={selection.activityId} className="rounded-xl border bg-card p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-2xl">{activity.emoji}</span>
+                  <div>
+                    <p className="font-medium">{activity.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {selection.customDays?.length || 0} day{(selection.customDays?.length || 0) !== 1 ? 's' : ''} selected
+                    </p>
+                  </div>
+                </div>
+
+                {/* Day selection grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {weekDates.map((date, idx) => {
+                    const dateStr = formatDateISO(date)
+                    const isSelected = selection.customDays?.includes(dateStr)
+
+                    return (
+                      <button
+                        key={dateStr}
+                        onClick={() => {
+                          setSelections(prev => prev.map(s => {
+                            if (s.activityId !== selection.activityId) return s
+                            const currentDays = s.customDays || []
+                            const newDays = isSelected
+                              ? currentDays.filter(d => d !== dateStr)
+                              : [...currentDays, dateStr]
+                            return { ...s, customDays: newDays }
+                          }))
+                        }}
+                        className={cn(
+                          "flex flex-col items-center p-2 rounded-lg transition-all text-xs",
+                          isSelected
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/50 hover:bg-muted"
+                        )}
+                      >
+                        <span className="font-medium">{getShortDayName(date)}</span>
+                        <span className="text-[10px] opacity-70">{getDayNumber(date)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-3 pt-2">
+          <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setStep('quick_add_type')}>
+            <ChevronLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+          <Button className="flex-1" onClick={handleQuickAddSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save Plan'}
           </Button>
         </div>
       </div>
