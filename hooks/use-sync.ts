@@ -50,11 +50,14 @@ export function useSync() {
 
   // Queue a sync operation with debouncing
   const queueSync = useCallback((key: string, operation: () => Promise<void>) => {
+    console.log('[useSync] queueSync called:', { key, isAuthenticated, userId: !!userId })
     if (!isAuthenticated || !userId) {
+      console.log('[useSync] queueSync skipped - not authenticated')
       return
     }
 
     pendingOpsRef.current.set(key, operation)
+    console.log('[useSync] Operation queued, pending ops:', pendingOpsRef.current.size)
     setSyncState(prev => ({ ...prev, pendingOperations: pendingOpsRef.current.size }))
 
     // Clear existing timer
@@ -64,13 +67,16 @@ export function useSync() {
 
     // Set new timer
     syncTimerRef.current = setTimeout(async () => {
+      console.log('[useSync] Executing queued sync operations...')
       setSyncState(prev => ({ ...prev, status: 'syncing' }))
 
       const ops = Array.from(pendingOpsRef.current.values())
       pendingOpsRef.current.clear()
+      console.log('[useSync] Running', ops.length, 'sync operations')
 
       try {
         await Promise.all(ops.map(op => op()))
+        console.log('[useSync] Sync operations completed successfully')
         setSyncState(prev => ({
           ...prev,
           status: 'idle',
@@ -78,7 +84,7 @@ export function useSync() {
           pendingOperations: 0,
         }))
       } catch (error) {
-        console.error('Sync error:', error)
+        console.error('[useSync] Sync error:', error)
         setSyncState(prev => ({
           ...prev,
           status: 'error',
@@ -92,6 +98,12 @@ export function useSync() {
   const saveCompletionWithSync = useCallback(async (
     completion: Omit<Completion, 'id' | 'completedAt'>
   ) => {
+    console.log('[useSync] saveCompletionWithSync called:', {
+      completion,
+      isAuthenticated,
+      userId: userId ? userId.substring(0, 8) + '...' : null,
+    })
+
     // Save locally first (optimistic)
     await storage.saveCompletion(completion)
 
@@ -102,9 +114,12 @@ export function useSync() {
         id: `${completion.date}_${completion.activityId}_${completion.timeBlock}_${completion.instanceIndex}`,
         completedAt: new Date().toISOString(),
       }
+      console.log('[useSync] Queueing completion sync:', fullCompletion.id)
       queueSync(`completion-${fullCompletion.id}`, () =>
         syncCompletion(fullCompletion, userId).then(() => {})
       )
+    } else {
+      console.log('[useSync] Skipping cloud sync - not authenticated')
     }
   }, [storage.saveCompletion, isAuthenticated, userId, queueSync])
 
@@ -115,15 +130,27 @@ export function useSync() {
     timeBlock: string,
     instanceIndex: number
   ) => {
+    console.log('[useSync] removeCompletionWithSync called:', {
+      date,
+      activityId,
+      timeBlock,
+      instanceIndex,
+      isAuthenticated,
+      userId: userId ? userId.substring(0, 8) + '...' : null,
+    })
+
     // Remove locally first
     await storage.removeCompletion(date, activityId, timeBlock, instanceIndex)
 
     // Queue cloud sync
     if (isAuthenticated && userId) {
       const completionId = `${date}_${activityId}_${timeBlock}_${instanceIndex}`
+      console.log('[useSync] Queueing completion removal:', completionId)
       queueSync(`remove-${completionId}`, () =>
         removeCompletionFromCloud(completionId, userId).then(() => {})
       )
+    } else {
+      console.log('[useSync] Skipping cloud removal - not authenticated')
     }
   }, [storage.removeCompletion, isAuthenticated, userId, queueSync])
 

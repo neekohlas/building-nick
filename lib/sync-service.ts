@@ -81,31 +81,42 @@ function dbToPlanConfig(db: DbSavedPlanConfig): SavedPlanConfig {
 
 // Sync a single completion to Supabase
 export async function syncCompletion(completion: Completion, userId: string): Promise<boolean> {
+  console.log('[syncService] syncCompletion called:', { completionId: completion.id, userId: userId.substring(0, 8) + '...' })
   const supabase = getSupabaseBrowserClient()
-  if (!supabase) return false
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
 
   try {
+    const dbData = completionToDb(completion, userId)
+    console.log('[syncService] Upserting completion:', dbData)
     const { error } = await supabase
       .from('completions')
-      .upsert(completionToDb(completion, userId), {
+      .upsert(dbData, {
         onConflict: 'user_id,id',
       })
 
     if (error) {
-      console.error('Error syncing completion:', error)
+      console.error('[syncService] Error syncing completion:', error)
       return false
     }
+    console.log('[syncService] Completion synced successfully')
     return true
   } catch (e) {
-    console.error('Exception syncing completion:', e)
+    console.error('[syncService] Exception syncing completion:', e)
     return false
   }
 }
 
 // Remove a completion from Supabase
 export async function removeCompletionFromCloud(completionId: string, userId: string): Promise<boolean> {
+  console.log('[syncService] removeCompletionFromCloud called:', { completionId, userId: userId.substring(0, 8) + '...' })
   const supabase = getSupabaseBrowserClient()
-  if (!supabase) return false
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
 
   try {
     const { error } = await supabase
@@ -115,12 +126,13 @@ export async function removeCompletionFromCloud(completionId: string, userId: st
       .eq('id', completionId)
 
     if (error) {
-      console.error('Error removing completion:', error)
+      console.error('[syncService] Error removing completion:', error)
       return false
     }
+    console.log('[syncService] Completion removed successfully')
     return true
   } catch (e) {
-    console.error('Exception removing completion:', e)
+    console.error('[syncService] Exception removing completion:', e)
     return false
   }
 }
