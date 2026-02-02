@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library, Bell } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library, Bell, BellRing } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -15,11 +15,13 @@ import { CalendarSettingsModal } from './calendar-settings-modal'
 import { HealthCoachModal } from './health-coach-modal'
 import { MigrationModal } from './migration-modal'
 import { RoutinesModal } from './routines-modal'
+import { NotificationSettingsModal } from './notification-settings-modal'
 import { SavedPlanConfig } from '@/hooks/use-storage'
 import {
   openRemindersSyncShortcut,
   getLastRemindersSyncTime
 } from '@/lib/reminders'
+import { useNotifications } from '@/hooks/use-notifications'
 
 interface MenuViewProps {
   onBack: () => void
@@ -61,9 +63,11 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
   const [showHealthCoach, setShowHealthCoach] = useState(false)
   const [showMigrationModal, setShowMigrationModal] = useState(false)
   const [showRoutinesModal, setShowRoutinesModal] = useState(false)
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const storage = useStorage()
   const [remindersSyncTime, setRemindersSyncTime] = useState<Date | null>(null)
+  const { preferences: notificationPrefs, permissionStatus: notificationPermission } = useNotifications()
 
   // Load reminders sync time on mount
   useEffect(() => {
@@ -226,6 +230,17 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
     return 'Sync with Apple Reminders'
   }
 
+  // Get notification settings description
+  const getNotificationDescription = () => {
+    if (notificationPermission === 'unsupported') return 'Not supported in this browser'
+    if (notificationPermission === 'denied') return 'Blocked - tap to fix'
+    if (notificationPrefs.enabled) {
+      const enabledTimes = notificationPrefs.times.filter(t => t.enabled).length
+      return `${enabledTimes} check-in${enabledTimes === 1 ? '' : 's'} scheduled`
+    }
+    return 'Get reminders throughout the day'
+  }
+
   const menuItems: MenuItem[] = [
     {
       icon: CalendarDays,
@@ -297,11 +312,11 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       disabled: true
     },
     {
-      icon: Settings,
-      label: 'Settings',
-      description: 'Notifications, preferences',
-      onClick: () => {},
-      disabled: true
+      icon: BellRing,
+      label: 'Notifications',
+      description: getNotificationDescription(),
+      onClick: () => setShowNotificationSettings(true),
+      connected: notificationPrefs.enabled && notificationPermission === 'granted'
     },
     {
       icon: LogOut,
@@ -387,7 +402,7 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
 
       {/* Coming Soon Note */}
       <p className="text-xs text-center text-muted-foreground">
-        Statistics and Settings coming soon in future updates.
+        Statistics coming soon in a future update.
       </p>
 
       {/* Location Modal */}
@@ -458,6 +473,13 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
               onOpenPlan()
             }
           }}
+        />
+      )}
+
+      {/* Notification Settings Modal */}
+      {showNotificationSettings && (
+        <NotificationSettingsModal
+          onClose={() => setShowNotificationSettings(false)}
         />
       )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { ActivityCard } from './activity-card'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SwapModal } from './swap-modal'
@@ -32,8 +32,9 @@ import {
 } from '@/lib/reminders'
 import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
 import { getRandomMessage, getStreakMessage, pickRandom } from '@/lib/messages'
-import { DailySchedule } from '@/hooks/use-storage'
+import { DailySchedule, Completion } from '@/hooks/use-storage'
 import { useSync } from '@/hooks/use-sync'
+import { useNotificationScheduler } from '@/hooks/use-notifications'
 
 interface TodayViewProps {
   onOpenMenu: () => void
@@ -84,6 +85,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
   // Instance-based completion tracking: keys are `${activityId}_${timeBlock}_${index}`
   const [completedInstanceKeys, setCompletedInstanceKeys] = useState<Set<string>>(new Set())
+  // Full completion objects for notifications
+  const [completions, setCompletions] = useState<Completion[]>([])
   const [motivation, setMotivation] = useState('')
   const [streak, setStreak] = useState(0)
 
@@ -155,6 +158,29 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
   const dateStr = formatDateISO(selectedDate)
   const isToday = formatDateISO(new Date()) === dateStr
+
+  // Build activity names map for notifications
+  const activityNames = useMemo(() => {
+    if (!schedule) return {}
+    const names: Record<string, string> = {}
+    for (const block of TIME_BLOCKS) {
+      const activities = schedule.activities[block] || []
+      for (const activityId of activities) {
+        const activity = getActivity(activityId)
+        if (activity) {
+          names[activityId] = activity.name
+        }
+      }
+    }
+    return names
+  }, [schedule, getActivity])
+
+  // Notification scheduler - only active when viewing today
+  useNotificationScheduler(
+    isToday ? schedule : null,
+    isToday ? completions : [],
+    activityNames
+  )
 
   // Navigate to previous/next day
   const navigateToPreviousDay = () => {
@@ -290,11 +316,13 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       setSchedule(existingSchedule)
 
       // Get completions (instance-based)
-      const completions = await storage.getCompletionsForDate(dateStr)
+      const loadedCompletions = await storage.getCompletionsForDate(dateStr)
       // Build instance keys from completions
       setCompletedInstanceKeys(new Set(
-        completions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
+        loadedCompletions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
       ))
+      // Store full completions for notifications
+      setCompletions(loadedCompletions)
 
       // Get streak and stats
       const currentStreak = await storage.getCurrentStreak()
@@ -345,10 +373,12 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       }
 
       // Re-fetch completions for current date (instance-based)
-      const completions = await storage.getCompletionsForDate(dateStr)
+      const refreshedCompletions = await storage.getCompletionsForDate(dateStr)
       setCompletedInstanceKeys(new Set(
-        completions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
+        refreshedCompletions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
       ))
+      // Store full completions for notifications
+      setCompletions(refreshedCompletions)
 
       // Re-fetch streak
       const currentStreak = await storage.getCurrentStreak()
