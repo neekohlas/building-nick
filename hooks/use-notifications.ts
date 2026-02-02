@@ -141,8 +141,21 @@ export function useNotifications(): UseNotificationsResult {
 
   // Send a test notification
   const sendTestNotification = useCallback(async () => {
+    console.log('[Notifications] Test notification requested')
+    console.log('[Notifications] Permission status:', Notification?.permission)
+    console.log('[Notifications] ServiceWorker available:', 'serviceWorker' in navigator)
+
     if (!areNotificationsAvailable()) {
-      console.warn('Notifications not available')
+      console.warn('[Notifications] Not available - permission:', Notification?.permission)
+      // Try showing a basic notification without service worker as fallback
+      if ('Notification' in window && Notification.permission === 'granted') {
+        console.log('[Notifications] Trying basic notification fallback')
+        new Notification('Test Notification', {
+          body: 'Notifications are working!',
+          icon: '/apple-icon.png'
+        })
+        return
+      }
       return
     }
 

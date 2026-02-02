@@ -338,13 +338,21 @@ export async function showNotification(
   body: string,
   tag: string = 'building-nick'
 ): Promise<void> {
+  console.log('[showNotification] Called with:', { title, body, tag })
+  console.log('[showNotification] Notification API exists:', 'Notification' in window)
+  console.log('[showNotification] Permission:', Notification?.permission)
+  console.log('[showNotification] ServiceWorker exists:', 'serviceWorker' in navigator)
+
   if (!areNotificationsAvailable()) {
-    console.warn('Notifications not available')
+    console.warn('[showNotification] Not available, aborting')
     return
   }
 
   try {
+    console.log('[showNotification] Waiting for serviceWorker.ready...')
     const registration = await navigator.serviceWorker.ready
+    console.log('[showNotification] ServiceWorker ready, showing notification')
+
     await registration.showNotification(title, {
       body,
       tag,
@@ -357,6 +365,7 @@ export async function showNotification(
         timestamp: new Date().toISOString()
       }
     })
+    console.log('[showNotification] Notification shown successfully')
 
     // Update last notification time
     const prefs = getNotificationPreferences()
