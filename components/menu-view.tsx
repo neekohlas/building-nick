@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -14,11 +14,14 @@ import { LocationModal } from './location-modal'
 import { CalendarSettingsModal } from './calendar-settings-modal'
 import { HealthCoachModal } from './health-coach-modal'
 import { MigrationModal } from './migration-modal'
+import { RoutinesModal } from './routines-modal'
+import { SavedPlanConfig } from '@/hooks/use-storage'
 
 interface MenuViewProps {
   onBack: () => void
   onOpenPlan: () => void
   onOpenPlanWithActivities?: (activityIds: string[]) => void
+  onOpenPlanWithRoutine?: (routine: SavedPlanConfig) => void
   onNavigateToToday?: () => void
   onShowToast?: (message: string) => void
 }
@@ -32,7 +35,7 @@ interface MenuItem {
   connected?: boolean
 }
 
-export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavigateToToday, onShowToast }: MenuViewProps) {
+export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast }: MenuViewProps) {
   const router = useRouter()
   const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
   const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
@@ -52,6 +55,7 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
   const [showCalendarModal, setShowCalendarModal] = useState(false)
   const [showHealthCoach, setShowHealthCoach] = useState(false)
   const [showMigrationModal, setShowMigrationModal] = useState(false)
+  const [showRoutinesModal, setShowRoutinesModal] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const storage = useStorage()
 
@@ -204,6 +208,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
       label: 'Plan Next 7 Days',
       description: 'Set your focus and schedule activities',
       onClick: onOpenPlan
+    },
+    {
+      icon: ListChecks,
+      label: 'Saved Routines',
+      description: 'View and manage your saved routines',
+      onClick: () => setShowRoutinesModal(true)
     },
     {
       icon: Calendar,
@@ -400,6 +410,22 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
               setTimeout(() => setToast(null), 3000)
             }
             return result
+          }}
+        />
+      )}
+
+      {/* Routines Modal */}
+      {showRoutinesModal && (
+        <RoutinesModal
+          onClose={() => setShowRoutinesModal(false)}
+          onLoadRoutine={(routine) => {
+            setShowRoutinesModal(false)
+            if (onOpenPlanWithRoutine) {
+              onOpenPlanWithRoutine(routine)
+            } else {
+              // Fallback: just open the planner
+              onOpenPlan()
+            }
           }}
         />
       )}

@@ -42,8 +42,9 @@ export interface WeekPlan {
 export type TimeBlock = 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'before5pm' | 'before9pm'
 
 export interface SavedPlanConfig {
-  id: string  // 'latest' or a unique id
+  id: string  // 'latest' or a unique id (uuid for named routines)
   savedAt: string
+  name?: string  // Optional name for saved routines (undefined for 'latest')
   selectedActivities: string[]  // Activity IDs
   frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>
   customDays: Record<string, string[]>  // Activity ID -> array of ISO date strings for custom frequency
@@ -649,6 +650,48 @@ export function useStorage() {
     return dbGet<SavedPlanConfig>('savedPlanConfigs', 'latest')
   }, [])
 
+  // Named Routines (saved plan configs with a name)
+  const saveNamedRoutine = useCallback(async (
+    config: Omit<SavedPlanConfig, 'id' | 'savedAt'>,
+    name: string
+  ): Promise<string> => {
+    const id = `routine_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const fullConfig: SavedPlanConfig = {
+      ...config,
+      id,
+      name,
+      savedAt: new Date().toISOString()
+    }
+    await dbPut('savedPlanConfigs', fullConfig, 'id')
+    return id
+  }, [])
+
+  const getAllSavedRoutines = useCallback(async (): Promise<SavedPlanConfig[]> => {
+    const all = await dbGetAll<SavedPlanConfig>('savedPlanConfigs')
+    // Return all configs except 'latest', sorted by savedAt descending
+    return all
+      .filter(c => c.id !== 'latest')
+      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+  }, [])
+
+  const getRoutineById = useCallback(async (id: string): Promise<SavedPlanConfig | null> => {
+    return dbGet<SavedPlanConfig>('savedPlanConfigs', id)
+  }, [])
+
+  const deleteRoutine = useCallback(async (id: string): Promise<void> => {
+    if (id === 'latest') return  // Don't allow deleting 'latest'
+    await dbDelete('savedPlanConfigs', id)
+  }, [])
+
+  const renameRoutine = useCallback(async (id: string, newName: string): Promise<void> => {
+    if (id === 'latest') return
+    const existing = await dbGet<SavedPlanConfig>('savedPlanConfigs', id)
+    if (existing) {
+      existing.name = newName
+      await dbPut('savedPlanConfigs', existing, 'id')
+    }
+  }, [])
+
   // Check if there are scheduled activities in the next N days
   const getScheduledActivitiesForRange = useCallback(async (startDate: string, days: number): Promise<Record<string, string[]>> => {
     const result: Record<string, string[]> = {}
@@ -718,6 +761,12 @@ export function useStorage() {
     // Plan configs
     savePlanConfig,
     getLastPlanConfig,
+    // Named routines
+    saveNamedRoutine,
+    getAllSavedRoutines,
+    getRoutineById,
+    deleteRoutine,
+    renameRoutine,
     getScheduledActivitiesForRange,
     clearDatabase,
     retryConnection

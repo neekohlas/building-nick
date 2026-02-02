@@ -9,12 +9,13 @@ import { LibraryView } from '@/components/library-view'
 import { MenuView } from '@/components/menu-view'
 import { BottomNav, View } from '@/components/bottom-nav'
 import { DatabaseRecovery } from '@/components/database-recovery'
-import { useStorage } from '@/hooks/use-storage'
+import { useStorage, SavedPlanConfig } from '@/hooks/use-storage'
 import { formatDateFriendly } from '@/lib/date-utils'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<View | 'plan'>('today')
   const [preSelectedActivities, setPreSelectedActivities] = useState<string[]>([])
+  const [preLoadedRoutine, setPreLoadedRoutine] = useState<SavedPlanConfig | null>(null)
   const [globalToast, setGlobalToast] = useState<string | null>(null)
   const today = new Date()
   const { hasConnectionError, retryConnection, clearDatabase } = useStorage()
@@ -59,12 +60,15 @@ export default function Home() {
             onComplete={() => {
               setActiveView('today')
               setPreSelectedActivities([])
+              setPreLoadedRoutine(null)
             }}
             onBack={() => {
               setActiveView('menu')
               setPreSelectedActivities([])
+              setPreLoadedRoutine(null)
             }}
             preSelectedActivities={preSelectedActivities}
+            preLoadedRoutine={preLoadedRoutine}
           />
         )}
         {activeView === 'library' && (
@@ -76,6 +80,12 @@ export default function Home() {
             onOpenPlan={() => setActiveView('plan')}
             onOpenPlanWithActivities={(activityIds) => {
               setPreSelectedActivities(activityIds)
+              setPreLoadedRoutine(null)
+              setActiveView('plan')
+            }}
+            onOpenPlanWithRoutine={(routine) => {
+              setPreLoadedRoutine(routine)
+              setPreSelectedActivities([])
               setActiveView('plan')
             }}
             onNavigateToToday={() => setActiveView('today')}

@@ -6,7 +6,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Sparkles, Search,
   ArrowUpDown, Clock, ArrowRightLeft, X, Info,
-  Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play, Video, Volume2
+  Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play, Video, Volume2, Bookmark
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ interface PlanWeekViewProps {
   onComplete: () => void
   onBack: () => void
   preSelectedActivities?: string[]
+  preLoadedRoutine?: SavedPlanConfig | null
 }
 
 type TimeBlock = 'before6am' | 'before9am' | 'before12pm' | 'before3pm' | 'before5pm' | 'before6pm' | 'before9pm' | 'before12am' | 'beforeNoon' | 'before230pm'
@@ -91,7 +92,7 @@ const FREQUENCY_OPTIONS: { value: PlanFrequency; label: string }[] = [
 
 const CATEGORY_ORDER: Category[] = ['physical', 'mind_body', 'professional']
 
-export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }: PlanWeekViewProps) {
+export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], preLoadedRoutine }: PlanWeekViewProps) {
   const storage = useSync()
   const { activities: notionActivities, isLoading: activitiesLoading, isSyncing, source: activitySource, syncFromNotion, getPlanableActivities } = useActivities()
   const { getWeatherForDate, hasBadWeather } = useWeather()
@@ -159,6 +160,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
   // Saved plan config
   const [savedConfig, setSavedConfig] = useState<SavedPlanConfig | null>(null)
   const [loadingSavedConfig, setLoadingSavedConfig] = useState(true)
+
+  // Save as routine modal
+  const [showSaveRoutineModal, setShowSaveRoutineModal] = useState(false)
+  const [routineName, setRoutineName] = useState('')
+  const [savingRoutine, setSavingRoutine] = useState(false)
 
   // Touch drag state for template editing
   const [dragState, setDragState] = useState<{
@@ -670,21 +676,19 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
     }
   }
 
-  // Apply saved plan configuration
-  const applySavedConfig = useCallback(() => {
-    if (!savedConfig) return
-
+  // Apply a plan configuration (works for both savedConfig and preLoadedRoutine)
+  const applyConfig = useCallback((config: SavedPlanConfig) => {
     // Restore selections with frequencies and custom days
-    const restoredSelections: ActivitySelection[] = savedConfig.selectedActivities
+    const restoredSelections: ActivitySelection[] = config.selectedActivities
       .filter(actId => getActivity(actId)) // Only include activities that still exist
       .map(activityId => ({
         activityId,
-        frequency: savedConfig.frequencies[activityId] || 'everyday',
-        customDays: savedConfig.customDays?.[activityId] || undefined
+        frequency: config.frequencies[activityId] || 'everyday',
+        customDays: config.customDays?.[activityId] || undefined
       }))
 
     setSelections(restoredSelections)
-    setStartWithHeavy(savedConfig.startWithHeavy)
+    setStartWithHeavy(config.startWithHeavy)
 
     // Restore day templates
     const emptyTemplate: DayTemplate = {
@@ -702,22 +706,22 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
 
     setHeavyDay({
       ...emptyTemplate,
-      before6am: savedConfig.heavyDaySchedule.before6am || [],
-      before9am: savedConfig.heavyDaySchedule.before9am || [],
-      beforeNoon: savedConfig.heavyDaySchedule.beforeNoon || [],
-      before230pm: savedConfig.heavyDaySchedule.before230pm || [],
-      before5pm: savedConfig.heavyDaySchedule.before5pm || [],
-      before9pm: savedConfig.heavyDaySchedule.before9pm || []
+      before6am: config.heavyDaySchedule.before6am || [],
+      before9am: config.heavyDaySchedule.before9am || [],
+      beforeNoon: config.heavyDaySchedule.beforeNoon || [],
+      before230pm: config.heavyDaySchedule.before230pm || [],
+      before5pm: config.heavyDaySchedule.before5pm || [],
+      before9pm: config.heavyDaySchedule.before9pm || []
     })
 
     setLightDay({
       ...emptyTemplate,
-      before6am: savedConfig.lightDaySchedule.before6am || [],
-      before9am: savedConfig.lightDaySchedule.before9am || [],
-      beforeNoon: savedConfig.lightDaySchedule.beforeNoon || [],
-      before230pm: savedConfig.lightDaySchedule.before230pm || [],
-      before5pm: savedConfig.lightDaySchedule.before5pm || [],
-      before9pm: savedConfig.lightDaySchedule.before9pm || []
+      before6am: config.lightDaySchedule.before6am || [],
+      before9am: config.lightDaySchedule.before9am || [],
+      beforeNoon: config.lightDaySchedule.beforeNoon || [],
+      before230pm: config.lightDaySchedule.before230pm || [],
+      before5pm: config.lightDaySchedule.before5pm || [],
+      before9pm: config.lightDaySchedule.before9pm || []
     })
 
     // Expand all categories that have selected activities
@@ -725,13 +729,73 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
       restoredSelections.map(s => getActivity(s.activityId)?.category).filter(Boolean)
     )
     setExpandedCategories(Array.from(categoriesWithSelections) as string[])
-  }, [savedConfig, getActivity])
+  }, [getActivity])
+
+  // Apply saved plan configuration
+  const applySavedConfig = useCallback(() => {
+    if (!savedConfig) return
+    applyConfig(savedConfig)
+  }, [savedConfig, applyConfig])
+
+  // Auto-apply preLoadedRoutine when provided
+  useEffect(() => {
+    if (preLoadedRoutine && !activitiesLoading) {
+      applyConfig(preLoadedRoutine)
+    }
+  }, [preLoadedRoutine, activitiesLoading, applyConfig])
 
   // Toggle variant expansion
   const toggleVariantExpansion = (activityId: string) => {
     setExpandedVariants(prev =>
       prev.includes(activityId) ? prev.filter(a => a !== activityId) : [...prev, activityId]
     )
+  }
+
+  // Save current plan as a named routine
+  const saveAsRoutine = async () => {
+    if (!routineName.trim() || savingRoutine) return
+
+    setSavingRoutine(true)
+    try {
+      const config = {
+        selectedActivities: selections.map(s => s.activityId),
+        frequencies: selections.reduce((acc, s) => {
+          acc[s.activityId] = s.frequency
+          return acc
+        }, {} as Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>),
+        customDays: selections.reduce((acc, s) => {
+          if (s.frequency === 'custom' && s.customDays) {
+            acc[s.activityId] = s.customDays
+          }
+          return acc
+        }, {} as Record<string, string[]>),
+        heavyDaySchedule: {
+          before6am: heavyDay.before6am,
+          before9am: heavyDay.before9am,
+          beforeNoon: [...heavyDay.beforeNoon, ...heavyDay.before12pm],
+          before230pm: [...heavyDay.before230pm, ...heavyDay.before3pm],
+          before5pm: [...heavyDay.before5pm, ...heavyDay.before6pm],
+          before9pm: [...heavyDay.before9pm, ...heavyDay.before12am]
+        },
+        lightDaySchedule: {
+          before6am: lightDay.before6am,
+          before9am: lightDay.before9am,
+          beforeNoon: [...lightDay.beforeNoon, ...lightDay.before12pm],
+          before230pm: [...lightDay.before230pm, ...lightDay.before3pm],
+          before5pm: [...lightDay.before5pm, ...lightDay.before6pm],
+          before9pm: [...lightDay.before9pm, ...lightDay.before12am]
+        },
+        startWithHeavy
+      }
+
+      await storage.saveNamedRoutine(config, routineName.trim())
+      setShowSaveRoutineModal(false)
+      setRoutineName('')
+    } catch (error) {
+      console.error('Failed to save routine:', error)
+    } finally {
+      setSavingRoutine(false)
+    }
   }
 
   // Determine drop target (block and index) based on Y position
@@ -2217,13 +2281,78 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
   // ============ STEP 6: Done ============
   if (step === 'done') {
     return (
-      <div className="flex flex-col items-center justify-center py-12 space-y-4">
-        <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
-          <Check className="h-8 w-8 text-green-600" />
+      <>
+        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
+            <Check className="h-8 w-8 text-green-600" />
+          </div>
+          <h2 className="text-xl font-semibold">Week Planned!</h2>
+          <p className="text-muted-foreground text-center">Your next 7 days are ready to go.</p>
+
+          <Button
+            variant="outline"
+            onClick={() => setShowSaveRoutineModal(true)}
+            className="mt-4"
+          >
+            <Bookmark className="h-4 w-4 mr-2" />
+            Save as Routine
+          </Button>
         </div>
-        <h2 className="text-xl font-semibold">Week Planned!</h2>
-        <p className="text-muted-foreground text-center">Your next 7 days are ready to go.</p>
-      </div>
+
+        {/* Save as Routine Modal */}
+        {showSaveRoutineModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowSaveRoutineModal(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl bg-card p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Save as Routine</h3>
+                <button
+                  onClick={() => setShowSaveRoutineModal(false)}
+                  className="p-2 rounded-full hover:bg-muted"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Save this plan as a routine to quickly reuse it in the future.
+              </p>
+
+              <Input
+                placeholder="Routine name (e.g., 'Strength Week')"
+                value={routineName}
+                onChange={e => setRoutineName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') saveAsRoutine()
+                }}
+                autoFocus
+              />
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowSaveRoutineModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={saveAsRoutine}
+                  disabled={!routineName.trim() || savingRoutine}
+                >
+                  {savingRoutine ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     )
   }
 
