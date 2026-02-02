@@ -25,7 +25,6 @@ import { RemindersSyncModal } from './reminders-sync-modal'
 import {
   getRemindersForTimeBlock,
   getOverdueReminders,
-  toggleReminderCompletion,
   checkForShortcutReturn,
   clearShortcutParam,
   getStoredReminders,
@@ -382,11 +381,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     clearShortcutParam()
   }, [])
 
-  // Handle reminder completion toggle
+  // Handle reminder completion toggle (sync-aware)
   const handleToggleReminderComplete = useCallback((reminderId: string) => {
-    toggleReminderCompletion(reminderId)
+    storage.toggleReminderCompletion(reminderId)
     setRemindersRefreshKey(k => k + 1)
-  }, [])
+  }, [storage])
 
   // Calculate current time indicator position
   useEffect(() => {

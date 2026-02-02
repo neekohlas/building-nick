@@ -6,8 +6,11 @@ import { Button } from '@/components/ui/button'
 import {
   parseRemindersFromClipboard,
   syncReminders,
+  getStoredReminders,
   type ReminderSyncResult
 } from '@/lib/reminders'
+import { useSync } from '@/hooks/use-sync'
+import { useAuth } from '@/hooks/use-auth'
 
 interface RemindersSyncModalProps {
   onClose: () => void
@@ -19,6 +22,13 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
   const [status, setStatus] = useState<'idle' | 'reading' | 'success' | 'error'>('reading')
   const [errorMessage, setErrorMessage] = useState('')
   const [syncResult, setSyncResult] = useState<ReminderSyncResult | null>(null)
+  const { syncRemindersWithCloud } = useSync()
+  const { isAuthenticated, userId, isSupabaseEnabled } = useAuth()
+
+  // Debug log on mount
+  useEffect(() => {
+    console.log('[RemindersSyncModal] Auth state:', { isAuthenticated, userId: userId?.substring(0, 8), isSupabaseEnabled })
+  }, [isAuthenticated, userId, isSupabaseEnabled])
 
   // Try to read clipboard automatically on mount
   useEffect(() => {
@@ -32,6 +42,14 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
             const result = syncReminders(reminders)
             setSyncResult(result)
             setStatus('success')
+
+            // Sync to cloud after local sync
+            const allReminders = getStoredReminders()
+            console.log('[RemindersSyncModal] About to sync to cloud, reminders:', allReminders.length)
+            console.log('[RemindersSyncModal] Auth state at sync time:', { isAuthenticated, userId: userId?.substring(0, 8), isSupabaseEnabled })
+            syncRemindersWithCloud(allReminders)
+            console.log('[RemindersSyncModal] syncRemindersWithCloud called')
+
             // Auto-close after short delay on success
             setTimeout(() => {
               onSyncComplete(result)
@@ -49,7 +67,7 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
     }
 
     tryReadClipboard()
-  }, [onClose, onSyncComplete])
+  }, [onClose, onSyncComplete, syncRemindersWithCloud])
 
   const handleManualSync = () => {
     if (!pasteText.trim()) {
@@ -71,6 +89,13 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
       console.log('[RemindersSyncModal] Sync result:', result)
       setSyncResult(result)
       setStatus('success')
+
+      // Sync to cloud after local sync
+      const allReminders = getStoredReminders()
+      console.log('[RemindersSyncModal] Manual sync - about to sync to cloud, reminders:', allReminders.length)
+      console.log('[RemindersSyncModal] Manual sync - auth state:', { isAuthenticated, userId: userId?.substring(0, 8), isSupabaseEnabled })
+      syncRemindersWithCloud(allReminders)
+      console.log('[RemindersSyncModal] Manual sync - syncRemindersWithCloud called')
 
       // Auto-close after short delay
       setTimeout(() => {

@@ -12,8 +12,16 @@ import {
   pullAllFromCloud,
   pushAllToCloud,
   hasCloudData,
+  syncRemindersToCloud,
+  updateReminderCompletionInCloud,
   SyncStatus,
 } from '@/lib/sync-service'
+import {
+  getStoredReminders,
+  saveReminders,
+  toggleReminderCompletion as toggleReminderCompletionLocal,
+  type Reminder,
+} from '@/lib/reminders'
 
 // Debounce time for sync operations (ms)
 const SYNC_DEBOUNCE = 2000
@@ -270,6 +278,42 @@ export function useSync() {
     }
   }, [storage.deleteRoutine, isAuthenticated, userId, queueSync])
 
+  // Sync reminders to cloud after local sync
+  const syncRemindersWithCloud = useCallback(async (reminders: Reminder[]) => {
+    console.log('[useSync] syncRemindersWithCloud called with:', {
+      remindersCount: reminders.length,
+      isAuthenticated,
+      userId: userId ? userId.substring(0, 8) + '...' : null,
+    })
+
+    if (!isAuthenticated || !userId) {
+      console.log('[useSync] Skipping reminders cloud sync - not authenticated')
+      return
+    }
+
+    console.log('[useSync] Syncing', reminders.length, 'reminders to cloud')
+    queueSync('reminders-batch', () =>
+      syncRemindersToCloud(reminders, userId).then(() => {
+        console.log('[useSync] syncRemindersToCloud completed')
+      })
+    )
+  }, [isAuthenticated, userId, queueSync])
+
+  // Toggle reminder completion with cloud sync
+  const toggleReminderCompletionWithSync = useCallback(async (reminderId: string): Promise<boolean> => {
+    // Toggle locally first
+    const newCompletionState = toggleReminderCompletionLocal(reminderId)
+
+    // Queue cloud sync
+    if (isAuthenticated && userId) {
+      queueSync(`reminder-${reminderId}`, () =>
+        updateReminderCompletionInCloud(reminderId, newCompletionState, newCompletionState, userId).then(() => {})
+      )
+    }
+
+    return newCompletionState
+  }, [isAuthenticated, userId, queueSync])
+
   // Pull all data from cloud and merge into local storage
   const pullFromCloud = useCallback(async () => {
     if (!isAuthenticated || !userId) return
@@ -334,10 +378,49 @@ export function useSync() {
           console.log('[useSync] Merged', routines.length, 'routines from cloud')
         }
 
+        // Merge reminders from cloud
+        if (cloudData.reminders && cloudData.reminders.length > 0) {
+          const localReminders = getStoredReminders()
+          const localRemindersMap = new Map(localReminders.map(r => [r.id, r]))
+
+          // Merge cloud reminders with local, preserving local completedInApp if set
+          const mergedReminders: Reminder[] = []
+
+          for (const cloudReminder of cloudData.reminders) {
+            const localReminder = localRemindersMap.get(cloudReminder.id)
+
+            if (localReminder) {
+              // Merge: prefer cloud completion status unless completed in app locally
+              const merged: Reminder = {
+                ...cloudReminder,
+                completedInApp: localReminder.completedInApp || cloudReminder.completedInApp,
+                isCompleted: localReminder.completedInApp
+                  ? true
+                  : cloudReminder.isCompleted,
+              }
+              mergedReminders.push(merged)
+              localRemindersMap.delete(cloudReminder.id)
+            } else {
+              mergedReminders.push(cloudReminder)
+            }
+          }
+
+          // Add any local-only reminders (not in cloud yet)
+          for (const localReminder of localRemindersMap.values()) {
+            mergedReminders.push(localReminder)
+          }
+
+          // Sort by due date and save
+          mergedReminders.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+          saveReminders(mergedReminders)
+          console.log('[useSync] Merged', cloudData.reminders.length, 'reminders from cloud')
+        }
+
         console.log('[useSync] Pulled data from cloud:', {
           completions: cloudData.completions.length,
           schedules: cloudData.schedules.length,
           planConfigs: cloudData.planConfigs.length,
+          reminders: cloudData.reminders?.length || 0,
         })
       }
 
@@ -475,11 +558,13 @@ export function useSync() {
       const completions = await getAllCompletions()
       const schedules = await getAllSchedules()
       const planConfig = await storage.getLastPlanConfig()
+      const reminders = getStoredReminders()
 
       const result = await pushAllToCloud(userId, {
         completions,
         schedules,
         planConfig,
+        reminders,
       })
 
       if (result.success) {
@@ -575,5 +660,9 @@ export function useSync() {
     pullFromCloud,
     migrateToCloud,
     dismissMigration,
+
+    // Reminder sync operations
+    syncRemindersWithCloud,
+    toggleReminderCompletion: toggleReminderCompletionWithSync,
   }
 }

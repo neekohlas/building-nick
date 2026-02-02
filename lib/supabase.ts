@@ -43,6 +43,18 @@ export interface DbSavedPlanConfig {
   updated_at: string
 }
 
+export interface DbReminder {
+  id: string  // Composite ID: title|dueDate from iOS Shortcuts
+  user_id: string
+  title: string
+  due_date: string  // ISO timestamp
+  is_completed: boolean
+  is_all_day: boolean
+  completed_in_app: boolean  // Track if completed within the habit app
+  synced_at: string  // When this reminder was last synced from iOS
+  updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -60,6 +72,11 @@ export type Database = {
         Row: DbSavedPlanConfig
         Insert: Omit<DbSavedPlanConfig, 'updated_at'>
         Update: Partial<DbSavedPlanConfig>
+      }
+      reminders: {
+        Row: DbReminder
+        Insert: Omit<DbReminder, 'updated_at'>
+        Update: Partial<DbReminder>
       }
     }
   }

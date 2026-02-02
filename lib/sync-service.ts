@@ -1,5 +1,6 @@
-import { getSupabaseBrowserClient, DbCompletion, DbSchedule, DbSavedPlanConfig } from './supabase'
+import { getSupabaseBrowserClient, DbCompletion, DbSchedule, DbSavedPlanConfig, DbReminder } from './supabase'
 import { Completion, DailySchedule, SavedPlanConfig } from '@/hooks/use-storage'
+import type { Reminder } from './reminders'
 
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 
@@ -10,6 +11,7 @@ interface SyncResult {
     completions: number
     schedules: number
     planConfigs: number
+    reminders?: number
   }
 }
 
@@ -82,6 +84,31 @@ function dbToPlanConfig(db: DbSavedPlanConfig): SavedPlanConfig {
     heavyDaySchedule: db.heavy_day_schedule,
     lightDaySchedule: db.light_day_schedule,
     startWithHeavy: db.start_with_heavy,
+  }
+}
+
+function reminderToDb(reminder: Reminder, userId: string): Omit<DbReminder, 'updated_at'> {
+  return {
+    id: reminder.id,
+    user_id: userId,
+    title: reminder.title,
+    due_date: reminder.dueDate.toISOString(),
+    is_completed: reminder.isCompleted,
+    is_all_day: reminder.isAllDay,
+    completed_in_app: reminder.completedInApp || false,
+    synced_at: reminder.syncedAt,
+  }
+}
+
+function dbToReminder(db: DbReminder): Reminder {
+  return {
+    id: db.id,
+    title: db.title,
+    dueDate: new Date(db.due_date),
+    isCompleted: db.is_completed,
+    isAllDay: db.is_all_day,
+    completedInApp: db.completed_in_app,
+    syncedAt: db.synced_at,
   }
 }
 
@@ -224,30 +251,130 @@ export async function deleteRoutineFromCloud(routineId: string, userId: string):
   }
 }
 
+// Sync reminders to Supabase (batch upsert)
+export async function syncRemindersToCloud(reminders: Reminder[], userId: string): Promise<boolean> {
+  console.log('[syncService] syncRemindersToCloud called:', { count: reminders.length, userId: userId.substring(0, 8) + '...' })
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
+
+  if (reminders.length === 0) {
+    console.log('[syncService] No reminders to sync')
+    return true
+  }
+
+  try {
+    const dbReminders = reminders.map(r => reminderToDb(r, userId))
+    const { error } = await supabase
+      .from('reminders')
+      .upsert(dbReminders, { onConflict: 'user_id,id' })
+
+    if (error) {
+      console.error('[syncService] Error syncing reminders:', error)
+      return false
+    }
+    console.log('[syncService] Reminders synced successfully')
+    return true
+  } catch (e) {
+    console.error('[syncService] Exception syncing reminders:', e)
+    return false
+  }
+}
+
+// Update a single reminder's completion status in Supabase
+export async function updateReminderCompletionInCloud(
+  reminderId: string,
+  isCompleted: boolean,
+  completedInApp: boolean,
+  userId: string
+): Promise<boolean> {
+  console.log('[syncService] updateReminderCompletionInCloud called:', { reminderId, isCompleted, userId: userId.substring(0, 8) + '...' })
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
+
+  try {
+    const { error } = await supabase
+      .from('reminders')
+      .update({
+        is_completed: isCompleted,
+        completed_in_app: completedInApp,
+      })
+      .eq('user_id', userId)
+      .eq('id', reminderId)
+
+    if (error) {
+      console.error('[syncService] Error updating reminder completion:', error)
+      return false
+    }
+    console.log('[syncService] Reminder completion updated successfully')
+    return true
+  } catch (e) {
+    console.error('[syncService] Exception updating reminder completion:', e)
+    return false
+  }
+}
+
+// Pull reminders from Supabase for a user
+export async function pullRemindersFromCloud(userId: string): Promise<Reminder[] | null> {
+  console.log('[syncService] pullRemindersFromCloud called:', { userId: userId.substring(0, 8) + '...' })
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return null
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('reminders')
+      .select('*')
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('[syncService] Error fetching reminders:', error)
+      return null
+    }
+
+    console.log('[syncService] Fetched', data?.length || 0, 'reminders from cloud')
+    return (data || []).map(dbToReminder)
+  } catch (e) {
+    console.error('[syncService] Exception fetching reminders:', e)
+    return null
+  }
+}
+
 // Pull all data from Supabase for a user
 export async function pullAllFromCloud(userId: string): Promise<{
   completions: Completion[]
   schedules: DailySchedule[]
   planConfigs: SavedPlanConfig[]
+  reminders: Reminder[]
 } | null> {
   const supabase = getSupabaseBrowserClient()
   if (!supabase) return null
 
   try {
-    const [completionsRes, schedulesRes, configsRes] = await Promise.all([
+    const [completionsRes, schedulesRes, configsRes, remindersRes] = await Promise.all([
       supabase.from('completions').select('*').eq('user_id', userId),
       supabase.from('schedules').select('*').eq('user_id', userId),
       supabase.from('saved_plan_configs').select('*').eq('user_id', userId),
+      supabase.from('reminders').select('*').eq('user_id', userId),
     ])
 
     if (completionsRes.error) console.error('Error fetching completions:', completionsRes.error)
     if (schedulesRes.error) console.error('Error fetching schedules:', schedulesRes.error)
     if (configsRes.error) console.error('Error fetching configs:', configsRes.error)
+    if (remindersRes.error) console.error('Error fetching reminders:', remindersRes.error)
 
     return {
       completions: (completionsRes.data || []).map(dbToCompletion),
       schedules: (schedulesRes.data || []).map(dbToSchedule),
       planConfigs: (configsRes.data || []).map(dbToPlanConfig),
+      reminders: (remindersRes.data || []).map(dbToReminder),
     }
   } catch (e) {
     console.error('Exception pulling from cloud:', e)
@@ -262,6 +389,7 @@ export async function pushAllToCloud(
     completions: Completion[]
     schedules: DailySchedule[]
     planConfig: SavedPlanConfig | null
+    reminders?: Reminder[]
   }
 ): Promise<SyncResult> {
   const supabase = getSupabaseBrowserClient()
@@ -271,6 +399,7 @@ export async function pushAllToCloud(
     let completionsCount = 0
     let schedulesCount = 0
     let planConfigsCount = 0
+    let remindersCount = 0
 
     // Push completions in batches
     if (data.completions.length > 0) {
@@ -314,12 +443,27 @@ export async function pushAllToCloud(
       }
     }
 
+    // Push reminders
+    if (data.reminders && data.reminders.length > 0) {
+      const dbReminders = data.reminders.map(r => reminderToDb(r, userId))
+      const { error } = await supabase
+        .from('reminders')
+        .upsert(dbReminders, { onConflict: 'user_id,id' })
+
+      if (error) {
+        console.error('Error pushing reminders:', error)
+      } else {
+        remindersCount = data.reminders.length
+      }
+    }
+
     return {
       success: true,
       counts: {
         completions: completionsCount,
         schedules: schedulesCount,
         planConfigs: planConfigsCount,
+        reminders: remindersCount,
       },
     }
   } catch (e) {
