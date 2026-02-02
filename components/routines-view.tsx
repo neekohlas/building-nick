@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Star, Play, Edit2, Trash2, Check, X, ArrowUpDown, Clock, Calendar, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useStorage, SavedPlanConfig } from '@/hooks/use-storage'
+import { SavedPlanConfig } from '@/hooks/use-storage'
+import { useSync } from '@/hooks/use-sync'
 import { useActivities } from '@/hooks/use-activities'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,7 @@ type Tab = 'saved' | 'recent'
 type SortMode = 'date' | 'name' | 'starred'
 
 export function RoutinesView({ onBack, onLoadRoutine }: RoutinesViewProps) {
-  const storage = useStorage()
+  const storage = useSync()
   const { getActivity } = useActivities()
   const [routines, setRoutines] = useState<SavedPlanConfig[]>([])
   const [loading, setLoading] = useState(true)
