@@ -77,8 +77,8 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50">
-      <div className="w-full max-w-md max-h-[85vh] bg-background rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="w-full max-w-sm bg-background rounded-2xl shadow-xl flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b shrink-0">
           <h2 className="text-lg font-semibold">Notifications</h2>
