@@ -3,11 +3,12 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 // Database types
 export interface DbCompletion {
-  id: string
+  id: string  // Format: `${date}_${activityId}_${timeBlock}_${instanceIndex}`
   user_id: string
   date: string
   activity_id: string
   time_block: string
+  instance_index: number  // Position in the time block array (0-based)
   completed_at: string
   updated_at: string
 }
@@ -31,7 +32,8 @@ export interface DbSavedPlanConfig {
   user_id: string
   saved_at: string
   selected_activities: string[]
-  frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends'>
+  frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>
+  custom_days?: Record<string, string[]>  // Activity ID -> array of ISO date strings for custom frequency
   heavy_day_schedule: DbSchedule['activities']
   light_day_schedule: DbSchedule['activities']
   start_with_heavy: boolean

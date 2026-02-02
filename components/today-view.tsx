@@ -62,19 +62,25 @@ const TIME_BLOCK_HOURS: Record<TimeBlock, number> = {
   before12am: 24
 }
 
+// Helper to create instance key for completion tracking
+const getInstanceKey = (activityId: string, timeBlock: string, index: number) =>
+  `${activityId}_${timeBlock}_${index}`
+
 export function TodayView({ onOpenMenu }: TodayViewProps) {
   const storage = useSync()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
   const { weather, getWeatherForDate, locationName } = useWeather()
   const { isConnected: calendarConnected, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
-  const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  // Instance-based completion tracking: keys are `${activityId}_${timeBlock}_${index}`
+  const [completedInstanceKeys, setCompletedInstanceKeys] = useState<Set<string>>(new Set())
   const [motivation, setMotivation] = useState('')
   const [streak, setStreak] = useState(0)
 
   // Modal states
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock | null>(null)
+  const [selectedInstanceIndex, setSelectedInstanceIndex] = useState<number>(0)
   const [showSwapModal, setShowSwapModal] = useState(false)
   const [swapActivity, setSwapActivity] = useState<Activity | null>(null)
   const [showCelebration, setShowCelebration] = useState(false)
@@ -268,9 +274,12 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
       setSchedule(existingSchedule)
 
-      // Get completions
+      // Get completions (instance-based)
       const completions = await storage.getCompletionsForDate(dateStr)
-      setCompletedIds(new Set(completions.map(c => c.activityId)))
+      // Build instance keys from completions
+      setCompletedInstanceKeys(new Set(
+        completions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
+      ))
 
       // Get streak and stats
       const currentStreak = await storage.getCurrentStreak()
@@ -320,9 +329,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
         setSchedule(cloudSchedule)
       }
 
-      // Re-fetch completions for current date
+      // Re-fetch completions for current date (instance-based)
       const completions = await storage.getCompletionsForDate(dateStr)
-      setCompletedIds(new Set(completions.map(c => c.activityId)))
+      setCompletedInstanceKeys(new Set(
+        completions.map(c => getInstanceKey(c.activityId, c.timeBlock, c.instanceIndex ?? 0))
+      ))
 
       // Re-fetch streak
       const currentStreak = await storage.getCurrentStreak()
@@ -423,26 +434,28 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     }
   }, [isToday, schedule]) // Recalculate when schedule changes (affects layout)
 
-  // Toggle completion
-  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock) => {
+  // Toggle completion (instance-based)
+  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock, instanceIndex: number) => {
     if (!storage.isReady) return
 
-    const isCompleted = completedIds.has(activityId)
+    const instanceKey = getInstanceKey(activityId, timeBlock, instanceIndex)
+    const isCompleted = completedInstanceKeys.has(instanceKey)
 
     if (isCompleted) {
-      await storage.removeCompletion(dateStr, activityId)
-      setCompletedIds(prev => {
+      await storage.removeCompletion(dateStr, activityId, timeBlock, instanceIndex)
+      setCompletedInstanceKeys(prev => {
         const next = new Set(prev)
-        next.delete(activityId)
+        next.delete(instanceKey)
         return next
       })
     } else {
       await storage.saveCompletion({
         date: dateStr,
         activityId,
-        timeBlock
+        timeBlock,
+        instanceIndex
       })
-      setCompletedIds(prev => new Set([...prev, activityId]))
+      setCompletedInstanceKeys(prev => new Set([...prev, instanceKey]))
       setShowCelebration(true)
 
       // Update streak
@@ -650,8 +663,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     }
 
     for (const block of Object.keys(schedule.activities) as TimeBlock[]) {
-      for (const activityId of schedule.activities[block]) {
-        if (completedIds.has(activityId)) {
+      const activities = schedule.activities[block] || []
+      for (let i = 0; i < activities.length; i++) {
+        const activityId = activities[i]
+        const instanceKey = getInstanceKey(activityId, block, i)
+        if (completedInstanceKeys.has(instanceKey)) {
           // Keep completed activities in today
           if (!newTodayActivities[block]) newTodayActivities[block] = []
           newTodayActivities[block].push(activityId)
@@ -682,6 +698,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   // Handle adding activity
   // Note: We allow adding the same activity multiple times (same or different time blocks)
   // in case the user wants to do it multiple times per day
+  // With instance-based tracking, each new instance starts uncompleted
   const handleAddActivity = async (activityId: string, timeBlock: TimeBlock) => {
     if (!schedule) return
 
@@ -695,21 +712,6 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
     await storage.saveDailySchedule(newSchedule)
     setSchedule(newSchedule)
-
-    // Ensure the newly added activity shows as uncompleted
-    // (in case there was a stale completion from sync)
-    if (completedIds.has(activityId)) {
-      // Verify it's actually completed for TODAY
-      const isCompletedToday = await storage.isActivityCompleted(dateStr, activityId)
-      if (!isCompletedToday) {
-        setCompletedIds(prev => {
-          const next = new Set(prev)
-          next.delete(activityId)
-          return next
-        })
-      }
-    }
-
     setShowAddModal(false)
     setAddActivityDefaultBlock(null)
   }
@@ -856,20 +858,30 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     setDropTarget(null)
   }
 
-  // Calculate incomplete count - only count activities that actually exist
-  const incompleteActivities = schedule
-    ? Object.values(schedule.activities).flat().filter(id => {
-        const activity = getActivity(id)
-        return activity && !completedIds.has(id)
-      })
-    : []
+  // Calculate incomplete count - instance-based, only count activities that actually exist
+  const incompleteCount = schedule
+    ? Object.entries(schedule.activities).reduce((count, [block, activities]) => {
+        return count + (activities || []).filter((activityId, index) => {
+          const activity = getActivity(activityId)
+          const instanceKey = getInstanceKey(activityId, block, index)
+          return activity && !completedInstanceKeys.has(instanceKey)
+        }).length
+      }, 0)
+    : 0
 
-  // Calculate progress - only count activities that actually exist
-  const allScheduledActivities = schedule
-    ? Object.values(schedule.activities).flat().filter(id => getActivity(id))
-    : []
-  const totalActivities = allScheduledActivities.length
-  const completedCount = allScheduledActivities.filter(id => completedIds.has(id)).length
+  // Calculate progress - instance-based, only count activities that actually exist
+  const totalActivities = schedule
+    ? Object.values(schedule.activities).flat().filter(id => getActivity(id)).length
+    : 0
+  const completedCount = schedule
+    ? Object.entries(schedule.activities).reduce((count, [block, activities]) => {
+        return count + (activities || []).filter((activityId, index) => {
+          const activity = getActivity(activityId)
+          const instanceKey = getInstanceKey(activityId, block, index)
+          return activity && completedInstanceKeys.has(instanceKey)
+        }).length
+      }, 0)
+    : 0
 
   if (!schedule) {
     return (
@@ -1058,9 +1070,9 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                           <div className="flex-1">
                             <ActivityCard
                               activity={activity}
-                              isCompleted={completedIds.has(activityId)}
+                              isCompleted={completedInstanceKeys.has(getInstanceKey(activityId, block, index))}
                               timeBlock={block}
-                              onToggleComplete={() => handleToggleComplete(activityId, block)}
+                              onToggleComplete={() => handleToggleComplete(activityId, block, index)}
                               onSwap={() => {
                                 setSwapActivity(activity)
                                 setSelectedTimeBlock(block)
@@ -1073,6 +1085,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                               onClick={() => {
                                 setSelectedActivity(activity)
                                 setSelectedTimeBlock(block)
+                                setSelectedInstanceIndex(index)
                               }}
                               onReorder={() => setIsEditMode(true)}
                               onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
@@ -1133,7 +1146,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       </Button>
 
       {/* Push All Incomplete Button */}
-      {incompleteActivities.length > 1 && (
+      {incompleteCount > 1 && (
         <Button
           variant="outline"
           className="w-full bg-transparent"
@@ -1143,7 +1156,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           }}
         >
           <CalendarClock className="h-4 w-4 mr-2" />
-          Push {incompleteActivities.length} Incomplete to {isToday ? 'Tomorrow' : 'Next Day'}
+          Push {incompleteCount} Incomplete to {isToday ? 'Tomorrow' : 'Next Day'}
         </Button>
       )}
 
@@ -1169,11 +1182,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       {selectedActivity && !showSwapModal && (
         <ActivityDetailModal
           activity={selectedActivity}
-          isCompleted={completedIds.has(selectedActivity.id)}
+          isCompleted={selectedTimeBlock ? completedInstanceKeys.has(getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)) : false}
           onClose={() => setSelectedActivity(null)}
           onComplete={() => {
             if (selectedTimeBlock) {
-              handleToggleComplete(selectedActivity.id, selectedTimeBlock)
+              handleToggleComplete(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)
             }
             setSelectedActivity(null)
           }}
@@ -1206,7 +1219,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       {showPushModal && (
         <PushModal
           activity={pushActivity}
-          incompleteCount={incompleteActivities.length}
+          incompleteCount={incompleteCount}
           currentDate={dateStr}
           onClose={() => {
             setShowPushModal(false)

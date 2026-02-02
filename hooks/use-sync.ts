@@ -88,7 +88,7 @@ export function useSync() {
     }, SYNC_DEBOUNCE)
   }, [isAuthenticated, userId])
 
-  // Sync-aware save completion
+  // Sync-aware save completion (instance-based)
   const saveCompletionWithSync = useCallback(async (
     completion: Omit<Completion, 'id' | 'completedAt'>
   ) => {
@@ -99,7 +99,7 @@ export function useSync() {
     if (isAuthenticated && userId) {
       const fullCompletion: Completion = {
         ...completion,
-        id: `${completion.date}_${completion.activityId}`,
+        id: `${completion.date}_${completion.activityId}_${completion.timeBlock}_${completion.instanceIndex}`,
         completedAt: new Date().toISOString(),
       }
       queueSync(`completion-${fullCompletion.id}`, () =>
@@ -108,14 +108,19 @@ export function useSync() {
     }
   }, [storage.saveCompletion, isAuthenticated, userId, queueSync])
 
-  // Sync-aware remove completion
-  const removeCompletionWithSync = useCallback(async (date: string, activityId: string) => {
+  // Sync-aware remove completion (instance-based)
+  const removeCompletionWithSync = useCallback(async (
+    date: string,
+    activityId: string,
+    timeBlock: string,
+    instanceIndex: number
+  ) => {
     // Remove locally first
-    await storage.removeCompletion(date, activityId)
+    await storage.removeCompletion(date, activityId, timeBlock, instanceIndex)
 
     // Queue cloud sync
     if (isAuthenticated && userId) {
-      const completionId = `${date}_${activityId}`
+      const completionId = `${date}_${activityId}_${timeBlock}_${instanceIndex}`
       queueSync(`remove-${completionId}`, () =>
         removeCompletionFromCloud(completionId, userId).then(() => {})
       )
@@ -171,12 +176,13 @@ export function useSync() {
       const cloudData = await pullAllFromCloud(userId)
 
       if (cloudData) {
-        // Merge completions - cloud data overwrites local for same IDs
+        // Merge completions - cloud data overwrites local for same IDs (instance-based)
         for (const completion of cloudData.completions) {
           await storage.saveCompletion({
             date: completion.date,
             activityId: completion.activityId,
             timeBlock: completion.timeBlock,
+            instanceIndex: completion.instanceIndex ?? 0,  // Default to 0 for legacy
           })
         }
 

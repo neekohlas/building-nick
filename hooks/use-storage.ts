@@ -12,10 +12,11 @@ const DB_VERSION = 4  // Bumped for savedPlanConfigs store
 const OPERATION_TIMEOUT = 5000 // 5 seconds
 
 export interface Completion {
-  id: string
+  id: string  // Format: `${date}_${activityId}_${timeBlock}_${instanceIndex}`
   date: string
   activityId: string
   timeBlock: string
+  instanceIndex: number  // Position in the time block array (0-based)
   completedAt: string
 }
 
@@ -44,7 +45,8 @@ export interface SavedPlanConfig {
   id: string  // 'latest' or a unique id
   savedAt: string
   selectedActivities: string[]  // Activity IDs
-  frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends'>
+  frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>
+  customDays: Record<string, string[]>  // Activity ID -> array of ISO date strings for custom frequency
   heavyDaySchedule: DailySchedule['activities']
   lightDaySchedule: DailySchedule['activities']
   startWithHeavy: boolean
@@ -476,25 +478,33 @@ export function useStorage() {
   }, [])
 
   // Completions
+  // Instance-based: each instance of an activity (by position in time block) has its own completion
   const saveCompletion = useCallback(async (completion: Omit<Completion, 'id' | 'completedAt'>) => {
     const fullCompletion: Completion = {
       ...completion,
-      id: `${completion.date}_${completion.activityId}`,
+      id: `${completion.date}_${completion.activityId}_${completion.timeBlock}_${completion.instanceIndex}`,
       completedAt: new Date().toISOString()
     }
     await dbPut('completions', fullCompletion, 'id')
   }, [])
 
-  const removeCompletion = useCallback(async (date: string, activityId: string) => {
-    await dbDelete('completions', `${date}_${activityId}`)
+  const removeCompletion = useCallback(async (date: string, activityId: string, timeBlock: string, instanceIndex: number) => {
+    await dbDelete('completions', `${date}_${activityId}_${timeBlock}_${instanceIndex}`)
   }, [])
 
   const getCompletionsForDate = useCallback(async (date: string): Promise<Completion[]> => {
     return dbGetAllByIndex<Completion>('completions', 'date', date)
   }, [])
 
-  const isActivityCompleted = useCallback(async (date: string, activityId: string): Promise<boolean> => {
-    const result = await dbGet<Completion>('completions', `${date}_${activityId}`)
+  // Check if a specific instance is completed
+  const isActivityInstanceCompleted = useCallback(async (
+    date: string,
+    activityId: string,
+    timeBlock: string,
+    instanceIndex: number
+  ): Promise<boolean> => {
+    const id = `${date}_${activityId}_${timeBlock}_${instanceIndex}`
+    const result = await dbGet<Completion>('completions', id)
     return !!result
   }, [])
 
@@ -649,7 +659,7 @@ export function useStorage() {
     saveCompletion,
     removeCompletion,
     getCompletionsForDate,
-    isActivityCompleted,
+    isActivityInstanceCompleted,
     saveDailySchedule,
     getDailySchedule,
     saveWeekPlan,

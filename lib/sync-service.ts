@@ -21,6 +21,7 @@ function completionToDb(completion: Completion, userId: string): Omit<DbCompleti
     date: completion.date,
     activity_id: completion.activityId,
     time_block: completion.timeBlock,
+    instance_index: completion.instanceIndex,
     completed_at: completion.completedAt,
   }
 }
@@ -31,6 +32,7 @@ function dbToCompletion(db: DbCompletion): Completion {
     date: db.date,
     activityId: db.activity_id,
     timeBlock: db.time_block,
+    instanceIndex: db.instance_index ?? 0,  // Default to 0 for legacy completions
     completedAt: db.completed_at,
   }
 }
@@ -57,6 +59,7 @@ function planConfigToDb(config: SavedPlanConfig, userId: string): Omit<DbSavedPl
     saved_at: config.savedAt,
     selected_activities: config.selectedActivities,
     frequencies: config.frequencies,
+    custom_days: config.customDays || {},
     heavy_day_schedule: config.heavyDaySchedule,
     light_day_schedule: config.lightDaySchedule,
     start_with_heavy: config.startWithHeavy,
@@ -69,6 +72,7 @@ function dbToPlanConfig(db: DbSavedPlanConfig): SavedPlanConfig {
     savedAt: db.saved_at,
     selectedActivities: db.selected_activities,
     frequencies: db.frequencies,
+    customDays: db.custom_days || {},
     heavyDaySchedule: db.heavy_day_schedule,
     lightDaySchedule: db.light_day_schedule,
     startWithHeavy: db.start_with_heavy,

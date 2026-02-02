@@ -527,7 +527,13 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
           frequencies: selections.reduce((acc, s) => {
             acc[s.activityId] = s.frequency
             return acc
-          }, {} as Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends'>),
+          }, {} as Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>),
+          customDays: selections.reduce((acc, s) => {
+            if (s.frequency === 'custom' && s.customDays) {
+              acc[s.activityId] = s.customDays
+            }
+            return acc
+          }, {} as Record<string, string[]>),
           heavyDaySchedule: {
             before6am: heavyDay.before6am,
             before9am: heavyDay.before9am,
@@ -668,12 +674,13 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [] }:
   const applySavedConfig = useCallback(() => {
     if (!savedConfig) return
 
-    // Restore selections with frequencies
+    // Restore selections with frequencies and custom days
     const restoredSelections: ActivitySelection[] = savedConfig.selectedActivities
       .filter(actId => getActivity(actId)) // Only include activities that still exist
       .map(activityId => ({
         activityId,
-        frequency: savedConfig.frequencies[activityId] || 'everyday'
+        frequency: savedConfig.frequencies[activityId] || 'everyday',
+        customDays: savedConfig.customDays?.[activityId] || undefined
       }))
 
     setSelections(restoredSelections)
