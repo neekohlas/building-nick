@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { X, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
@@ -10,6 +10,7 @@ import { SpectrumBar } from './spectrum-bar'
 
 interface AddActivityModalProps {
   targetDate: Date
+  defaultTimeBlock?: TimeBlock | null  // Pre-select this time block when opening
   onClose: () => void
   onAdd: (activityId: string, timeBlock: TimeBlock) => void
 }
@@ -23,26 +24,30 @@ const FILTERS: { value: 'all' | Category; label: string }[] = [
 
 const TIME_BLOCKS: { value: TimeBlock; label: string }[] = [
   { value: 'before6am', label: 'Before 6 AM' },
-  { value: 'before9am', label: 'Before 9 AM' },
-  { value: 'beforeNoon', label: 'Before Noon' },
-  { value: 'before230pm', label: 'Afternoon' },
-  { value: 'before5pm', label: 'Before 5 PM' },
-  { value: 'before9pm', label: 'Before 9 PM' }
+  { value: 'before9am', label: '6-9 AM' },
+  { value: 'beforeNoon', label: '9 AM-12 PM' },
+  { value: 'before230pm', label: '12-2:30 PM' },
+  { value: 'before5pm', label: '2:30-5 PM' },
+  { value: 'before9pm', label: '5-9 PM' }
 ]
 
-export function AddActivityModal({ targetDate, onClose, onAdd }: AddActivityModalProps) {
+export function AddActivityModal({ targetDate, defaultTimeBlock, onClose, onAdd }: AddActivityModalProps) {
   const { getAllActivities } = useActivities()
   const [filter, setFilter] = useState<'all' | Category>('all')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
-  const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock>('before9pm')
+  const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock>(defaultTimeBlock || 'before9pm')
 
-  // When selecting an activity, auto-set its preferred time block
+  // Update selected time block when defaultTimeBlock prop changes (e.g., when modal opens with a specific block)
+  useEffect(() => {
+    if (defaultTimeBlock) {
+      setSelectedTimeBlock(defaultTimeBlock)
+    }
+  }, [defaultTimeBlock])
+
+  // When selecting an activity, keep the user's time block choice
+  // (defaultTimeBlock from Notion is only used in 7-day planning, not here)
   const handleSelectActivity = (activity: Activity) => {
     setSelectedActivity(activity)
-    // Use the activity's default time block if set, otherwise keep current selection
-    if (activity.defaultTimeBlock) {
-      setSelectedTimeBlock(activity.defaultTimeBlock)
-    }
   }
 
   // Get activities from Notion (via useActivities hook) and filter

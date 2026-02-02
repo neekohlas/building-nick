@@ -119,31 +119,54 @@ export async function GET() {
       }
 
       const timeBlockMap: Record<string, TimeBlock> = {
+        // Before 6 AM
         'before6am': 'before6am',
         'before 6am': 'before6am',
+        'before 6 am': 'before6am',
+        // Before 9 AM (6-9 AM range)
         'before9am': 'before9am',
         'before 9am': 'before9am',
         'before 9 am': 'before9am',
         'morning': 'before9am',
-        'before12pm': 'before12pm',
-        'before 12pm': 'before12pm',
+        '6-9 am': 'before9am',
+        // Before 12 PM (9 AM-12 PM range)
+        'before12pm': 'beforeNoon',
+        'before 12pm': 'beforeNoon',
+        'before 12 pm': 'beforeNoon',
         'before noon': 'beforeNoon',
         'beforenoon': 'beforeNoon',
-        'before3pm': 'before3pm',
-        'before 3pm': 'before3pm',
+        '9 am-12 pm': 'beforeNoon',
+        '9-12 pm': 'beforeNoon',
+        // Before 2:30 PM (12-2:30 PM range)
         'before 2:30pm': 'before230pm',
         'before 2:30 pm': 'before230pm',
         'before230pm': 'before230pm',
         'afternoon': 'before230pm',
+        '12-2:30 pm': 'before230pm',
+        '12-2:30pm': 'before230pm',
+        // Legacy mappings (map to new equivalents)
+        'before3pm': 'before230pm',
+        'before 3pm': 'before230pm',
+        // Before 5 PM (2:30-5 PM range)
         'before5pm': 'before5pm',
         'before 5pm': 'before5pm',
-        'before6pm': 'before6pm',
-        'before 6pm': 'before6pm',
+        'before 5 pm': 'before5pm',
+        '2:30-5 pm': 'before5pm',
+        '2:30-5pm': 'before5pm',
+        // Legacy before6pm maps to before5pm
+        'before6pm': 'before5pm',
+        'before 6pm': 'before5pm',
+        // Before 9 PM (5-9 PM range)
         'before9pm': 'before9pm',
         'before 9pm': 'before9pm',
+        'before 9 pm': 'before9pm',
         'evening': 'before9pm',
-        'before12am': 'before12am',
-        'before 12am': 'before12am',
+        '5-9 pm': 'before9pm',
+        '5-9pm': 'before9pm',
+        // Legacy before12am maps to before9pm
+        'before12am': 'before9pm',
+        'before 12am': 'before9pm',
+        // Flexible/anytime
         'anytime': 'before9pm',
         'any time': 'before9pm',
         'flexible': 'before9pm'

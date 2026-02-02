@@ -81,6 +81,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [showPushModal, setShowPushModal] = useState(false)
   const [pushActivity, setPushActivity] = useState<Activity | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
+  const [addActivityDefaultBlock, setAddActivityDefaultBlock] = useState<TimeBlock | null>(null)
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
@@ -296,6 +297,31 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     loadData()
   // Re-run when date changes or storage becomes ready
   }, [storage.isReady, dateStr, generateSchedule, storage])
+
+  // Re-fetch data when cloud sync pulls new data
+  useEffect(() => {
+    if (!storage.lastPullTime || !storage.isReady) return
+
+    async function refreshFromCloud() {
+      console.log('[TodayView] Cloud data pulled, refreshing...')
+
+      // Re-fetch schedule for current date
+      const cloudSchedule = await storage.getDailySchedule(dateStr)
+      if (cloudSchedule) {
+        setSchedule(cloudSchedule)
+      }
+
+      // Re-fetch completions for current date
+      const completions = await storage.getCompletionsForDate(dateStr)
+      setCompletedIds(new Set(completions.map(c => c.activityId)))
+
+      // Re-fetch streak
+      const currentStreak = await storage.getCurrentStreak()
+      setStreak(currentStreak)
+    }
+
+    refreshFromCloud()
+  }, [storage.lastPullTime, storage.isReady, dateStr, storage])
 
   // Calculate current time indicator position
   useEffect(() => {
@@ -659,6 +685,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     await storage.saveDailySchedule(newSchedule)
     setSchedule(newSchedule)
     setShowAddModal(false)
+    setAddActivityDefaultBlock(null)
   }
 
   // Calculate drop target from Y position
@@ -1047,7 +1074,14 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                 </span>
                 <div className="flex-1 h-px bg-border" />
                 <button
-                  onClick={() => setShowAddModal(true)}
+                  onClick={() => {
+                    // The + button is on the divider AFTER a time block, so clicking it
+                    // should add to the NEXT time block (the one that starts at this time)
+                    const nextBlockIndex = blockIndex + 1
+                    const nextBlock = TIME_BLOCKS[nextBlockIndex] || block
+                    setAddActivityDefaultBlock(nextBlock)
+                    setShowAddModal(true)
+                  }}
                   className="p-1 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                 >
                   <Plus className="h-4 w-4" />
@@ -1062,7 +1096,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       <Button
         variant="outline"
         className="w-full bg-transparent"
-        onClick={() => setShowAddModal(true)}
+        onClick={() => {
+          setAddActivityDefaultBlock(null)
+          setShowAddModal(true)
+        }}
       >
         <Plus className="h-4 w-4 mr-2" />
         Add Activity
@@ -1157,7 +1194,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       {showAddModal && (
         <AddActivityModal
           targetDate={selectedDate}
-          onClose={() => setShowAddModal(false)}
+          defaultTimeBlock={addActivityDefaultBlock}
+          onClose={() => {
+            setShowAddModal(false)
+            setAddActivityDefaultBlock(null)
+          }}
           onAdd={handleAddActivity}
         />
       )}
