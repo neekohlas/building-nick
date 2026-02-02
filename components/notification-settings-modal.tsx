@@ -60,8 +60,14 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   }
 
   const handleSendTest = async () => {
-    await sendTestNotification()
-    setTestSent(true)
+    console.log('[UI] Test button clicked')
+    setTestSent(true) // Set immediately so user sees feedback
+    try {
+      await sendTestNotification()
+      console.log('[UI] sendTestNotification completed')
+    } catch (e) {
+      console.error('[UI] sendTestNotification error:', e)
+    }
     setTimeout(() => setTestSent(false), 3000)
   }
 
@@ -245,20 +251,27 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
           {/* Test Notification - always show for debugging */}
           <div className="pt-4 border-t">
             <button
-              onClick={handleSendTest}
-              disabled={testSent || permissionStatus !== 'granted'}
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                handleSendTest()
+              }}
+              onTouchEnd={(e) => {
+                e.preventDefault()
+                handleSendTest()
+              }}
+              disabled={testSent}
               className={cn(
-                "w-full flex items-center justify-center gap-2 p-3 rounded-xl border transition-colors",
+                "w-full flex items-center justify-center gap-2 p-4 rounded-xl border transition-colors touch-manipulation",
                 testSent
                   ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
-                  : permissionStatus !== 'granted'
-                    ? "opacity-50 cursor-not-allowed"
-                    : "hover:bg-muted active:bg-muted"
+                  : "bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 active:bg-blue-100"
               )}
             >
               <TestTube className="h-5 w-5" />
               <span className="font-medium">
-                {testSent ? 'Test Sent!' : permissionStatus !== 'granted' ? `Test (need permission: ${permissionStatus})` : 'Send Test Notification'}
+                {testSent ? 'Test Sent!' : 'Send Test Notification'}
               </span>
             </button>
           </div>
