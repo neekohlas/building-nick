@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -24,6 +24,7 @@ interface MenuViewProps {
   onOpenPlanWithRoutine?: (routine: SavedPlanConfig) => void
   onNavigateToToday?: () => void
   onShowToast?: (message: string) => void
+  onOpenLibrary?: () => void
 }
 
 interface MenuItem {
@@ -35,7 +36,7 @@ interface MenuItem {
   connected?: boolean
 }
 
-export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast }: MenuViewProps) {
+export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast, onOpenLibrary }: MenuViewProps) {
   const router = useRouter()
   const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
   const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
@@ -210,10 +211,10 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       onClick: onOpenPlan
     },
     {
-      icon: ListChecks,
-      label: 'Saved Routines',
-      description: 'View and manage your saved routines',
-      onClick: () => setShowRoutinesModal(true)
+      icon: Library,
+      label: 'Activity Library',
+      description: 'Browse all available activities',
+      onClick: onOpenLibrary || (() => {})
     },
     {
       icon: Calendar,

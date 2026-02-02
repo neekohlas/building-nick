@@ -45,6 +45,8 @@ export interface SavedPlanConfig {
   id: string  // 'latest' or a unique id (uuid for named routines)
   savedAt: string
   name?: string  // Optional name for saved routines (undefined for 'latest')
+  starred?: boolean  // Whether the routine is starred/favorited
+  isAutoSaved?: boolean  // True for auto-saved routines (recent history)
   selectedActivities: string[]  // Activity IDs
   frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>
   customDays: Record<string, string[]>  // Activity ID -> array of ISO date strings for custom frequency
@@ -637,13 +639,46 @@ export function useStorage() {
   }, [])
 
   // Saved Plan Configs
+  // Also auto-saves to recent routines (keeps last 5)
   const savePlanConfig = useCallback(async (config: Omit<SavedPlanConfig, 'id' | 'savedAt'>): Promise<void> => {
+    const now = new Date()
+    const timestamp = now.toISOString()
+
+    // Save as 'latest'
     const fullConfig: SavedPlanConfig = {
       ...config,
-      id: 'latest',  // Always overwrite the 'latest' config
-      savedAt: new Date().toISOString()
+      id: 'latest',
+      savedAt: timestamp
     }
     await dbPut('savedPlanConfigs', fullConfig, 'id')
+
+    // Also auto-save to recent routines with timestamp name
+    const autoSaveId = `auto_${now.getTime()}`
+    const autoSaveName = now.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    })
+    const autoSaveConfig: SavedPlanConfig = {
+      ...config,
+      id: autoSaveId,
+      name: autoSaveName,
+      savedAt: timestamp,
+      isAutoSaved: true
+    }
+    await dbPut('savedPlanConfigs', autoSaveConfig, 'id')
+
+    // Clean up old auto-saves, keep only last 5
+    const all = await dbGetAll<SavedPlanConfig>('savedPlanConfigs')
+    const autoSaves = all
+      .filter(c => c.isAutoSaved)
+      .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+
+    // Delete auto-saves beyond the 5th
+    for (let i = 5; i < autoSaves.length; i++) {
+      await dbDelete('savedPlanConfigs', autoSaves[i].id)
+    }
   }, [])
 
   const getLastPlanConfig = useCallback(async (): Promise<SavedPlanConfig | null> => {
@@ -651,27 +686,61 @@ export function useStorage() {
   }, [])
 
   // Named Routines (saved plan configs with a name)
+  // When saving a named routine, delete the most recent auto-save if created within 60 seconds
+  // This prevents duplicates when user saves with a name right after planning
   const saveNamedRoutine = useCallback(async (
     config: Omit<SavedPlanConfig, 'id' | 'savedAt'>,
     name: string
   ): Promise<string> => {
-    const id = `routine_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const now = new Date()
+    const id = `routine_${now.getTime()}_${Math.random().toString(36).substr(2, 9)}`
     const fullConfig: SavedPlanConfig = {
       ...config,
       id,
       name,
-      savedAt: new Date().toISOString()
+      isAutoSaved: false,
+      savedAt: now.toISOString()
     }
     await dbPut('savedPlanConfigs', fullConfig, 'id')
+
+    // Find and delete recent auto-saves (created within 60 seconds)
+    const all = await dbGetAll<SavedPlanConfig>('savedPlanConfigs')
+    const recentAutoSaves = all.filter(c => {
+      if (!c.isAutoSaved || c.id === 'latest') return false
+      const savedTime = new Date(c.savedAt).getTime()
+      const timeDiff = now.getTime() - savedTime
+      return timeDiff < 60000 // Within 60 seconds
+    })
+
+    // Delete recent auto-saves to avoid duplicates
+    for (const autoSave of recentAutoSaves) {
+      await dbDelete('savedPlanConfigs', autoSave.id)
+    }
+
     return id
   }, [])
 
   const getAllSavedRoutines = useCallback(async (): Promise<SavedPlanConfig[]> => {
     const all = await dbGetAll<SavedPlanConfig>('savedPlanConfigs')
-    // Return all configs except 'latest', sorted by savedAt descending
+    // Return all configs except 'latest', sorted by starred first, then savedAt descending
     return all
       .filter(c => c.id !== 'latest')
+      .sort((a, b) => {
+        // Starred first
+        if (a.starred && !b.starred) return -1
+        if (!a.starred && b.starred) return 1
+        // Then by date
+        return new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime()
+      })
+  }, [])
+
+  // Get most recent routine (for default loading in planner)
+  const getMostRecentRoutine = useCallback(async (): Promise<SavedPlanConfig | null> => {
+    const all = await dbGetAll<SavedPlanConfig>('savedPlanConfigs')
+    const routines = all
+      .filter(c => c.id !== 'latest')
       .sort((a, b) => new Date(b.savedAt).getTime() - new Date(a.savedAt).getTime())
+    return routines[0] || null
   }, [])
 
   const getRoutineById = useCallback(async (id: string): Promise<SavedPlanConfig | null> => {
@@ -688,6 +757,34 @@ export function useStorage() {
     const existing = await dbGet<SavedPlanConfig>('savedPlanConfigs', id)
     if (existing) {
       existing.name = newName
+      // When renaming, mark as not auto-saved (user is intentionally saving)
+      existing.isAutoSaved = false
+      await dbPut('savedPlanConfigs', existing, 'id')
+    }
+  }, [])
+
+  const toggleRoutineStar = useCallback(async (id: string): Promise<boolean> => {
+    if (id === 'latest') return false
+    const existing = await dbGet<SavedPlanConfig>('savedPlanConfigs', id)
+    if (existing) {
+      existing.starred = !existing.starred
+      // Starring a routine marks it as not auto-saved (user wants to keep it)
+      if (existing.starred) {
+        existing.isAutoSaved = false
+      }
+      await dbPut('savedPlanConfigs', existing, 'id')
+      return existing.starred
+    }
+    return false
+  }, [])
+
+  // Promote an auto-saved routine to a named routine
+  const promoteRoutine = useCallback(async (id: string, name: string): Promise<void> => {
+    if (id === 'latest') return
+    const existing = await dbGet<SavedPlanConfig>('savedPlanConfigs', id)
+    if (existing) {
+      existing.name = name
+      existing.isAutoSaved = false
       await dbPut('savedPlanConfigs', existing, 'id')
     }
   }, [])
@@ -764,9 +861,12 @@ export function useStorage() {
     // Named routines
     saveNamedRoutine,
     getAllSavedRoutines,
+    getMostRecentRoutine,
     getRoutineById,
     deleteRoutine,
     renameRoutine,
+    toggleRoutineStar,
+    promoteRoutine,
     getScheduledActivitiesForRange,
     clearDatabase,
     retryConnection

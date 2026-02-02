@@ -1,9 +1,9 @@
 'use client'
 
-import { Calendar, CalendarDays, Library, Menu } from 'lucide-react'
+import { Calendar, CalendarDays, ListChecks, Menu } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export type View = 'today' | 'week' | 'library' | 'menu'
+export type View = 'today' | 'week' | 'routines' | 'menu'
 
 interface BottomNavProps {
   activeView: View
@@ -13,7 +13,7 @@ interface BottomNavProps {
 const NAV_ITEMS: { view: View; label: string; icon: typeof Calendar }[] = [
   { view: 'today', label: 'Today', icon: Calendar },
   { view: 'week', label: 'Week', icon: CalendarDays },
-  { view: 'library', label: 'Library', icon: Library },
+  { view: 'routines', label: 'Routines', icon: ListChecks },
   { view: 'menu', label: 'More', icon: Menu }
 ]
 

@@ -6,6 +6,7 @@ import { TodayView } from '@/components/today-view'
 import { WeekView } from '@/components/week-view'
 import { PlanWeekView } from '@/components/plan-week-view'
 import { LibraryView } from '@/components/library-view'
+import { RoutinesView } from '@/components/routines-view'
 import { MenuView } from '@/components/menu-view'
 import { BottomNav, View } from '@/components/bottom-nav'
 import { DatabaseRecovery } from '@/components/database-recovery'
@@ -13,7 +14,7 @@ import { useStorage, SavedPlanConfig } from '@/hooks/use-storage'
 import { formatDateFriendly } from '@/lib/date-utils'
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View | 'plan'>('today')
+  const [activeView, setActiveView] = useState<View | 'plan' | 'library'>('today')
   const [preSelectedActivities, setPreSelectedActivities] = useState<string[]>([])
   const [preLoadedRoutine, setPreLoadedRoutine] = useState<SavedPlanConfig | null>(null)
   const [globalToast, setGlobalToast] = useState<string | null>(null)
@@ -71,6 +72,16 @@ export default function Home() {
             preLoadedRoutine={preLoadedRoutine}
           />
         )}
+        {activeView === 'routines' && (
+          <RoutinesView
+            onBack={() => setActiveView('today')}
+            onLoadRoutine={(routine) => {
+              setPreLoadedRoutine(routine)
+              setPreSelectedActivities([])
+              setActiveView('plan')
+            }}
+          />
+        )}
         {activeView === 'library' && (
           <LibraryView onBack={() => setActiveView('today')} />
         )}
@@ -90,6 +101,7 @@ export default function Home() {
             }}
             onNavigateToToday={() => setActiveView('today')}
             onShowToast={setGlobalToast}
+            onOpenLibrary={() => setActiveView('library')}
           />
         )}
         </main>

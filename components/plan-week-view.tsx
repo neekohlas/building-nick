@@ -28,6 +28,7 @@ import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor } from 
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventListItem } from './calendar-event-card'
 import { HealthCoachModal } from './health-coach-modal'
+import { RoutinesModal } from './routines-modal'
 import { SpectrumBar } from './spectrum-bar'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
@@ -157,9 +158,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
   // Custom day picker modal
   const [customDayPickerActivity, setCustomDayPickerActivity] = useState<string | null>(null)
 
-  // Saved plan config
+  // Saved plan config (most recent routine)
   const [savedConfig, setSavedConfig] = useState<SavedPlanConfig | null>(null)
   const [loadingSavedConfig, setLoadingSavedConfig] = useState(true)
+  const [allRoutines, setAllRoutines] = useState<SavedPlanConfig[]>([])
+  const [showRoutinesPicker, setShowRoutinesPicker] = useState(false)
 
   // Save as routine modal
   const [showSaveRoutineModal, setShowSaveRoutineModal] = useState(false)
@@ -278,12 +281,17 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     setWeekDates(dates)
   }, [])
 
-  // Load saved plan config on mount
+  // Load saved plan config and all routines on mount
   useEffect(() => {
     async function loadSavedConfig() {
       try {
-        const config = await storage.getLastPlanConfig()
+        // Get most recent routine (for default "Use Previous Plan")
+        const config = await storage.getMostRecentRoutine()
         setSavedConfig(config)
+
+        // Also load all routines for the picker
+        const routines = await storage.getAllSavedRoutines()
+        setAllRoutines(routines)
       } catch (e) {
         console.error('Failed to load saved plan config:', e)
       } finally {
@@ -293,7 +301,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     if (storage.isReady) {
       loadSavedConfig()
     }
-  }, [storage.isReady, storage.getLastPlanConfig])
+  }, [storage.isReady, storage.getMostRecentRoutine, storage.getAllSavedRoutines])
 
   // Apply pre-selected activities from Health Coach
   useEffect(() => {
@@ -573,7 +581,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
       console.log('All schedules saved, setting step to done')
       setIsSaving(false)
       setStep('done')
-      setTimeout(() => onComplete(), 1500)
+      // Don't auto-navigate - let user click "Done" or save as routine
     } catch (error) {
       console.error('Error saving schedules:', error)
       alert('Failed to save schedules: ' + (error instanceof Error ? error.message : 'Unknown error'))
@@ -736,6 +744,12 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     if (!savedConfig) return
     applyConfig(savedConfig)
   }, [savedConfig, applyConfig])
+
+  // Apply a specific routine
+  const applyRoutine = useCallback((routine: SavedPlanConfig) => {
+    applyConfig(routine)
+    setShowRoutinesPicker(false)
+  }, [applyConfig])
 
   // Auto-apply preLoadedRoutine when provided
   useEffect(() => {
@@ -1412,25 +1426,38 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
           </div>
         </button>
 
-        {/* Use Previous Plan button - only show if config exists and nothing selected yet */}
-        {savedConfig && !loadingSavedConfig && selections.length === 0 && (
-          <button
-            onClick={applySavedConfig}
-            className="w-full p-4 rounded-xl border bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-800 hover:shadow-md transition-all text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center shrink-0">
-                <RefreshCw className="h-5 w-5 text-white" />
+        {/* Saved Routines Section - only show starred routines */}
+        {!loadingSavedConfig && selections.length === 0 && allRoutines.filter(r => r.starred).length > 0 && (
+          <div className="space-y-2">
+            {allRoutines.filter(r => r.starred).slice(0, 2).map(routine => (
+              <div
+                key={routine.id}
+                className="w-full p-3 rounded-xl border bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => applyRoutine(routine)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center shrink-0">
+                      <Star className="h-4 w-4 text-white fill-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground">Saved Routine</p>
+                      <p className="font-medium text-sm truncate">{routine.name || 'Starred Routine'}</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setShowRoutinesPicker(true)}
+                    className="p-1.5 rounded-lg hover:bg-yellow-200/50 dark:hover:bg-yellow-800/30 transition-colors"
+                    title="Browse all routines"
+                  >
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  </button>
+                </div>
               </div>
-              <div>
-                <p className="font-medium text-sm">Use Previous Plan</p>
-                <p className="text-xs text-muted-foreground">
-                  {savedConfig.selectedActivities.length} activities from {new Date(savedConfig.savedAt).toLocaleDateString()}
-                </p>
-              </div>
-              <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
-            </div>
-          </button>
+            ))}
+          </div>
         )}
 
         {activitiesLoading ? (
@@ -1771,6 +1798,14 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
               activityIds.forEach(id => handleCoachSuggestion(id))
               setShowHealthCoach(false)
             }}
+          />
+        )}
+
+        {/* Routines Picker Modal */}
+        {showRoutinesPicker && (
+          <RoutinesModal
+            onClose={() => setShowRoutinesPicker(false)}
+            onLoadRoutine={applyRoutine}
           />
         )}
 
@@ -2280,23 +2315,84 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
 
   // ============ STEP 6: Done ============
   if (step === 'done') {
+    // Calculate mind-body activities with frequency counts
+    const mindBodyCounts: Record<string, number> = {}
+    const countInSchedule = (schedule: DayTemplate) => {
+      Object.values(schedule).forEach(activities => {
+        activities.forEach(actId => {
+          const activity = getActivity(actId)
+          if (activity?.category === 'mind_body') {
+            mindBodyCounts[actId] = (mindBodyCounts[actId] || 0) + 1
+          }
+        })
+      })
+    }
+    countInSchedule(heavyDay)
+    countInSchedule(lightDay)
+
+    // Sort by count descending
+    const topMindBodyActivities = Object.entries(mindBodyCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([actId, count]) => ({ activity: getActivity(actId), count }))
+      .filter(item => item.activity)
+
+    // Generate auto-suggested name based on top activities
+    const suggestedName = topMindBodyActivities.length > 0
+      ? topMindBodyActivities.slice(0, 2).map(item => item.activity?.name).filter(Boolean).join(' + ')
+      : 'My Routine'
+
     return (
       <>
-        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+        <div className="flex flex-col items-center justify-center py-8 space-y-4">
           <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center">
             <Check className="h-8 w-8 text-green-600" />
           </div>
           <h2 className="text-xl font-semibold">Week Planned!</h2>
           <p className="text-muted-foreground text-center">Your next 7 days are ready to go.</p>
 
-          <Button
-            variant="outline"
-            onClick={() => setShowSaveRoutineModal(true)}
-            className="mt-4"
-          >
-            <Bookmark className="h-4 w-4 mr-2" />
-            Save as Routine
-          </Button>
+          {/* Mind-body activities summary */}
+          {topMindBodyActivities.length > 0 && (
+            <div className="w-full max-w-xs bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 mt-2">
+              <p className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">
+                Mind-Body Focus
+              </p>
+              <div className="space-y-1.5">
+                {topMindBodyActivities.map(({ activity, count }) => (
+                  <div key={activity?.id} className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-1.5">
+                      <span>{activity?.emoji}</span>
+                      <span className="text-foreground">{activity?.name}</span>
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {count}x/week
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground text-center">
+            This routine has been auto-saved to your recent routines.
+          </p>
+
+          <div className="flex flex-col gap-3 w-full max-w-xs mt-4">
+            <Button onClick={onComplete}>
+              <Check className="h-4 w-4 mr-2" />
+              Done
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRoutineName(suggestedName)
+                setShowSaveRoutineModal(true)
+              }}
+            >
+              <Bookmark className="h-4 w-4 mr-2" />
+              Save with Custom Name
+            </Button>
+          </div>
         </div>
 
         {/* Save as Routine Modal */}
@@ -2310,7 +2406,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Save as Routine</h3>
+                <h3 className="text-lg font-semibold">Name This Routine</h3>
                 <button
                   onClick={() => setShowSaveRoutineModal(false)}
                   className="p-2 rounded-full hover:bg-muted"
@@ -2320,11 +2416,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
               </div>
 
               <p className="text-sm text-muted-foreground">
-                Save this plan as a routine to quickly reuse it in the future.
+                Give this routine a memorable name to find it easily later.
               </p>
 
               <Input
-                placeholder="Routine name (e.g., 'Strength Week')"
+                placeholder="e.g., 'Strength Week', 'Recovery Focus'"
                 value={routineName}
                 onChange={e => setRoutineName(e.target.value)}
                 onKeyDown={e => {
