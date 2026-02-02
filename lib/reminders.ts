@@ -240,15 +240,21 @@ export function toggleReminderCompletion(reminderId: string): boolean {
 }
 
 /**
- * Get reminders for a specific date
+ * Get reminders for a specific date (using local timezone)
  */
 export function getRemindersForDate(date: Date): Reminder[] {
   const reminders = getStoredReminders()
-  const dateStr = date.toISOString().split('T')[0]
+
+  // Use local date components for comparison (not UTC)
+  const targetYear = date.getFullYear()
+  const targetMonth = date.getMonth()
+  const targetDay = date.getDate()
 
   return reminders.filter(r => {
-    const reminderDateStr = r.dueDate.toISOString().split('T')[0]
-    return reminderDateStr === dateStr
+    const reminderYear = r.dueDate.getFullYear()
+    const reminderMonth = r.dueDate.getMonth()
+    const reminderDay = r.dueDate.getDate()
+    return reminderYear === targetYear && reminderMonth === targetMonth && reminderDay === targetDay
   })
 }
 
@@ -276,6 +282,17 @@ export function getRemindersForTimeBlock(
   timeBlock: 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'before5pm' | 'before9pm'
 ): Reminder[] {
   const dateReminders = getRemindersForDate(date)
+
+  // Debug: log what reminders we found for this date
+  if (dateReminders.length > 0 && timeBlock === 'before6am') {
+    console.log('[getRemindersForTimeBlock] Reminders for date:', date.toLocaleDateString(), dateReminders.map(r => ({
+      title: r.title,
+      hour: r.dueDate.getHours(),
+      minute: r.dueDate.getMinutes(),
+      isAllDay: r.isAllDay,
+      isCompleted: r.isCompleted
+    })))
+  }
 
   // Time block hour boundaries
   const blockEndHours: Record<string, number> = {
