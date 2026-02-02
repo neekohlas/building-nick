@@ -147,7 +147,6 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 export function areNotificationsAvailable(): boolean {
   if (typeof window === 'undefined') return false
   if (!('Notification' in window)) return false
-  if (!('serviceWorker' in navigator)) return false
   return Notification.permission === 'granted'
 }
 
@@ -343,14 +342,27 @@ export async function showNotification(
   console.log('[showNotification] Permission:', Notification?.permission)
   console.log('[showNotification] ServiceWorker exists:', 'serviceWorker' in navigator)
 
-  if (!areNotificationsAvailable()) {
-    console.warn('[showNotification] Not available, aborting')
+  // Check if we have permission
+  if (!('Notification' in window) || Notification.permission !== 'granted') {
+    console.warn('[showNotification] Notification permission not granted')
     return
   }
 
   try {
-    console.log('[showNotification] Waiting for serviceWorker.ready...')
-    const registration = await navigator.serviceWorker.ready
+    // Wait for service worker with a timeout
+    const swReady = new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Service worker ready timeout'))
+      }, 5000)
+
+      navigator.serviceWorker.ready.then((registration) => {
+        clearTimeout(timeout)
+        resolve(registration)
+      }).catch(reject)
+    })
+
+    console.log('[showNotification] Waiting for serviceWorker.ready (5s timeout)...')
+    const registration = await swReady
     console.log('[showNotification] ServiceWorker ready, showing notification')
 
     await registration.showNotification(title, {
@@ -372,7 +384,19 @@ export async function showNotification(
     prefs.lastNotificationTime = new Date().toISOString()
     saveNotificationPreferences(prefs)
   } catch (e) {
-    console.error('Failed to show notification:', e)
+    console.error('[showNotification] SW notification failed, trying fallback:', e)
+
+    // Fallback to basic Notification API (won't work on iOS but works on desktop)
+    try {
+      new Notification(title, {
+        body,
+        tag,
+        icon: '/apple-icon.png'
+      })
+      console.log('[showNotification] Fallback notification sent')
+    } catch (fallbackError) {
+      console.error('[showNotification] Fallback also failed:', fallbackError)
+    }
   }
 }
 
