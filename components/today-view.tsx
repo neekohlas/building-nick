@@ -693,6 +693,21 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
     await storage.saveDailySchedule(newSchedule)
     setSchedule(newSchedule)
+
+    // Ensure the newly added activity shows as uncompleted
+    // (in case there was a stale completion from sync)
+    if (completedIds.has(activityId)) {
+      // Verify it's actually completed for TODAY
+      const isCompletedToday = await storage.isActivityCompleted(dateStr, activityId)
+      if (!isCompletedToday) {
+        setCompletedIds(prev => {
+          const next = new Set(prev)
+          next.delete(activityId)
+          return next
+        })
+      }
+    }
+
     setShowAddModal(false)
     setAddActivityDefaultBlock(null)
   }
