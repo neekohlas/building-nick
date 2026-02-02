@@ -5,7 +5,7 @@ import React, { useRef } from "react"
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, Sparkles, Search,
-  ArrowUpDown, Clock, ArrowRightLeft, X, Info,
+  ArrowUpDown, Clock, ArrowRightLeft, X, Info, Settings,
   Zap, Leaf, Plus, GripVertical, Star, RefreshCw, ExternalLink, Play, Video, Volume2, Bookmark
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -163,6 +163,10 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
   const [loadingSavedConfig, setLoadingSavedConfig] = useState(true)
   const [allRoutines, setAllRoutines] = useState<SavedPlanConfig[]>([])
   const [showRoutinesPicker, setShowRoutinesPicker] = useState(false)
+
+  // Routine choice modal (Quick Add vs Customize)
+  const [routineToApply, setRoutineToApply] = useState<SavedPlanConfig | null>(null)
+  const [showRoutineChoiceModal, setShowRoutineChoiceModal] = useState(false)
 
   // Save as routine modal
   const [showSaveRoutineModal, setShowSaveRoutineModal] = useState(false)
@@ -745,18 +749,37 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     applyConfig(savedConfig)
   }, [savedConfig, applyConfig])
 
-  // Apply a specific routine
+  // Apply a specific routine - show choice modal first
   const applyRoutine = useCallback((routine: SavedPlanConfig) => {
-    applyConfig(routine)
+    setRoutineToApply(routine)
+    setShowRoutineChoiceModal(true)
     setShowRoutinesPicker(false)
+  }, [])
+
+  // Quick add routine - apply and skip to tomorrow_type step
+  const quickAddRoutine = useCallback((routine: SavedPlanConfig) => {
+    applyConfig(routine)
+    setShowRoutineChoiceModal(false)
+    setRoutineToApply(null)
+    // Skip to tomorrow_type step (heavy/light day selection)
+    setStep('tomorrow_type')
   }, [applyConfig])
 
-  // Auto-apply preLoadedRoutine when provided
+  // Customize routine - apply and stay on step 1
+  const customizeRoutine = useCallback((routine: SavedPlanConfig) => {
+    applyConfig(routine)
+    setShowRoutineChoiceModal(false)
+    setRoutineToApply(null)
+    // Stay on select_activities step for full customization
+  }, [applyConfig])
+
+  // Show choice modal when preLoadedRoutine is provided
   useEffect(() => {
     if (preLoadedRoutine && !activitiesLoading) {
-      applyConfig(preLoadedRoutine)
+      setRoutineToApply(preLoadedRoutine)
+      setShowRoutineChoiceModal(true)
     }
-  }, [preLoadedRoutine, activitiesLoading, applyConfig])
+  }, [preLoadedRoutine, activitiesLoading])
 
   // Toggle variant expansion
   const toggleVariantExpansion = (activityId: string) => {
@@ -1426,39 +1449,71 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
           </div>
         </button>
 
-        {/* Saved Routines Section - only show starred routines */}
-        {!loadingSavedConfig && selections.length === 0 && allRoutines.filter(r => r.starred).length > 0 && (
-          <div className="space-y-2">
-            {allRoutines.filter(r => r.starred).slice(0, 2).map(routine => (
-              <div
-                key={routine.id}
-                className="w-full p-3 rounded-xl border bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800 hover:shadow-md transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => applyRoutine(routine)}
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-500 to-amber-500 flex items-center justify-center shrink-0">
-                      <Star className="h-4 w-4 text-white fill-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-muted-foreground">Saved Routine</p>
-                      <p className="font-medium text-sm truncate">{routine.name || 'Starred Routine'}</p>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setShowRoutinesPicker(true)}
-                    className="p-1.5 rounded-lg hover:bg-yellow-200/50 dark:hover:bg-yellow-800/30 transition-colors"
-                    title="Browse all routines"
-                  >
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  </button>
+        {/* Saved Routines Section - show starred routines, or fall back to most recent */}
+        {!loadingSavedConfig && selections.length === 0 && (() => {
+          const starredRoutines = allRoutines.filter(r => r.starred)
+          const routinesToShow = starredRoutines.length > 0
+            ? starredRoutines.slice(0, 2)
+            : allRoutines.slice(0, 1) // Fall back to most recent if no starred
+
+          if (routinesToShow.length === 0) return null
+
+          return (
+            <div className="space-y-2">
+              {routinesToShow.map(routine => (
+                <div
+                  key={routine.id}
+                  className={cn(
+                    "w-full p-3 rounded-xl border hover:shadow-md transition-all",
+                    routine.starred
+                      ? "bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border-yellow-200 dark:border-yellow-800"
+                      : "bg-card border-border"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => applyRoutine(routine)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
+                      <div className={cn(
+                        "w-9 h-9 rounded-full flex items-center justify-center shrink-0",
+                        routine.starred
+                          ? "bg-gradient-to-br from-yellow-500 to-amber-500"
+                          : "bg-gradient-to-br from-primary/80 to-primary"
+                      )}>
+                        {routine.starred ? (
+                          <Star className="h-4 w-4 text-white fill-white" />
+                        ) : (
+                          <Clock className="h-4 w-4 text-white" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-muted-foreground">
+                          {routine.starred ? 'Saved Routine' : 'Recent Routine'}
+                        </p>
+                        <p className="font-medium text-sm truncate">
+                          {routine.name || (routine.starred ? 'Starred Routine' : 'Last Used')}
+                        </p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setShowRoutinesPicker(true)}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-colors",
+                        routine.starred
+                          ? "hover:bg-yellow-200/50 dark:hover:bg-yellow-800/30"
+                          : "hover:bg-muted"
+                      )}
+                      title="Browse all routines"
+                    >
+                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
 
         {activitiesLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -1808,6 +1863,90 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
             onLoadRoutine={applyRoutine}
           />
         )}
+
+        {/* Routine Choice Modal (Quick Add vs Customize) */}
+        {showRoutineChoiceModal && routineToApply && (() => {
+          const customDayCount = Object.keys(routineToApply.frequencies || {})
+            .filter(actId => routineToApply.frequencies[actId] === 'custom').length
+          const activityCount = routineToApply.selectedActivities?.length || 0
+
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+              onClick={() => {
+                setShowRoutineChoiceModal(false)
+                setRoutineToApply(null)
+              }}
+            >
+              <div
+                className="w-full max-w-sm rounded-2xl bg-card animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div className="border-b p-4">
+                  <h2 className="text-lg font-semibold">Use Routine</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {routineToApply.name || 'Saved Routine'} • {activityCount} activities
+                  </p>
+                </div>
+
+                {/* Options */}
+                <div className="p-4 space-y-3">
+                  {/* Quick Add Option */}
+                  <button
+                    onClick={() => quickAddRoutine(routineToApply)}
+                    className="w-full p-4 rounded-xl border bg-gradient-to-r from-primary/10 to-primary/5 border-primary/30 hover:border-primary/50 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                        <Zap className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Quick Add</p>
+                        <p className="text-xs text-muted-foreground">
+                          {customDayCount > 0
+                            ? `Pick heavy/light day + ${customDayCount} custom schedule${customDayCount > 1 ? 's' : ''}`
+                            : 'Just pick heavy/light day, then done'}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* Customize Option */}
+                  <button
+                    onClick={() => customizeRoutine(routineToApply)}
+                    className="w-full p-4 rounded-xl border hover:border-muted-foreground/30 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                        <Settings className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <p className="font-medium">Customize</p>
+                        <p className="text-xs text-muted-foreground">
+                          Review and edit activities & schedules
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Cancel */}
+                <div className="border-t p-4">
+                  <button
+                    onClick={() => {
+                      setShowRoutineChoiceModal(false)
+                      setRoutineToApply(null)
+                    }}
+                    className="w-full py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Custom Day Picker Modal */}
         {customDayPickerActivity && (() => {
