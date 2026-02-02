@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -16,6 +16,10 @@ import { HealthCoachModal } from './health-coach-modal'
 import { MigrationModal } from './migration-modal'
 import { RoutinesModal } from './routines-modal'
 import { SavedPlanConfig } from '@/hooks/use-storage'
+import {
+  openRemindersSyncShortcut,
+  getLastRemindersSyncTime
+} from '@/lib/reminders'
 
 interface MenuViewProps {
   onBack: () => void
@@ -59,6 +63,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
   const [showRoutinesModal, setShowRoutinesModal] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const storage = useStorage()
+  const [remindersSyncTime, setRemindersSyncTime] = useState<Date | null>(null)
+
+  // Load reminders sync time on mount
+  useEffect(() => {
+    setRemindersSyncTime(getLastRemindersSyncTime())
+  }, [])
 
   // Show migration modal when user just signed in and has local data
   const shouldShowMigrationPrompt = hasPendingMigration && isAuthenticated
@@ -203,6 +213,19 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
     return Cloud
   }
 
+  // Handle reminders sync - opens iOS Shortcut
+  const handleRemindersSync = () => {
+    openRemindersSyncShortcut()
+  }
+
+  // Format reminders sync time description
+  const getRemindersSyncDescription = () => {
+    if (remindersSyncTime) {
+      return `Last synced ${remindersSyncTime.toLocaleDateString()} at ${remindersSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    }
+    return 'Sync with Apple Reminders'
+  }
+
   const menuItems: MenuItem[] = [
     {
       icon: CalendarDays,
@@ -224,6 +247,13 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
         : 'Connect to see your events',
       onClick: calendarConnected ? () => setShowCalendarModal(true) : connectCalendar,
       connected: calendarConnected
+    },
+    {
+      icon: Bell,
+      label: 'Sync Reminders',
+      description: getRemindersSyncDescription(),
+      onClick: handleRemindersSync,
+      connected: !!remindersSyncTime
     },
     {
       icon: Sparkles,

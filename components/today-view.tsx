@@ -20,6 +20,17 @@ import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor, WeatherDay } from '@/hooks/use-weather'
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventCard } from './calendar-event-card'
+import { ReminderCard, OverdueRemindersSection } from './reminder-card'
+import {
+  getRemindersForTimeBlock,
+  getOverdueReminders,
+  toggleReminderCompletion,
+  checkForShortcutReturn,
+  clearShortcutParam,
+  parseRemindersFromClipboard,
+  syncReminders,
+  type Reminder
+} from '@/lib/reminders'
 import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
 import { getRandomMessage, getStreakMessage, pickRandom } from '@/lib/messages'
 import { DailySchedule } from '@/hooks/use-storage'
@@ -91,6 +102,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
+
+  // Reminders state
+  const [overdueReminders, setOverdueReminders] = useState<Reminder[]>([])
+  const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -342,6 +357,45 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
     refreshFromCloud()
   }, [storage.lastPullTime, storage.isReady, dateStr, storage])
+
+  // Load overdue reminders when date changes
+  useEffect(() => {
+    setOverdueReminders(getOverdueReminders(selectedDate))
+  }, [selectedDate, remindersRefreshKey])
+
+  // Check for return from Reminders sync shortcut
+  useEffect(() => {
+    if (!checkForShortcutReturn()) return
+
+    // Read clipboard and sync reminders
+    async function syncFromClipboard() {
+      try {
+        const clipboardText = await navigator.clipboard.readText()
+        if (clipboardText && clipboardText.includes('"id":')) {
+          const reminders = parseRemindersFromClipboard(clipboardText)
+          if (reminders.length > 0) {
+            const result = syncReminders(reminders)
+            console.log('[TodayView] Reminders synced:', result)
+            // Refresh reminders display
+            setRemindersRefreshKey(k => k + 1)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to read clipboard for reminders sync:', error)
+      } finally {
+        // Clear the URL param regardless of success
+        clearShortcutParam()
+      }
+    }
+
+    syncFromClipboard()
+  }, [])
+
+  // Handle reminder completion toggle
+  const handleToggleReminderComplete = useCallback((reminderId: string) => {
+    toggleReminderCompletion(reminderId)
+    setRemindersRefreshKey(k => k + 1)
+  }, [])
 
   // Calculate current time indicator position
   useEffect(() => {
@@ -986,6 +1040,14 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
         </p>
       </div>
 
+      {/* Overdue Reminders Section */}
+      {overdueReminders.length > 0 && (
+        <OverdueRemindersSection
+          reminders={overdueReminders}
+          onToggleComplete={handleToggleReminderComplete}
+        />
+      )}
+
       {/* Daily Plan - Activities appear ABOVE their deadline time */}
       <div className="space-y-2 relative" ref={scheduleContainerRef}>
         {/* Current time indicator */}
@@ -1025,6 +1087,22 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                         compact={true}
                         formatTime={formatEventTime}
                         getDuration={getEventDuration}
+                      />
+                    ))}
+                  </div>
+                ) : null
+              })()}
+
+              {/* Reminders for this time block */}
+              {(() => {
+                const blockReminders = getRemindersForTimeBlock(selectedDate, block)
+                return blockReminders.length > 0 ? (
+                  <div className="space-y-2 mb-2">
+                    {blockReminders.map(reminder => (
+                      <ReminderCard
+                        key={reminder.id}
+                        reminder={reminder}
+                        onToggleComplete={() => handleToggleReminderComplete(reminder.id)}
                       />
                     ))}
                   </div>
