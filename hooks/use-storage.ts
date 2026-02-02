@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
  */
 
 const DB_NAME = 'BuildingNickDB'
-const DB_VERSION = 4  // Bumped for savedPlanConfigs store
+const DB_VERSION = 5  // Bumped for instance-based completions (removed dateActivity unique index)
 const OPERATION_TIMEOUT = 5000 // 5 seconds
 
 export interface Completion {
@@ -146,8 +146,53 @@ function getDB(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       console.log('IndexedDB upgrade needed from', event.oldVersion, 'to', event.newVersion)
       const database = (event.target as IDBOpenDBRequest).result
+      const transaction = (event.target as IDBOpenDBRequest).transaction
 
-      if (!database.objectStoreNames.contains('completions')) {
+      // v5: Remove old unique dateActivity index by recreating completions store
+      if (event.oldVersion < 5 && database.objectStoreNames.contains('completions')) {
+        console.log('Migrating completions store for instance-based tracking...')
+        // Read existing completions before deleting
+        const existingCompletions: Completion[] = []
+        if (transaction) {
+          try {
+            const oldStore = transaction.objectStore('completions')
+            const getAllRequest = oldStore.getAll()
+            getAllRequest.onsuccess = () => {
+              const oldCompletions = getAllRequest.result || []
+              console.log('Found', oldCompletions.length, 'existing completions to migrate')
+              // Migrate old completions to new format (add instanceIndex: 0)
+              for (const c of oldCompletions) {
+                existingCompletions.push({
+                  ...c,
+                  instanceIndex: c.instanceIndex ?? 0,
+                  // Update ID to new format if needed
+                  id: c.id.split('_').length === 4 ? c.id : `${c.date}_${c.activityId}_${c.timeBlock || 'before9am'}_0`
+                })
+              }
+            }
+          } catch (e) {
+            console.warn('Could not read existing completions:', e)
+          }
+        }
+
+        // Delete old store
+        database.deleteObjectStore('completions')
+        console.log('Deleted old completions store')
+
+        // Create new store with correct indexes
+        const completionsStore = database.createObjectStore('completions', { keyPath: 'id' })
+        completionsStore.createIndex('date', 'date', { unique: false })
+        completionsStore.createIndex('activityId', 'activityId', { unique: false })
+        console.log('Created new completions store with instance-based tracking')
+
+        // Re-add migrated completions
+        for (const c of existingCompletions) {
+          completionsStore.add(c)
+        }
+        if (existingCompletions.length > 0) {
+          console.log('Migrated', existingCompletions.length, 'completions')
+        }
+      } else if (!database.objectStoreNames.contains('completions')) {
         console.log('Creating completions store')
         const completionsStore = database.createObjectStore('completions', { keyPath: 'id' })
         completionsStore.createIndex('date', 'date', { unique: false })
