@@ -55,6 +55,18 @@ export interface DbReminder {
   updated_at: string
 }
 
+export interface DbPushSubscription {
+  id: string  // UUID
+  user_id: string
+  endpoint: string  // Push service endpoint URL
+  p256dh: string  // Client public key
+  auth: string  // Auth secret
+  notification_times: { hour: number; minute: number }[]  // Scheduled notification times
+  timezone: string  // User's timezone for scheduling
+  created_at: string
+  updated_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -77,6 +89,11 @@ export type Database = {
         Row: DbReminder
         Insert: Omit<DbReminder, 'updated_at'>
         Update: Partial<DbReminder>
+      }
+      push_subscriptions: {
+        Row: DbPushSubscription
+        Insert: Omit<DbPushSubscription, 'created_at' | 'updated_at'>
+        Update: Partial<DbPushSubscription>
       }
     }
   }

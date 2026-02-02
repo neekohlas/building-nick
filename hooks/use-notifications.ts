@@ -16,6 +16,12 @@ import {
   getTimeUntilNextNotification,
   getCurrentTimeBlock
 } from '@/lib/notifications'
+import {
+  subscribeToPush,
+  unsubscribeFromPush,
+  updateNotificationTimes,
+  isPushSupported
+} from '@/lib/push-subscription'
 import { Completion, DailySchedule } from '@/hooks/use-storage'
 import { Reminder, getRemindersForDate } from '@/lib/reminders'
 
@@ -25,6 +31,7 @@ export interface UseNotificationsResult {
   preferences: NotificationPreferences
   isScheduled: boolean
   nextNotificationIn: number | null  // ms until next notification
+  isPushSubscribed: boolean
 
   // Actions
   requestPermission: () => Promise<boolean>
@@ -48,6 +55,7 @@ export function useNotifications(): UseNotificationsResult {
   })
   const [isScheduled, setIsScheduled] = useState(false)
   const [nextNotificationIn, setNextNotificationIn] = useState<number | null>(null)
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false)
 
   const schedulerRef = useRef<NodeJS.Timeout | null>(null)
   const countdownRef = useRef<NodeJS.Timeout | null>(null)
@@ -95,11 +103,33 @@ export function useNotifications(): UseNotificationsResult {
     return permission === 'granted'
   }, [])
 
-  // Update preferences
-  const updatePreferences = useCallback((updates: Partial<NotificationPreferences>) => {
+  // Update preferences and sync with server
+  const updatePreferences = useCallback(async (updates: Partial<NotificationPreferences>) => {
     setPreferences(prev => {
       const newPrefs = { ...prev, ...updates }
       saveNotificationPreferences(newPrefs)
+
+      // Sync with server in the background
+      if (isPushSupported()) {
+        const enabledTimes = newPrefs.times
+          .filter(t => t.enabled)
+          .map(t => ({ hour: t.hour, minute: t.minute }))
+
+        if (newPrefs.enabled && enabledTimes.length > 0) {
+          // Subscribe or update subscription
+          subscribeToPush(enabledTimes).then(sub => {
+            setIsPushSubscribed(!!sub)
+            console.log('[Notifications] Push subscription updated')
+          })
+        } else if (!newPrefs.enabled) {
+          // Unsubscribe if disabled
+          unsubscribeFromPush().then(() => {
+            setIsPushSubscribed(false)
+            console.log('[Notifications] Push subscription removed')
+          })
+        }
+      }
+
       return newPrefs
     })
   }, [])
@@ -112,6 +142,15 @@ export function useNotifications(): UseNotificationsResult {
         times: [...prev.times, time].sort((a, b) => (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute))
       }
       saveNotificationPreferences(newPrefs)
+
+      // Sync with server
+      if (isPushSupported() && newPrefs.enabled) {
+        const enabledTimes = newPrefs.times
+          .filter(t => t.enabled)
+          .map(t => ({ hour: t.hour, minute: t.minute }))
+        updateNotificationTimes(enabledTimes)
+      }
+
       return newPrefs
     })
   }, [])
@@ -123,6 +162,15 @@ export function useNotifications(): UseNotificationsResult {
       newTimes.splice(index, 1)
       const newPrefs = { ...prev, times: newTimes }
       saveNotificationPreferences(newPrefs)
+
+      // Sync with server
+      if (isPushSupported() && newPrefs.enabled) {
+        const enabledTimes = newPrefs.times
+          .filter(t => t.enabled)
+          .map(t => ({ hour: t.hour, minute: t.minute }))
+        updateNotificationTimes(enabledTimes)
+      }
+
       return newPrefs
     })
   }, [])
@@ -135,6 +183,15 @@ export function useNotifications(): UseNotificationsResult {
       newTimes.sort((a, b) => (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute))
       const newPrefs = { ...prev, times: newTimes }
       saveNotificationPreferences(newPrefs)
+
+      // Sync with server
+      if (isPushSupported() && newPrefs.enabled) {
+        const enabledTimes = newPrefs.times
+          .filter(t => t.enabled)
+          .map(t => ({ hour: t.hour, minute: t.minute }))
+        updateNotificationTimes(enabledTimes)
+      }
+
       return newPrefs
     })
   }, [])
@@ -204,6 +261,7 @@ export function useNotifications(): UseNotificationsResult {
     preferences,
     isScheduled,
     nextNotificationIn,
+    isPushSubscribed,
     requestPermission,
     updatePreferences,
     addNotificationTime,
