@@ -28,6 +28,15 @@ export function useSync() {
   const { userId, isAuthenticated, isSupabaseEnabled } = useAuth()
   const storage = useStorage()
 
+  // Log auth state on mount
+  useEffect(() => {
+    console.log('[useSync] Auth state:', {
+      userId,
+      isAuthenticated,
+      isSupabaseEnabled,
+    })
+  }, [userId, isAuthenticated, isSupabaseEnabled])
+
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'idle',
     lastSyncTime: null,
@@ -68,7 +77,11 @@ export function useSync() {
 
   // Queue a sync operation with debouncing
   const queueSync = useCallback((key: string, operation: () => Promise<void>) => {
-    if (!isAuthenticated || !userId) return
+    console.log('[useSync] queueSync called:', { key, isAuthenticated, userId: userId?.substring(0, 8) })
+    if (!isAuthenticated || !userId) {
+      console.log('[useSync] queueSync skipped - not authenticated')
+      return
+    }
 
     pendingOpsRef.current.set(key, operation)
     setSyncState(prev => ({ ...prev, pendingOperations: pendingOpsRef.current.size }))

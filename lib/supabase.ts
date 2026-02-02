@@ -62,6 +62,7 @@ export type Database = {
 
 // Singleton browser client
 let browserClient: SupabaseClient<Database> | null = null
+let hasLoggedConfigStatus = false
 
 export function getSupabaseBrowserClient(): SupabaseClient<Database> | null {
   if (typeof window === 'undefined') {
@@ -71,6 +72,17 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> | null {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
+  // Log configuration status once
+  if (!hasLoggedConfigStatus) {
+    hasLoggedConfigStatus = true
+    console.log('[Supabase] Configuration check:', {
+      hasUrl: !!supabaseUrl,
+      hasAnonKey: !!supabaseAnonKey,
+      hasDefaultUserId: !!process.env.NEXT_PUBLIC_DEFAULT_USER_ID,
+      url: supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'NOT SET',
+    })
+  }
+
   // Return null if Supabase is not configured (app works without it)
   if (!supabaseUrl || !supabaseAnonKey) {
     return null
@@ -78,6 +90,7 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> | null {
 
   if (!browserClient) {
     browserClient = createBrowserClient<Database>(supabaseUrl, supabaseAnonKey)
+    console.log('[Supabase] Browser client initialized')
   }
 
   return browserClient
@@ -85,9 +98,20 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> | null {
 
 // Check if Supabase is configured (including default user ID for single-user mode)
 export function isSupabaseConfigured(): boolean {
-  return !!(
+  const configured = !!(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
     process.env.NEXT_PUBLIC_DEFAULT_USER_ID
   )
+
+  if (typeof window !== 'undefined') {
+    console.log('[Supabase] isSupabaseConfigured:', configured, {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      hasDefaultUserId: !!process.env.NEXT_PUBLIC_DEFAULT_USER_ID,
+      defaultUserId: process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 'NOT SET',
+    })
+  }
+
+  return configured
 }
