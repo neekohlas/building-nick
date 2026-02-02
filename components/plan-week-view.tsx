@@ -153,6 +153,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
 
   // Saving state
   const [isSaving, setIsSaving] = useState(false)
+  const [pendingQuickSave, setPendingQuickSave] = useState(false)
 
   // Health Coach modal
   const [showHealthCoach, setShowHealthCoach] = useState(false)
@@ -238,6 +239,14 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [step])
+
+  // Handle pending quick save - wait for schedules to be populated
+  useEffect(() => {
+    if (pendingQuickSave && Object.keys(generatedSchedules).length > 0) {
+      setPendingQuickSave(false)
+      saveSchedules()
+    }
+  }, [pendingQuickSave, generatedSchedules])
 
   // Merged activities lookup - use Notion activities, fallback to local
   const allActivities = useMemo(() => {
@@ -2131,12 +2140,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
       if (hasCustomDays) {
         setStep('quick_add_custom')
       } else {
-        // Generate schedules and save directly
+        // Generate schedules and set pending save flag
+        // The effect will trigger save once schedules are ready
+        setIsSaving(true)
         generateSchedules()
-        // Small delay to ensure schedules are generated before saving
-        setTimeout(() => {
-          saveSchedules()
-        }, 100)
+        setPendingQuickSave(true)
       }
     }
 
@@ -2228,10 +2236,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
     const customDayActivities = selections.filter(s => s.frequency === 'custom')
 
     const handleQuickAddSave = () => {
+      // Generate schedules and set pending save flag
+      // The effect will trigger save once schedules are ready
+      setIsSaving(true)
       generateSchedules()
-      setTimeout(() => {
-        saveSchedules()
-      }, 100)
+      setPendingQuickSave(true)
     }
 
     return (
@@ -2268,6 +2277,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
                   {weekDates.map((date, idx) => {
                     const dateStr = formatDateISO(date)
                     const isSelected = selection.customDays?.includes(dateStr)
+                    const dayWeather = getWeatherForDate(dateStr)
 
                     return (
                       <button
@@ -2291,6 +2301,11 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
                       >
                         <span className="font-medium">{getShortDayName(date)}</span>
                         <span className="text-[10px] opacity-70">{getDayNumber(date)}</span>
+                        {dayWeather && (
+                          <span className="text-sm mt-0.5">
+                            {getWeatherEmoji(dayWeather.weather.main, dayWeather.weather.id)}
+                          </span>
+                        )}
                       </button>
                     )
                   })}
