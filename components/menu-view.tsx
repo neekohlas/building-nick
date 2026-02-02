@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2 } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -168,6 +168,17 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
     setTimeout(() => setToast(null), 3000)
   }
 
+  const handlePushToCloud = async () => {
+    if (!isAuthenticated) return
+    const result = await migrateToCloud()
+    if (result.success) {
+      setToast('All local data pushed to cloud!')
+    } else {
+      setToast('Failed to push data')
+    }
+    setTimeout(() => setToast(null), 3000)
+  }
+
   // Get cloud sync status description
   const getCloudSyncDescription = () => {
     if (!isSupabaseEnabled) return 'Not configured'
@@ -224,11 +235,18 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onNavig
     },
     {
       icon: getCloudIcon(),
-      label: 'Cloud Sync',
+      label: 'Pull from Cloud',
       description: getCloudSyncDescription(),
       onClick: handleCloudSync,
       connected: isAuthenticated && syncStatus !== 'error',
       disabled: !isAuthenticated
+    },
+    {
+      icon: Upload,
+      label: 'Push to Cloud',
+      description: 'Upload all local data to cloud',
+      onClick: handlePushToCloud,
+      disabled: !isAuthenticated || syncStatus === 'syncing'
     },
     {
       icon: BarChart3,
