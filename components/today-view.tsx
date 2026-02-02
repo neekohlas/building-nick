@@ -680,16 +680,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   }
 
   // Handle adding activity
+  // Note: We allow adding the same activity multiple times (same or different time blocks)
+  // in case the user wants to do it multiple times per day
   const handleAddActivity = async (activityId: string, timeBlock: TimeBlock) => {
     if (!schedule) return
-
-    // Check if activity is already in this time block to prevent duplicates
-    if (schedule.activities[timeBlock]?.includes(activityId)) {
-      console.log('[TodayView] Activity already in time block, skipping add')
-      setShowAddModal(false)
-      setAddActivityDefaultBlock(null)
-      return
-    }
 
     const newSchedule: DailySchedule = {
       ...schedule,
@@ -993,8 +987,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           </div>
         )}
         {TIME_BLOCKS.map((block, blockIndex) => {
-          // Deduplicate activities in case of sync issues
-          const activities = [...new Set(schedule.activities[block] || [])]
+          const activities = schedule.activities[block] || []
           const hasActivities = activities.length > 0
           const deadlineLabel = TIME_BLOCK_DEADLINE_LABELS[block]
 
@@ -1034,10 +1027,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
                     if (!activity) return null
 
                     const isDragging = dragState?.activityId === activityId && dragState?.isDragging
-                    const itemKey = `${block}-${activityId}`
+                    // Use index in key to allow same activity multiple times
+                    const itemKey = `${block}-${activityId}-${index}`
 
                     return (
-                      <div key={activityId}>
+                      <div key={itemKey}>
                         <div
                           ref={el => {
                             if (el) itemRefs.current.set(itemKey, el)
