@@ -31,6 +31,9 @@ export interface DbSavedPlanConfig {
   id: string
   user_id: string
   saved_at: string
+  name?: string | null  // Optional name for saved routines
+  starred?: boolean  // Whether the routine is starred/favorited
+  is_auto_saved?: boolean  // True for auto-saved routines (recent history)
   selected_activities: string[]
   frequencies: Record<string, 'everyday' | 'heavy' | 'light' | 'weekdays' | 'weekends' | 'custom'>
   custom_days?: Record<string, string[]>  // Activity ID -> array of ISO date strings for custom frequency

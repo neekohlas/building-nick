@@ -789,6 +789,11 @@ export function useStorage() {
     }
   }, [])
 
+  // Save a complete routine (used for cloud sync)
+  const saveRoutine = useCallback(async (routine: SavedPlanConfig): Promise<void> => {
+    await dbPut('savedPlanConfigs', routine, 'id')
+  }, [])
+
   // Check if there are scheduled activities in the next N days
   const getScheduledActivitiesForRange = useCallback(async (startDate: string, days: number): Promise<Record<string, string[]>> => {
     const result: Record<string, string[]> = {}
@@ -860,6 +865,7 @@ export function useStorage() {
     getLastPlanConfig,
     // Named routines
     saveNamedRoutine,
+    saveRoutine,
     getAllSavedRoutines,
     getMostRecentRoutine,
     getRoutineById,

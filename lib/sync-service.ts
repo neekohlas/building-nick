@@ -57,6 +57,9 @@ function planConfigToDb(config: SavedPlanConfig, userId: string): Omit<DbSavedPl
     id: config.id,
     user_id: userId,
     saved_at: config.savedAt,
+    name: config.name || null,
+    starred: config.starred || false,
+    is_auto_saved: config.isAutoSaved || false,
     selected_activities: config.selectedActivities,
     frequencies: config.frequencies,
     custom_days: config.customDays || {},
@@ -70,6 +73,9 @@ function dbToPlanConfig(db: DbSavedPlanConfig): SavedPlanConfig {
   return {
     id: db.id,
     savedAt: db.saved_at,
+    name: db.name || undefined,
+    starred: db.starred || false,
+    isAutoSaved: db.is_auto_saved || false,
     selectedActivities: db.selected_activities,
     frequencies: db.frequencies,
     customDays: db.custom_days || {},
@@ -160,25 +166,60 @@ export async function syncSchedule(schedule: DailySchedule, userId: string): Pro
   }
 }
 
-// Sync plan config to Supabase
+// Sync plan config to Supabase (works for both 'latest' and named routines)
 export async function syncPlanConfig(config: SavedPlanConfig, userId: string): Promise<boolean> {
+  console.log('[syncService] syncPlanConfig called:', { configId: config.id, name: config.name, userId: userId.substring(0, 8) + '...' })
   const supabase = getSupabaseBrowserClient()
-  if (!supabase) return false
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
 
   try {
+    const dbData = planConfigToDb(config, userId)
+    console.log('[syncService] Upserting plan config:', { id: dbData.id, name: dbData.name, starred: dbData.starred })
     const { error } = await supabase
       .from('saved_plan_configs')
-      .upsert(planConfigToDb(config, userId), {
+      .upsert(dbData, {
         onConflict: 'user_id,id',
       })
 
     if (error) {
-      console.error('Error syncing plan config:', error)
+      console.error('[syncService] Error syncing plan config:', error)
       return false
     }
+    console.log('[syncService] Plan config synced successfully')
     return true
   } catch (e) {
-    console.error('Exception syncing plan config:', e)
+    console.error('[syncService] Exception syncing plan config:', e)
+    return false
+  }
+}
+
+// Delete a routine from Supabase
+export async function deleteRoutineFromCloud(routineId: string, userId: string): Promise<boolean> {
+  console.log('[syncService] deleteRoutineFromCloud called:', { routineId, userId: userId.substring(0, 8) + '...' })
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) {
+    console.log('[syncService] No Supabase client available')
+    return false
+  }
+
+  try {
+    const { error } = await supabase
+      .from('saved_plan_configs')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', routineId)
+
+    if (error) {
+      console.error('[syncService] Error deleting routine:', error)
+      return false
+    }
+    console.log('[syncService] Routine deleted successfully')
+    return true
+  } catch (e) {
+    console.error('[syncService] Exception deleting routine:', e)
     return false
   }
 }

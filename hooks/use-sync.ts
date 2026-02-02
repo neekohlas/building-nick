@@ -8,6 +8,7 @@ import {
   removeCompletionFromCloud,
   syncSchedule,
   syncPlanConfig,
+  deleteRoutineFromCloud,
   pullAllFromCloud,
   pushAllToCloud,
   hasCloudData,
@@ -167,14 +168,14 @@ export function useSync() {
     }
   }, [storage.saveDailySchedule, isAuthenticated, userId, queueSync])
 
-  // Sync-aware save plan config
+  // Sync-aware save plan config (also auto-saves a routine)
   const savePlanConfigWithSync = useCallback(async (
     config: Omit<SavedPlanConfig, 'id' | 'savedAt'>
   ) => {
-    // Save locally first
+    // Save locally first (this also creates an auto-saved routine)
     await storage.savePlanConfig(config)
 
-    // Queue cloud sync
+    // Queue cloud sync for 'latest'
     if (isAuthenticated && userId) {
       const fullConfig: SavedPlanConfig = {
         ...config,
@@ -184,8 +185,90 @@ export function useSync() {
       queueSync('planConfig-latest', () =>
         syncPlanConfig(fullConfig, userId).then(() => {})
       )
+
+      // Also sync the auto-saved routine that was just created
+      // Get the most recent routine to sync it
+      const routines = await storage.getAllSavedRoutines()
+      const mostRecent = routines.find(r => r.isAutoSaved)
+      if (mostRecent) {
+        queueSync(`routine-${mostRecent.id}`, () =>
+          syncPlanConfig(mostRecent, userId).then(() => {})
+        )
+      }
     }
-  }, [storage.savePlanConfig, isAuthenticated, userId, queueSync])
+  }, [storage.savePlanConfig, storage.getAllSavedRoutines, isAuthenticated, userId, queueSync])
+
+  // Sync-aware save named routine
+  const saveNamedRoutineWithSync = useCallback(async (
+    config: Omit<SavedPlanConfig, 'id' | 'savedAt'>,
+    name: string
+  ): Promise<string> => {
+    // Save locally first
+    const routineId = await storage.saveNamedRoutine(config, name)
+
+    // Queue cloud sync
+    if (isAuthenticated && userId) {
+      const fullConfig: SavedPlanConfig = {
+        ...config,
+        id: routineId,
+        name,
+        isAutoSaved: false,
+        savedAt: new Date().toISOString(),
+      }
+      queueSync(`routine-${routineId}`, () =>
+        syncPlanConfig(fullConfig, userId).then(() => {})
+      )
+    }
+
+    return routineId
+  }, [storage.saveNamedRoutine, isAuthenticated, userId, queueSync])
+
+  // Sync-aware rename routine
+  const renameRoutineWithSync = useCallback(async (id: string, newName: string) => {
+    // Rename locally first
+    await storage.renameRoutine(id, newName)
+
+    // Queue cloud sync - fetch the updated routine and sync it
+    if (isAuthenticated && userId) {
+      const routine = await storage.getRoutineById(id)
+      if (routine) {
+        queueSync(`routine-${id}`, () =>
+          syncPlanConfig(routine, userId).then(() => {})
+        )
+      }
+    }
+  }, [storage.renameRoutine, storage.getRoutineById, isAuthenticated, userId, queueSync])
+
+  // Sync-aware toggle routine star
+  const toggleRoutineStarWithSync = useCallback(async (id: string): Promise<boolean> => {
+    // Toggle locally first
+    const newStarred = await storage.toggleRoutineStar(id)
+
+    // Queue cloud sync
+    if (isAuthenticated && userId) {
+      const routine = await storage.getRoutineById(id)
+      if (routine) {
+        queueSync(`routine-${id}`, () =>
+          syncPlanConfig(routine, userId).then(() => {})
+        )
+      }
+    }
+
+    return newStarred
+  }, [storage.toggleRoutineStar, storage.getRoutineById, isAuthenticated, userId, queueSync])
+
+  // Sync-aware delete routine
+  const deleteRoutineWithSync = useCallback(async (id: string) => {
+    // Delete locally first
+    await storage.deleteRoutine(id)
+
+    // Queue cloud deletion
+    if (isAuthenticated && userId) {
+      queueSync(`delete-routine-${id}`, () =>
+        deleteRoutineFromCloud(id, userId).then(() => {})
+      )
+    }
+  }, [storage.deleteRoutine, isAuthenticated, userId, queueSync])
 
   // Pull all data from cloud and merge into local storage
   const pullFromCloud = useCallback(async () => {
@@ -228,18 +311,27 @@ export function useSync() {
           await storage.saveDailySchedule(deduplicatedSchedule)
         }
 
-        // Use latest plan config from cloud
+        // Merge plan configs and routines from cloud
         if (cloudData.planConfigs.length > 0) {
+          // Save 'latest' plan config
           const latestConfig = cloudData.planConfigs.find(c => c.id === 'latest')
           if (latestConfig) {
             await storage.savePlanConfig({
               selectedActivities: latestConfig.selectedActivities,
               frequencies: latestConfig.frequencies,
+              customDays: latestConfig.customDays,
               heavyDaySchedule: latestConfig.heavyDaySchedule,
               lightDaySchedule: latestConfig.lightDaySchedule,
               startWithHeavy: latestConfig.startWithHeavy,
             })
           }
+
+          // Save all other routines (named/starred/auto-saved)
+          const routines = cloudData.planConfigs.filter(c => c.id !== 'latest')
+          for (const routine of routines) {
+            await storage.saveRoutine(routine)
+          }
+          console.log('[useSync] Merged', routines.length, 'routines from cloud')
         }
 
         console.log('[useSync] Pulled data from cloud:', {
@@ -472,6 +564,12 @@ export function useSync() {
     removeCompletion: removeCompletionWithSync,
     saveDailySchedule: saveDailyScheduleWithSync,
     savePlanConfig: savePlanConfigWithSync,
+
+    // Override routine operations with sync versions
+    saveNamedRoutine: saveNamedRoutineWithSync,
+    renameRoutine: renameRoutineWithSync,
+    toggleRoutineStar: toggleRoutineStarWithSync,
+    deleteRoutine: deleteRoutineWithSync,
 
     // Sync actions
     pullFromCloud,
