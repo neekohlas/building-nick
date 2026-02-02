@@ -242,26 +242,34 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
             </div>
           )}
 
-          {/* Test Notification */}
-          {preferences.enabled && permissionStatus === 'granted' && (
-            <div className="pt-4 border-t">
-              <button
-                onClick={handleSendTest}
-                disabled={testSent}
-                className={cn(
-                  "w-full flex items-center justify-center gap-2 p-3 rounded-xl border transition-colors",
-                  testSent
-                    ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
-                    : "hover:bg-muted"
-                )}
-              >
-                <TestTube className="h-5 w-5" />
-                <span className="font-medium">
-                  {testSent ? 'Test Sent!' : 'Send Test Notification'}
-                </span>
-              </button>
-            </div>
-          )}
+          {/* Test Notification - always show for debugging */}
+          <div className="pt-4 border-t">
+            <button
+              onClick={handleSendTest}
+              disabled={testSent || permissionStatus !== 'granted'}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 p-3 rounded-xl border transition-colors",
+                testSent
+                  ? "bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300"
+                  : permissionStatus !== 'granted'
+                    ? "opacity-50 cursor-not-allowed"
+                    : "hover:bg-muted active:bg-muted"
+              )}
+            >
+              <TestTube className="h-5 w-5" />
+              <span className="font-medium">
+                {testSent ? 'Test Sent!' : permissionStatus !== 'granted' ? `Test (need permission: ${permissionStatus})` : 'Send Test Notification'}
+              </span>
+            </button>
+          </div>
+
+          {/* Debug info - remove after testing */}
+          <div className="pt-4 border-t">
+            <p className="text-xs text-muted-foreground font-mono">
+              Debug: permission={permissionStatus}, enabled={String(preferences.enabled)},
+              swSupport={'serviceWorker' in navigator ? 'yes' : 'no'}
+            </p>
+          </div>
 
           {/* How it works */}
           <div className="pt-4 border-t">
