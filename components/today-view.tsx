@@ -21,14 +21,13 @@ import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor, Weathe
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventCard } from './calendar-event-card'
 import { ReminderCard, OverdueRemindersSection } from './reminder-card'
+import { RemindersSyncModal } from './reminders-sync-modal'
 import {
   getRemindersForTimeBlock,
   getOverdueReminders,
   toggleReminderCompletion,
   checkForShortcutReturn,
   clearShortcutParam,
-  parseRemindersFromClipboard,
-  syncReminders,
   type Reminder
 } from '@/lib/reminders'
 import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
@@ -106,6 +105,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   // Reminders state
   const [overdueReminders, setOverdueReminders] = useState<Reminder[]>([])
   const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
+  const [showRemindersSyncModal, setShowRemindersSyncModal] = useState(false)
 
   // Drag state
   const [dragState, setDragState] = useState<{
@@ -367,28 +367,10 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   useEffect(() => {
     if (!checkForShortcutReturn()) return
 
-    // Read clipboard and sync reminders
-    async function syncFromClipboard() {
-      try {
-        const clipboardText = await navigator.clipboard.readText()
-        if (clipboardText && clipboardText.includes('"id":')) {
-          const reminders = parseRemindersFromClipboard(clipboardText)
-          if (reminders.length > 0) {
-            const result = syncReminders(reminders)
-            console.log('[TodayView] Reminders synced:', result)
-            // Refresh reminders display
-            setRemindersRefreshKey(k => k + 1)
-          }
-        }
-      } catch (error) {
-        console.error('Failed to read clipboard for reminders sync:', error)
-      } finally {
-        // Clear the URL param regardless of success
-        clearShortcutParam()
-      }
-    }
-
-    syncFromClipboard()
+    // Show the sync modal which will handle clipboard reading
+    setShowRemindersSyncModal(true)
+    // Clear the URL param
+    clearShortcutParam()
   }, [])
 
   // Handle reminder completion toggle
@@ -1333,6 +1315,16 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
           weather={selectedDateWeather}
           locationName={locationName}
           onClose={() => setShowWeatherDetail(false)}
+        />
+      )}
+
+      {/* Reminders Sync Modal */}
+      {showRemindersSyncModal && (
+        <RemindersSyncModal
+          onClose={() => setShowRemindersSyncModal(false)}
+          onSyncComplete={() => {
+            setRemindersRefreshKey(k => k + 1)
+          }}
         />
       )}
 
