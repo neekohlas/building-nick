@@ -28,6 +28,7 @@ import {
   toggleReminderCompletion,
   checkForShortcutReturn,
   clearShortcutParam,
+  getStoredReminders,
   type Reminder
 } from '@/lib/reminders'
 import { formatDateISO, shouldShowProfessionalGoals, formatDuration, formatDateFriendly } from '@/lib/date-utils'
@@ -358,9 +359,17 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     refreshFromCloud()
   }, [storage.lastPullTime, storage.isReady, dateStr, storage])
 
-  // Load overdue reminders when date changes
+  // Load overdue reminders when date changes or after sync
   useEffect(() => {
-    setOverdueReminders(getOverdueReminders(selectedDate))
+    const overdue = getOverdueReminders(selectedDate)
+    const allReminders = getStoredReminders()
+    console.log('[TodayView] Reminders refresh:', {
+      totalStored: allReminders.length,
+      overdueCount: overdue.length,
+      selectedDate: selectedDate.toISOString(),
+      refreshKey: remindersRefreshKey
+    })
+    setOverdueReminders(overdue)
   }, [selectedDate, remindersRefreshKey])
 
   // Check for return from Reminders sync shortcut

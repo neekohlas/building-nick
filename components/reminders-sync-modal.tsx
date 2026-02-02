@@ -60,6 +60,7 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
 
     try {
       const reminders = parseRemindersFromClipboard(pasteText)
+      console.log('[RemindersSyncModal] Parsed reminders:', reminders.length, reminders)
       if (reminders.length === 0) {
         setErrorMessage('No valid reminders found in the pasted data')
         setStatus('error')
@@ -67,6 +68,7 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
       }
 
       const result = syncReminders(reminders)
+      console.log('[RemindersSyncModal] Sync result:', result)
       setSyncResult(result)
       setStatus('success')
 
