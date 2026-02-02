@@ -298,9 +298,18 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   // Re-run when date changes or storage becomes ready
   }, [storage.isReady, dateStr, generateSchedule, storage])
 
+  // Track last processed pull time to avoid re-processing
+  const lastProcessedPullTimeRef = useRef<Date | null>(null)
+
   // Re-fetch data when cloud sync pulls new data
   useEffect(() => {
     if (!storage.lastPullTime || !storage.isReady) return
+
+    // Skip if we've already processed this pull time
+    if (lastProcessedPullTimeRef.current?.getTime() === storage.lastPullTime.getTime()) {
+      return
+    }
+    lastProcessedPullTimeRef.current = storage.lastPullTime
 
     async function refreshFromCloud() {
       console.log('[TodayView] Cloud data pulled, refreshing...')
