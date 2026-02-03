@@ -229,8 +229,10 @@ export async function GET(request: NextRequest) {
         results.sent++
       } catch (e: unknown) {
         results.failed++
-        const err = e as Error
-        results.errors.push(err.message || String(e))
+        const err = e as { message?: string; statusCode?: number; body?: string }
+        const errorMsg = `${err.statusCode || 'no-code'}: ${err.message || String(e)}`
+        results.errors.push(errorMsg)
+        console.error('[Send Notifications] Force push error:', err)
       }
     }
 
