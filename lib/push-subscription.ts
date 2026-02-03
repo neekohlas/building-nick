@@ -75,24 +75,25 @@ export async function subscribeToPush(
   const registration = await Promise.race([registrationPromise, timeoutPromise])
   console.log('[Push] Service worker ready')
 
-  // Check for existing subscription
-  let subscription = await registration.pushManager.getSubscription()
+  // Always unsubscribe first to ensure fresh subscription with correct VAPID key
+  const existingSubscription = await registration.pushManager.getSubscription()
+  if (existingSubscription) {
+    console.log('[Push] Unsubscribing existing subscription...')
+    await existingSubscription.unsubscribe()
+  }
 
-  if (!subscription) {
-    // Create new subscription
-    console.log('[Push] Creating new subscription...')
-    try {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      })
-      console.log('[Push] Subscription created:', subscription.endpoint)
-    } catch (e) {
-      const err = e as Error
-      throw new Error(`PushMgr: ${err.message}`)
-    }
-  } else {
-    console.log('[Push] Using existing subscription:', subscription.endpoint)
+  // Create new subscription
+  console.log('[Push] Creating new subscription...')
+  let subscription: PushSubscription
+  try {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    })
+    console.log('[Push] Subscription created:', subscription.endpoint)
+  } catch (e) {
+    const err = e as Error
+    throw new Error(`PushMgr: ${err.message}`)
   }
 
   // Save subscription to server
