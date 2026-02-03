@@ -55,8 +55,10 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   }, [])
 
   const handleEnableNotifications = async () => {
-    if (permissionStatus === 'denied') {
-      alert('Notifications are blocked. Please enable them in your browser settings.')
+    // Always try to request permission - iOS sometimes reports wrong status
+    // Only block if we're 100% sure it's denied
+    if (permissionStatus === 'denied' && 'Notification' in window && Notification.permission === 'denied') {
+      alert('Notifications are blocked. Delete and re-add this app to your home screen to reset permissions.')
       return
     }
     const granted = await requestPermission()
@@ -327,8 +329,8 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
 
           {/* Debug */}
           <div className="text-[10px] text-muted-foreground font-mono text-center space-y-1">
-            <p>{permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'}</p>
-            <p>SW: {swVersion}</p>
+            <p>hook:{permissionStatus} | real:{'Notification' in window ? Notification.permission : 'n/a'}</p>
+            <p>sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'} | SW:{swVersion}</p>
           </div>
         </div>
 
