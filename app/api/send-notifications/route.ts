@@ -32,14 +32,16 @@ function getRandomMessage() {
 // POST - Send notifications to all subscribers who should receive one at this time
 // This should be called by a cron job every minute
 export async function POST(request: NextRequest) {
-  // Verify this is an authorized request (from cron or admin)
+  // Optional auth check - only enforce if CRON_SECRET is set
   const authHeader = request.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
-  // Allow if CRON_SECRET matches or if running locally
+  // If CRON_SECRET is configured, require it. Otherwise allow all requests.
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  console.log('[Send Notifications] Request received')
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
@@ -149,16 +151,84 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Manual trigger for testing (requires auth)
+// GET - Debug/status endpoint and manual trigger
 export async function GET(request: NextRequest) {
-  // For testing, allow GET to trigger a test notification to all subscribers
   const { searchParams } = new URL(request.url)
   const testMode = searchParams.get('test') === 'true'
+  const forceMode = searchParams.get('force') === 'true'
 
-  if (!testMode) {
-    return NextResponse.json({ error: 'Use POST for cron, GET with ?test=true for testing' })
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
   }
 
-  // Reuse POST logic
-  return POST(request)
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+  // Get all subscriptions for debugging
+  const { data: subscriptions, error } = await supabase
+    .from('push_subscriptions')
+    .select('*')
+
+  if (error) {
+    return NextResponse.json({ error: 'Failed to fetch subscriptions', details: error }, { status: 500 })
+  }
+
+  const now = new Date()
+  const debugInfo = {
+    serverTime: now.toISOString(),
+    serverHour: now.getHours(),
+    serverMinute: now.getMinutes(),
+    vapidConfigured: !!(vapidPublicKey && vapidPrivateKey),
+    subscriptionCount: subscriptions?.length || 0,
+    subscriptions: subscriptions?.map(sub => ({
+      id: sub.id,
+      timezone: sub.timezone,
+      notification_times: sub.notification_times,
+      endpoint: sub.endpoint?.substring(0, 50) + '...'
+    }))
+  }
+
+  // If force mode, send notification to all subscribers regardless of time
+  if (forceMode && subscriptions && subscriptions.length > 0) {
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return NextResponse.json({ ...debugInfo, error: 'VAPID keys not configured' }, { status: 500 })
+    }
+
+    const results = { sent: 0, failed: 0, errors: [] as string[] }
+
+    for (const sub of subscriptions) {
+      const pushSubscription = {
+        endpoint: sub.endpoint,
+        keys: {
+          p256dh: sub.p256dh,
+          auth: sub.auth
+        }
+      }
+
+      try {
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify({
+            title: 'Test from server',
+            body: `Forced notification at ${now.toLocaleTimeString()}`,
+            tag: 'building-nick-test',
+            url: '/'
+          })
+        )
+        results.sent++
+      } catch (e: unknown) {
+        results.failed++
+        const err = e as Error
+        results.errors.push(err.message || String(e))
+      }
+    }
+
+    return NextResponse.json({ ...debugInfo, forceResults: results })
+  }
+
+  // If test mode, run normal POST logic
+  if (testMode) {
+    return POST(request)
+  }
+
+  return NextResponse.json(debugInfo)
 }
