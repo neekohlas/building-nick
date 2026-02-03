@@ -1,14 +1,27 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export function ServiceWorkerRegister() {
+  const router = useRouter()
+
   useEffect(() => {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator)) {
       console.log('[SW Register] Service workers not supported')
       return
     }
+
+    // Listen for messages from service worker (e.g., navigation requests)
+    const handleMessage = (event: MessageEvent) => {
+      console.log('[SW Register] Message from SW:', event.data)
+      if (event.data?.type === 'NAVIGATE' && event.data?.url) {
+        console.log('[SW Register] Navigating to:', event.data.url)
+        router.push(event.data.url)
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', handleMessage)
 
     // Register the service worker with update check
     navigator.serviceWorker
@@ -42,7 +55,11 @@ export function ServiceWorkerRegister() {
       .catch((error) => {
         console.error('[SW Register] Service worker registration failed:', error)
       })
-  }, [])
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage)
+    }
+  }, [router])
 
   return null
 }
