@@ -58,62 +58,61 @@ export async function subscribeToPush(
   notificationTimes: { hour: number; minute: number }[]
 ): Promise<PushSubscription | null> {
   if (!isPushSupported()) {
-    console.error('[Push] Push notifications not supported')
-    return null
+    throw new Error('Push not supported')
   }
 
   if (!VAPID_PUBLIC_KEY) {
-    console.error('[Push] VAPID public key not configured')
-    return null
+    throw new Error('VAPID key missing')
   }
 
-  try {
-    // Wait for service worker with timeout
-    console.log('[Push] Waiting for service worker...')
-    const registrationPromise = navigator.serviceWorker.ready
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Service worker timeout')), 10000)
-    })
+  // Wait for service worker with timeout
+  console.log('[Push] Waiting for service worker...')
+  const registrationPromise = navigator.serviceWorker.ready
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('SW timeout (10s)')), 10000)
+  })
 
-    const registration = await Promise.race([registrationPromise, timeoutPromise])
-    console.log('[Push] Service worker ready')
+  const registration = await Promise.race([registrationPromise, timeoutPromise])
+  console.log('[Push] Service worker ready')
 
-    // Check for existing subscription
-    let subscription = await registration.pushManager.getSubscription()
+  // Check for existing subscription
+  let subscription = await registration.pushManager.getSubscription()
 
-    if (!subscription) {
-      // Create new subscription
-      console.log('[Push] Creating new subscription...')
+  if (!subscription) {
+    // Create new subscription
+    console.log('[Push] Creating new subscription...')
+    try {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       })
       console.log('[Push] Subscription created:', subscription.endpoint)
-    } else {
-      console.log('[Push] Using existing subscription:', subscription.endpoint)
+    } catch (e) {
+      const err = e as Error
+      throw new Error(`PushMgr: ${err.message}`)
     }
-
-    // Save subscription to server
-    const response = await fetch('/api/push-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subscription: subscription.toJSON(),
-        notificationTimes,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      })
-    })
-
-    if (!response.ok) {
-      throw new Error(`Failed to save subscription: ${response.status}`)
-    }
-
-    console.log('[Push] Subscription saved to server')
-    return subscription
-  } catch (e) {
-    console.error('[Push] Error subscribing:', e)
-    return null
+  } else {
+    console.log('[Push] Using existing subscription:', subscription.endpoint)
   }
+
+  // Save subscription to server
+  const response = await fetch('/api/push-subscription', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      subscription: subscription.toJSON(),
+      notificationTimes,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+    })
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`Server ${response.status}: ${text.substring(0, 50)}`)
+  }
+
+  console.log('[Push] Subscription saved to server')
+  return subscription
 }
 
 /**

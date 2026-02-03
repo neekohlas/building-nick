@@ -111,11 +111,18 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
         .filter(t => t.enabled)
         .map(t => ({ hour: t.hour, minute: t.minute }))
 
+      // Check service worker status first
+      if (!navigator.serviceWorker.controller) {
+        setSyncStatus('No SW controller - reload app')
+        setTimeout(() => setSyncStatus(null), 5000)
+        return
+      }
+
       const result = await subscribeToPush(enabledTimes)
       if (result) {
         setSyncStatus('Synced!')
       } else {
-        setSyncStatus('Sync failed - check console')
+        setSyncStatus('Sync failed - null result')
       }
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e)
