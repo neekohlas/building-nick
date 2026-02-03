@@ -121,11 +121,10 @@ export async function POST(request: NextRequest) {
           url: '/'
         })
 
-        // iOS requires specific options for push to work reliably
+        // Web push options - don't set topic for iOS web push (Apple rejects invalid topics)
         const options = {
-          TTL: 60, // 60 seconds - iOS needs this
-          urgency: 'high' as const, // High urgency for immediate delivery
-          topic: 'building-nick' // Required for iOS - must be consistent
+          TTL: 60, // 60 seconds
+          urgency: 'high' as const
         }
 
         await webpush.sendNotification(pushSubscription, payload, options)
@@ -218,11 +217,10 @@ export async function GET(request: NextRequest) {
           url: '/'
         })
 
-        // iOS requires specific options for push to work reliably
+        // Web push options - don't set topic for iOS web push (Apple rejects invalid topics)
         const options = {
-          TTL: 60, // 60 seconds - iOS needs this
-          urgency: 'high' as const, // High urgency for immediate delivery
-          topic: 'building-nick' // Required for iOS - must be consistent
+          TTL: 60, // 60 seconds
+          urgency: 'high' as const
         }
 
         await webpush.sendNotification(pushSubscription, payload, options)
