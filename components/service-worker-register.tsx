@@ -1,34 +1,55 @@
 'use client'
 
 import { useEffect, Suspense } from 'react'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+
+const PENDING_NAVIGATION_KEY = 'pending_notification_navigation'
 
 function ServiceWorkerRegisterInner() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const pathname = usePathname()
 
-  // Check if we were opened from a notification and need to navigate
+  // Check for pending navigation from notification click (stored in localStorage)
   useEffect(() => {
-    const fromNotification = searchParams.get('from_notification')
-    if (fromNotification) {
-      console.log('[SW Register] Opened from notification, current path:', pathname)
-      // Remove the query param and ensure we're on the right page
-      // The SW opened us with /today?from_notification=timestamp
-      // We need to clean up the URL
-      const url = new URL(window.location.href)
-      url.searchParams.delete('from_notification')
-
-      // If we're not on /today, navigate there
-      if (pathname !== '/today') {
-        console.log('[SW Register] Navigating to /today')
-        router.replace('/today')
-      } else {
-        // Just clean up the URL
-        window.history.replaceState({}, '', url.pathname)
+    const checkPendingNavigation = () => {
+      try {
+        const pending = localStorage.getItem(PENDING_NAVIGATION_KEY)
+        if (pending) {
+          const { url, timestamp } = JSON.parse(pending)
+          // Only use if less than 30 seconds old
+          if (Date.now() - timestamp < 30000) {
+            console.log('[SW Register] Found pending navigation:', url, 'current:', pathname)
+            localStorage.removeItem(PENDING_NAVIGATION_KEY)
+            if (pathname !== url) {
+              console.log('[SW Register] Navigating to:', url)
+              router.replace(url)
+            }
+          } else {
+            // Expired, remove it
+            localStorage.removeItem(PENDING_NAVIGATION_KEY)
+          }
+        }
+      } catch (e) {
+        console.error('[SW Register] Error checking pending navigation:', e)
       }
     }
-  }, [searchParams, pathname, router])
+
+    // Check on mount
+    checkPendingNavigation()
+
+    // Also check when app becomes visible (iOS may have suspended it)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[SW Register] App became visible, checking pending navigation')
+        checkPendingNavigation()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [pathname, router])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -40,6 +61,21 @@ function ServiceWorkerRegisterInner() {
     // Listen for messages from service worker (e.g., navigation requests)
     const handleMessage = (event: MessageEvent) => {
       console.log('[SW Register] Message from SW:', event.data)
+
+      // Store navigation intent in localStorage (survives app restart)
+      if (event.data?.type === 'STORE_NAVIGATION' && event.data?.url) {
+        console.log('[SW Register] Storing navigation intent:', event.data.url)
+        try {
+          localStorage.setItem(PENDING_NAVIGATION_KEY, JSON.stringify({
+            url: event.data.url,
+            timestamp: Date.now()
+          }))
+        } catch (e) {
+          console.error('[SW Register] Failed to store navigation:', e)
+        }
+      }
+
+      // Immediate navigation request
       if (event.data?.type === 'NAVIGATE' && event.data?.url) {
         console.log('[SW Register] Navigating to:', event.data.url)
         router.push(event.data.url)

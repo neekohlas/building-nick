@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 10
+const SW_VERSION = 11
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -16,59 +16,47 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW v10] Notification clicked:', event.notification.tag)
+  console.log('[SW v11] Notification clicked:', event.notification.tag)
 
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
-  // Add a query param to force navigation - this survives app resume
-  const urlWithParam = new URL(targetUrl, self.location.origin)
-  urlWithParam.searchParams.set('from_notification', Date.now().toString())
-  const fullUrl = urlWithParam.href
+  const fullUrl = new URL(targetUrl, self.location.origin).href
 
-  console.log('[SW v10] Opening URL with notification param:', fullUrl)
+  console.log('[SW v11] Target URL:', fullUrl)
 
-  // On iOS PWA, always use openWindow with the full URL including the notification param
-  // This is the most reliable way to ensure navigation happens
   event.waitUntil(
     (async () => {
-      // First, close any existing windows and open fresh to the target URL
-      // This ensures we always land on the right page
       const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
-      console.log('[SW v10] Found', clientList.length, 'existing clients')
+      console.log('[SW v11] Found', clientList.length, 'existing clients')
 
-      // If we have an existing client, try to navigate it
+      // Send postMessage to all clients to store navigation intent
+      // This uses localStorage which persists even if the app restarts
       for (const client of clientList) {
         if (client.url.includes(self.location.origin)) {
-          console.log('[SW v10] Trying to navigate existing client')
-
-          // Send postMessage (works if app is active)
-          client.postMessage({ type: 'NAVIGATE', url: targetUrl })
-
-          // Focus and try navigate
-          try {
-            if ('focus' in client) await client.focus()
-            if ('navigate' in client) {
-              await client.navigate(fullUrl)
-              console.log('[SW v10] client.navigate succeeded')
-              return
-            }
-          } catch (e) {
-            console.log('[SW v10] Navigation failed, will open new window:', e)
-          }
-
-          // If navigate didn't work, open a new window anyway
-          // The app will handle the from_notification param
-          if (clients.openWindow) {
-            return clients.openWindow(fullUrl)
-          }
-          return
+          console.log('[SW v11] Sending STORE_NAVIGATION to client')
+          client.postMessage({ type: 'STORE_NAVIGATION', url: targetUrl })
         }
       }
 
-      // No existing window, open new one
-      console.log('[SW v10] No existing client, opening new window')
+      // Try to find and focus an existing window
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin)) {
+          console.log('[SW v11] Found existing client, focusing')
+          try {
+            if ('focus' in client) await client.focus()
+            // Also send navigate message
+            client.postMessage({ type: 'NAVIGATE', url: targetUrl })
+            return
+          } catch (e) {
+            console.log('[SW v11] Focus failed:', e)
+          }
+        }
+      }
+
+      // No existing window, open new one with the target URL
+      console.log('[SW v11] No existing client, opening new window')
       if (clients.openWindow) {
         return clients.openWindow(fullUrl)
       }
@@ -191,4 +179,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v10] Custom service worker loaded')
+console.log('[SW v11] Custom service worker loaded')
