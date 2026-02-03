@@ -9,7 +9,25 @@ function ServiceWorkerRegisterInner() {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Check for pending navigation from notification click (stored in localStorage)
+  // Check if we arrived from a notification click (via URL hash)
+  useEffect(() => {
+    const hash = window.location.hash
+    console.log('[SW Register] Current hash:', hash, 'pathname:', pathname)
+
+    if (hash.includes('from_notification=')) {
+      console.log('[SW Register] Detected notification navigation hash')
+      // Clear the hash
+      window.history.replaceState(null, '', window.location.pathname)
+
+      // If we're not on /today, navigate there
+      if (pathname !== '/today') {
+        console.log('[SW Register] Navigating to /today from hash')
+        router.replace('/today')
+      }
+    }
+  }, [pathname, router])
+
+  // Also check for pending navigation from localStorage (backup)
   useEffect(() => {
     const checkPendingNavigation = () => {
       try {

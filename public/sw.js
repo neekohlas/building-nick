@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 11
+const SW_VERSION = 12
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -16,48 +16,27 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW v11] Notification clicked:', event.notification.tag)
+  console.log('[SW v12] Notification clicked:', event.notification.tag)
 
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
-  const fullUrl = new URL(targetUrl, self.location.origin).href
+  // Add a hash to signal this came from a notification - hashes work better on iOS
+  const urlWithHash = new URL(targetUrl, self.location.origin)
+  urlWithHash.hash = 'from_notification=' + Date.now()
+  const fullUrl = urlWithHash.href
 
-  console.log('[SW v11] Target URL:', fullUrl)
+  console.log('[SW v12] Opening URL:', fullUrl)
 
+  // On iOS PWA, the most reliable approach is to ALWAYS use openWindow
+  // This forces iOS to open the app to the specified URL
   event.waitUntil(
     (async () => {
-      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
-      console.log('[SW v11] Found', clientList.length, 'existing clients')
-
-      // Send postMessage to all clients to store navigation intent
-      // This uses localStorage which persists even if the app restarts
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin)) {
-          console.log('[SW v11] Sending STORE_NAVIGATION to client')
-          client.postMessage({ type: 'STORE_NAVIGATION', url: targetUrl })
-        }
-      }
-
-      // Try to find and focus an existing window
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin)) {
-          console.log('[SW v11] Found existing client, focusing')
-          try {
-            if ('focus' in client) await client.focus()
-            // Also send navigate message
-            client.postMessage({ type: 'NAVIGATE', url: targetUrl })
-            return
-          } catch (e) {
-            console.log('[SW v11] Focus failed:', e)
-          }
-        }
-      }
-
-      // No existing window, open new one with the target URL
-      console.log('[SW v11] No existing client, opening new window')
+      // Always open a new window to the target URL
+      // This is the most reliable way to navigate on iOS
       if (clients.openWindow) {
+        console.log('[SW v12] Using openWindow for reliable navigation')
         return clients.openWindow(fullUrl)
       }
     })()
@@ -179,4 +158,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v11] Custom service worker loaded')
+console.log('[SW v12] Custom service worker loaded')
