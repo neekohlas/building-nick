@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 13
+const SW_VERSION = 14
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // IndexedDB helper for storing navigation intent (works in SW, unlike localStorage)
@@ -37,9 +37,9 @@ async function setPendingNavigation(url) {
       tx.onerror = () => reject(tx.error)
     })
     db.close()
-    console.log('[SW v13] Stored pending navigation in IndexedDB:', url)
+    console.log('[SW v14] Stored pending navigation in IndexedDB:', url)
   } catch (e) {
-    console.error('[SW v13] Failed to store in IndexedDB:', e)
+    console.error('[SW v14] Failed to store in IndexedDB:', e)
   }
 }
 
@@ -51,14 +51,17 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW v13] Notification clicked:', event.notification.tag)
+  // preventDefault may help on iOS according to some reports
+  event.preventDefault()
+
+  console.log('[SW v14] Notification clicked:', event.notification.tag)
 
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
 
-  console.log('[SW v13] Target URL:', targetUrl)
+  console.log('[SW v14] Target URL:', targetUrl)
 
   event.waitUntil(
     (async () => {
@@ -67,24 +70,24 @@ self.addEventListener('notificationclick', (event) => {
 
       // Try to find existing clients and notify them
       const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
-      console.log('[SW v13] Found', clientList.length, 'clients')
+      console.log('[SW v14] Found', clientList.length, 'clients')
 
       for (const client of clientList) {
         if (client.url.includes(self.location.origin)) {
-          console.log('[SW v13] Notifying client and focusing')
+          console.log('[SW v14] Notifying client and focusing')
           // Tell client to check IndexedDB
           client.postMessage({ type: 'CHECK_NAVIGATION' })
           try {
             await client.focus()
           } catch (e) {
-            console.log('[SW v13] Focus failed:', e)
+            console.log('[SW v14] Focus failed:', e)
           }
           return
         }
       }
 
       // No existing client, open new window
-      console.log('[SW v13] No client, opening window')
+      console.log('[SW v14] No client, opening window')
       if (clients.openWindow) {
         const fullUrl = new URL(targetUrl, self.location.origin).href
         return clients.openWindow(fullUrl)
@@ -208,4 +211,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v13] Custom service worker loaded')
+console.log('[SW v14] Custom service worker loaded')
