@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Bell, BellOff, Plus, Trash2, TestTube } from 'lucide-react'
+import { X, Bell, BellOff, Plus, Trash2, TestTube, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/use-notifications'
 import { formatNotificationTime, parseTimeString } from '@/lib/notifications'
+import { subscribeToPush, isPushSupported } from '@/lib/push-subscription'
 
 interface NotificationSettingsModalProps {
   onClose: () => void
@@ -15,6 +16,7 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
     permissionStatus,
     preferences,
     nextNotificationIn,
+    isPushSubscribed,
     requestPermission,
     updatePreferences,
     addNotificationTime,
@@ -26,6 +28,7 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   const [showAddTime, setShowAddTime] = useState(false)
   const [newTimeValue, setNewTimeValue] = useState('12:00')
   const [testStatus, setTestStatus] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
   const handleEnableNotifications = async () => {
     if (permissionStatus === 'denied') {
@@ -66,6 +69,31 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
       setTestStatus(`Error: ${e}`)
     }
     setTimeout(() => setTestStatus(null), 5000)
+  }
+
+  const handleSyncToServer = async () => {
+    if (!isPushSupported()) {
+      setSyncStatus('Push not supported')
+      setTimeout(() => setSyncStatus(null), 3000)
+      return
+    }
+
+    setSyncStatus('Syncing...')
+    try {
+      const enabledTimes = preferences.times
+        .filter(t => t.enabled)
+        .map(t => ({ hour: t.hour, minute: t.minute }))
+
+      const result = await subscribeToPush(enabledTimes)
+      if (result) {
+        setSyncStatus('Synced!')
+      } else {
+        setSyncStatus('Sync failed - check console')
+      }
+    } catch (e) {
+      setSyncStatus(`Error: ${e}`)
+    }
+    setTimeout(() => setSyncStatus(null), 5000)
   }
 
   const formatCountdown = (ms: number | null): string => {
@@ -173,6 +201,25 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
             </div>
           )}
 
+          {/* Sync Button - only show if enabled */}
+          {preferences.enabled && (
+            <button
+              type="button"
+              onClick={handleSyncToServer}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 p-3 rounded-xl border touch-manipulation",
+                syncStatus === 'Synced!'
+                  ? "bg-green-50 border-green-200 text-green-700"
+                  : syncStatus?.startsWith('Error') || syncStatus?.includes('failed')
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-orange-50 border-orange-200 text-orange-700 active:bg-orange-100"
+              )}
+            >
+              <RefreshCw className={cn("h-4 w-4", syncStatus === 'Syncing...' && "animate-spin")} />
+              <span className="text-sm font-medium">{syncStatus || 'Sync to Server'}</span>
+            </button>
+          )}
+
           {/* Test Button */}
           <button
             type="button"
@@ -190,7 +237,7 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
 
           {/* Debug */}
           <p className="text-[10px] text-muted-foreground font-mono text-center">
-            {permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'}
+            {permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'}
           </p>
         </div>
 
