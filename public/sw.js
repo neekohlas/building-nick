@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 3
+const SW_VERSION = 4
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -47,62 +47,53 @@ self.addEventListener('notificationclose', (event) => {
 
 // Handle push events (for server-side push notifications)
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push received:', event)
+  console.log('[SW v4] Push event received!')
 
-  // Default notification in case of any issues
-  let title = 'Building Nick'
-  let body = 'Time to check in on your activities!'
-  let tag = 'building-nick'
-  let url = '/'
+  // CRITICAL: On iOS, we must show a notification synchronously within waitUntil
+  // Create the notification promise immediately
+  const notificationPromise = (async () => {
+    // Default notification in case of any issues
+    let title = 'Building Nick'
+    let body = 'Time to check in on your activities!'
+    let tag = 'building-nick-push'
 
-  // Try to parse push data if available
-  if (event.data) {
-    try {
-      const data = event.data.json()
-      title = data.title || title
-      body = data.body || body
-      tag = data.tag || tag
-      url = data.url || url
-      console.log('[SW] Push data parsed:', { title, body, tag })
-    } catch (e) {
-      // Try as text
+    // Try to parse push data if available
+    if (event.data) {
       try {
-        body = event.data.text() || body
-        console.log('[SW] Push data as text:', body)
-      } catch (e2) {
-        console.error('[SW] Failed to parse push data:', e, e2)
+        const data = event.data.json()
+        title = data.title || title
+        body = data.body || body
+        tag = data.tag || tag
+        console.log('[SW v4] Push data parsed:', { title, body, tag })
+      } catch (e) {
+        // Try as text
+        try {
+          body = event.data.text() || body
+          console.log('[SW v4] Push data as text:', body)
+        } catch (e2) {
+          console.error('[SW v4] Failed to parse push data:', e, e2)
+        }
       }
+    } else {
+      console.log('[SW v4] Push with no data, using defaults')
     }
-  } else {
-    console.log('[SW] Push with no data, using defaults')
-  }
 
-  // iOS-compatible notification options (no vibrate, renotify, etc.)
-  const options = {
-    body: body,
-    tag: tag,
-    icon: '/apple-icon.png',
-    badge: '/icon-light-32x32.png',
-    data: {
-      url: url,
-      timestamp: new Date().toISOString()
+    // iOS requires minimal options - keep it simple
+    try {
+      await self.registration.showNotification(title, {
+        body: body,
+        tag: tag,
+        icon: '/apple-icon.png'
+      })
+      console.log('[SW v4] Notification shown successfully')
+    } catch (err) {
+      console.error('[SW v4] Failed to show notification:', err)
+      // Absolute minimal fallback
+      await self.registration.showNotification(title, { body: body })
     }
-  }
+  })()
 
-  console.log('[SW] Showing notification with options:', JSON.stringify(options))
-
-  // CRITICAL: iOS requires waitUntil with showNotification for push to work
-  event.waitUntil(
-    self.registration.showNotification(title, options)
-      .then(() => {
-        console.log('[SW] Notification shown successfully')
-      })
-      .catch((err) => {
-        console.error('[SW] Failed to show notification:', err)
-        // Try with minimal options as fallback
-        return self.registration.showNotification(title, { body: body })
-      })
-  )
+  event.waitUntil(notificationPromise)
 })
 
 // Handle messages from the main thread
@@ -159,4 +150,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW] Custom service worker loaded')
+console.log('[SW v4] Custom service worker loaded')

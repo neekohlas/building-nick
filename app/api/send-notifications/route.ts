@@ -114,15 +114,21 @@ export async function POST(request: NextRequest) {
       const message = getRandomMessage()
 
       try {
-        await webpush.sendNotification(
-          pushSubscription,
-          JSON.stringify({
-            title: message.title,
-            body: message.body,
-            tag: 'building-nick-scheduled',
-            url: '/'
-          })
-        )
+        const payload = JSON.stringify({
+          title: message.title,
+          body: message.body,
+          tag: 'building-nick-scheduled',
+          url: '/'
+        })
+
+        // iOS requires specific options for push to work reliably
+        const options = {
+          TTL: 60, // 60 seconds - iOS needs this
+          urgency: 'high' as const, // High urgency for immediate delivery
+          topic: 'building-nick' // Required for iOS - must be consistent
+        }
+
+        await webpush.sendNotification(pushSubscription, payload, options)
         results.sent++
         console.log(`[Send Notifications] Sent to ${sub.endpoint.substring(0, 50)}...`)
       } catch (e: unknown) {
@@ -205,15 +211,21 @@ export async function GET(request: NextRequest) {
       }
 
       try {
-        await webpush.sendNotification(
-          pushSubscription,
-          JSON.stringify({
-            title: 'Test from server',
-            body: `Forced notification at ${now.toLocaleTimeString()}`,
-            tag: 'building-nick-test',
-            url: '/'
-          })
-        )
+        const payload = JSON.stringify({
+          title: 'Test from server',
+          body: `Forced notification at ${now.toLocaleTimeString()}`,
+          tag: 'building-nick-test',
+          url: '/'
+        })
+
+        // iOS requires specific options for push to work reliably
+        const options = {
+          TTL: 60, // 60 seconds - iOS needs this
+          urgency: 'high' as const, // High urgency for immediate delivery
+          topic: 'building-nick' // Required for iOS - must be consistent
+        }
+
+        await webpush.sendNotification(pushSubscription, payload, options)
         results.sent++
       } catch (e: unknown) {
         results.failed++
