@@ -1,47 +1,13 @@
 /**
  * Building Nick - Custom Service Worker for Push Notifications
- * Version: 3
  *
  * This file handles push notifications and notification interactions.
+ * Note: iOS PWAs have a known bug where notification clicks don't reliably
+ * navigate to specific URLs - they just open the app to its last state.
  */
 
-const SW_VERSION = 14
+const SW_VERSION = 15
 console.log('[SW] Service worker version:', SW_VERSION)
-
-// IndexedDB helper for storing navigation intent (works in SW, unlike localStorage)
-const DB_NAME = 'building-nick-sw'
-const STORE_NAME = 'navigation'
-
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result)
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME)
-      }
-    }
-  })
-}
-
-async function setPendingNavigation(url) {
-  try {
-    const db = await openDB()
-    const tx = db.transaction(STORE_NAME, 'readwrite')
-    const store = tx.objectStore(STORE_NAME)
-    store.put({ url, timestamp: Date.now() }, 'pending')
-    await new Promise((resolve, reject) => {
-      tx.oncomplete = resolve
-      tx.onerror = () => reject(tx.error)
-    })
-    db.close()
-    console.log('[SW v14] Stored pending navigation in IndexedDB:', url)
-  } catch (e) {
-    console.error('[SW v14] Failed to store in IndexedDB:', e)
-  }
-}
 
 // Install event - skip waiting immediately
 self.addEventListener('install', (event) => {
@@ -51,48 +17,28 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  // preventDefault may help on iOS according to some reports
-  event.preventDefault()
-
-  console.log('[SW v14] Notification clicked:', event.notification.tag)
-
+  console.log('[SW] Notification clicked:', event.notification.tag)
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
+  const fullUrl = new URL(targetUrl, self.location.origin).href
 
-  console.log('[SW v14] Target URL:', targetUrl)
-
+  // Try to focus existing window or open new one
+  // Note: iOS may ignore the URL and just open the app to its last state
   event.waitUntil(
-    (async () => {
-      // Store navigation intent in IndexedDB FIRST (this persists!)
-      await setPendingNavigation(targetUrl)
-
-      // Try to find existing clients and notify them
-      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
-      console.log('[SW v14] Found', clientList.length, 'clients')
-
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to focus an existing window
       for (const client of clientList) {
-        if (client.url.includes(self.location.origin)) {
-          console.log('[SW v14] Notifying client and focusing')
-          // Tell client to check IndexedDB
-          client.postMessage({ type: 'CHECK_NAVIGATION' })
-          try {
-            await client.focus()
-          } catch (e) {
-            console.log('[SW v14] Focus failed:', e)
-          }
-          return
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus()
         }
       }
-
-      // No existing client, open new window
-      console.log('[SW v14] No client, opening window')
+      // Open new window if none found
       if (clients.openWindow) {
-        const fullUrl = new URL(targetUrl, self.location.origin).href
         return clients.openWindow(fullUrl)
       }
-    })()
+    })
   )
 })
 
@@ -103,17 +49,13 @@ self.addEventListener('notificationclose', (event) => {
 
 // Handle push events (for server-side push notifications)
 self.addEventListener('push', (event) => {
-  console.log('[SW v7] Push event received!')
+  console.log('[SW] Push event received!')
 
   // CRITICAL: On iOS, we must show a notification synchronously within waitUntil
-  // Create the notification promise immediately
   const notificationPromise = (async () => {
-    // Default notification in case of any issues
     let title = 'Building Nick'
     let body = 'Time to check in on your activities!'
     let tag = 'building-nick-push'
-
-    // URL to open when notification is clicked (default to Today page)
     let url = '/today'
 
     // Try to parse push data if available
@@ -124,21 +66,18 @@ self.addEventListener('push', (event) => {
         body = data.body || body
         tag = data.tag || tag
         url = data.url || url
-        console.log('[SW v7] Push data parsed:', { title, body, tag, url })
+        console.log('[SW] Push data parsed:', { title, body, tag, url })
       } catch (e) {
-        // Try as text
         try {
           body = event.data.text() || body
-          console.log('[SW v7] Push data as text:', body)
+          console.log('[SW] Push data as text:', body)
         } catch (e2) {
-          console.error('[SW v7] Failed to parse push data:', e, e2)
+          console.error('[SW] Failed to parse push data:', e, e2)
         }
       }
-    } else {
-      console.log('[SW v7] Push with no data, using defaults')
     }
 
-    // iOS requires minimal options - keep it simple but include data for click handler
+    // iOS requires minimal options
     try {
       await self.registration.showNotification(title, {
         body: body,
@@ -146,10 +85,9 @@ self.addEventListener('push', (event) => {
         icon: '/apple-icon.png',
         data: { url: url }
       })
-      console.log('[SW v7] Notification shown successfully')
+      console.log('[SW] Notification shown successfully')
     } catch (err) {
-      console.error('[SW v7] Failed to show notification:', err)
-      // Absolute minimal fallback
+      console.error('[SW] Failed to show notification:', err)
       await self.registration.showNotification(title, { body: body, data: { url: url } })
     }
   })()
@@ -159,49 +97,11 @@ self.addEventListener('push', (event) => {
 
 // Handle messages from the main thread
 self.addEventListener('message', (event) => {
-  console.log('[SW v10] Message received:', event.data)
+  console.log('[SW] Message received:', event.data)
 
   if (event.data?.type === 'SKIP_WAITING') {
-    console.log('[SW v10] Skip waiting requested')
+    console.log('[SW] Skip waiting requested')
     self.skipWaiting()
-    return
-  }
-
-  if (event.data?.type === 'SCHEDULE_NOTIFICATION') {
-    const { title, body, delay, tag } = event.data
-
-    setTimeout(() => {
-      self.registration.showNotification(title, {
-        body,
-        tag: tag || 'building-nick-scheduled',
-        icon: '/apple-icon.png',
-        badge: '/icon-light-32x32.png',
-        data: {
-          url: '/',
-          timestamp: new Date().toISOString()
-        }
-      })
-    }, delay)
-
-    // Respond to confirm scheduling
-    if (event.ports && event.ports[0]) {
-      event.ports[0].postMessage({ scheduled: true, delay })
-    }
-  }
-
-  if (event.data?.type === 'SHOW_NOTIFICATION') {
-    const { title, body, tag } = event.data
-
-    self.registration.showNotification(title, {
-      body,
-      tag: tag || 'building-nick',
-      icon: '/apple-icon.png',
-      badge: '/icon-light-32x32.png',
-      data: {
-        url: '/',
-        timestamp: new Date().toISOString()
-      }
-    })
   }
 })
 
@@ -211,4 +111,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v14] Custom service worker loaded')
+console.log('[SW] Custom service worker loaded')
