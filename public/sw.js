@@ -5,8 +5,43 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 12
+const SW_VERSION = 13
 console.log('[SW] Service worker version:', SW_VERSION)
+
+// IndexedDB helper for storing navigation intent (works in SW, unlike localStorage)
+const DB_NAME = 'building-nick-sw'
+const STORE_NAME = 'navigation'
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1)
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => resolve(request.result)
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME)
+      }
+    }
+  })
+}
+
+async function setPendingNavigation(url) {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(STORE_NAME, 'readwrite')
+    const store = tx.objectStore(STORE_NAME)
+    store.put({ url, timestamp: Date.now() }, 'pending')
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+    console.log('[SW v13] Stored pending navigation in IndexedDB:', url)
+  } catch (e) {
+    console.error('[SW v13] Failed to store in IndexedDB:', e)
+  }
+}
 
 // Install event - skip waiting immediately
 self.addEventListener('install', (event) => {
@@ -16,27 +51,42 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW v12] Notification clicked:', event.notification.tag)
+  console.log('[SW v13] Notification clicked:', event.notification.tag)
 
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
-  // Add a hash to signal this came from a notification - hashes work better on iOS
-  const urlWithHash = new URL(targetUrl, self.location.origin)
-  urlWithHash.hash = 'from_notification=' + Date.now()
-  const fullUrl = urlWithHash.href
 
-  console.log('[SW v12] Opening URL:', fullUrl)
+  console.log('[SW v13] Target URL:', targetUrl)
 
-  // On iOS PWA, the most reliable approach is to ALWAYS use openWindow
-  // This forces iOS to open the app to the specified URL
   event.waitUntil(
     (async () => {
-      // Always open a new window to the target URL
-      // This is the most reliable way to navigate on iOS
+      // Store navigation intent in IndexedDB FIRST (this persists!)
+      await setPendingNavigation(targetUrl)
+
+      // Try to find existing clients and notify them
+      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+      console.log('[SW v13] Found', clientList.length, 'clients')
+
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin)) {
+          console.log('[SW v13] Notifying client and focusing')
+          // Tell client to check IndexedDB
+          client.postMessage({ type: 'CHECK_NAVIGATION' })
+          try {
+            await client.focus()
+          } catch (e) {
+            console.log('[SW v13] Focus failed:', e)
+          }
+          return
+        }
+      }
+
+      // No existing client, open new window
+      console.log('[SW v13] No client, opening window')
       if (clients.openWindow) {
-        console.log('[SW v12] Using openWindow for reliable navigation')
+        const fullUrl = new URL(targetUrl, self.location.origin).href
         return clients.openWindow(fullUrl)
       }
     })()
@@ -158,4 +208,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v12] Custom service worker loaded')
+console.log('[SW v13] Custom service worker loaded')
