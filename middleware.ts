@@ -8,6 +8,9 @@ const publicRoutes = [
   '/api/auth/logout',
   '/api/auth/google/callback',
   '/auth/callback', // Supabase OAuth callback
+  '/sw.js', // Service worker must be accessible for push notifications
+  '/api/push-subscription', // Push subscription management
+  '/api/send-notifications', // Push notification sending (called by cron)
 ]
 
 // API routes that need protection
