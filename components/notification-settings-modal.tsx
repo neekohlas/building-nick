@@ -35,23 +35,20 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   // Check service worker version
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(reg => {
-        // Try to get version by fetching the SW file
-        fetch('/sw.js')
-          .then(r => r.text())
-          .then(text => {
-            const match = text.match(/SW_VERSION\s*=\s*(\d+)/)
-            if (match) {
-              setSwVersion(`v${match[1]} (file)`)
-            }
-          })
-        // Also check if SW is active
-        if (reg.active) {
-          setSwVersion(prev => prev.includes('file') ? prev : 'active')
-        }
-      }).catch(() => {
-        setSwVersion('not ready')
-      })
+      // Fetch the SW file to get version
+      fetch('/sw.js')
+        .then(r => r.text())
+        .then(text => {
+          const match = text.match(/SW_VERSION\s*=\s*(\d+)/)
+          if (match) {
+            setSwVersion(`v${match[1]}`)
+          } else {
+            setSwVersion('no version')
+          }
+        })
+        .catch(() => {
+          setSwVersion('fetch failed')
+        })
     } else {
       setSwVersion('unsupported')
     }
@@ -137,14 +134,21 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
       const response = await fetch('/api/send-notifications?force=true')
       const data = await response.json()
       if (data.forceResults) {
-        setServerPushStatus(`Sent: ${data.forceResults.sent}, Failed: ${data.forceResults.failed}`)
+        const { sent, failed, errors } = data.forceResults
+        if (errors && errors.length > 0) {
+          // Show first error (truncated)
+          const errMsg = errors[0].substring(0, 40)
+          setServerPushStatus(`Failed: ${errMsg}`)
+        } else {
+          setServerPushStatus(`Sent: ${sent}, Failed: ${failed}`)
+        }
       } else {
         setServerPushStatus('No results')
       }
     } catch (e) {
       setServerPushStatus(`Error: ${e}`)
     }
-    setTimeout(() => setServerPushStatus(null), 5000)
+    setTimeout(() => setServerPushStatus(null), 8000)
   }
 
   const formatCountdown = (ms: number | null): string => {
