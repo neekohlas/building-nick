@@ -354,7 +354,7 @@ export async function POST(request: NextRequest) {
           title: message.title,
           body: message.body,
           tag: 'building-nick-scheduled',
-          url: '/'
+          url: '/today'
         })
 
         // Web push options - don't set topic for iOS web push (Apple rejects invalid topics)
@@ -468,7 +468,7 @@ export async function GET(request: NextRequest) {
           title: message.title,
           body: message.body,
           tag: 'building-nick-test',
-          url: '/'
+          url: '/today'
         })
 
         // Web push options - don't set topic for iOS web push (Apple rejects invalid topics)

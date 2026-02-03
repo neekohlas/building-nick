@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 4
+const SW_VERSION = 5
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -47,7 +47,7 @@ self.addEventListener('notificationclose', (event) => {
 
 // Handle push events (for server-side push notifications)
 self.addEventListener('push', (event) => {
-  console.log('[SW v4] Push event received!')
+  console.log('[SW v5] Push event received!')
 
   // CRITICAL: On iOS, we must show a notification synchronously within waitUntil
   // Create the notification promise immediately
@@ -57,6 +57,9 @@ self.addEventListener('push', (event) => {
     let body = 'Time to check in on your activities!'
     let tag = 'building-nick-push'
 
+    // URL to open when notification is clicked (default to Today page)
+    let url = '/today'
+
     // Try to parse push data if available
     if (event.data) {
       try {
@@ -64,32 +67,34 @@ self.addEventListener('push', (event) => {
         title = data.title || title
         body = data.body || body
         tag = data.tag || tag
-        console.log('[SW v4] Push data parsed:', { title, body, tag })
+        url = data.url || url
+        console.log('[SW v5] Push data parsed:', { title, body, tag, url })
       } catch (e) {
         // Try as text
         try {
           body = event.data.text() || body
-          console.log('[SW v4] Push data as text:', body)
+          console.log('[SW v5] Push data as text:', body)
         } catch (e2) {
-          console.error('[SW v4] Failed to parse push data:', e, e2)
+          console.error('[SW v5] Failed to parse push data:', e, e2)
         }
       }
     } else {
-      console.log('[SW v4] Push with no data, using defaults')
+      console.log('[SW v5] Push with no data, using defaults')
     }
 
-    // iOS requires minimal options - keep it simple
+    // iOS requires minimal options - keep it simple but include data for click handler
     try {
       await self.registration.showNotification(title, {
         body: body,
         tag: tag,
-        icon: '/apple-icon.png'
+        icon: '/apple-icon.png',
+        data: { url: url }
       })
-      console.log('[SW v4] Notification shown successfully')
+      console.log('[SW v5] Notification shown successfully')
     } catch (err) {
-      console.error('[SW v4] Failed to show notification:', err)
+      console.error('[SW v5] Failed to show notification:', err)
       // Absolute minimal fallback
-      await self.registration.showNotification(title, { body: body })
+      await self.registration.showNotification(title, { body: body, data: { url: url } })
     }
   })()
 
@@ -150,4 +155,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v4] Custom service worker loaded')
+console.log('[SW v5] Custom service worker loaded')
