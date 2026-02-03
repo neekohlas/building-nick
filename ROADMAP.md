@@ -192,7 +192,82 @@ Hands-free audio guidance for activities with step-by-step instructions. The app
 
 ---
 
-## Feature 6: Advanced AI Health Coach (Voice Agent)
+## Feature 6: Push Notifications
+
+**Status:** COMPLETE
+**Priority:** High
+**Complexity:** Medium
+**Completed:** February 2, 2026
+
+### Description
+Push notifications to remind users about upcoming activities, with intelligent scheduling that respects time blocks and existing completions.
+
+### What Was Implemented
+- `/app/api/push-subscription/route.ts` - API to store push subscriptions in Supabase
+- `/app/api/send-notifications/route.ts` - API to send push notifications via web-push
+- `/hooks/use-notifications.ts` - Hook for notification permission and scheduling logic
+- `/public/service-worker.js` - Service worker handling push events and notification display
+- Permission request in the app when user first uses it
+- Notifications 15 minutes before each time block deadline
+- Smart filtering: skips time blocks with no activities or all completed
+- Tap notification → opens the app
+
+### Technical Details
+- VAPID keys for web push authentication
+- Supabase table for storing push subscriptions
+- Service worker registered for background notification handling
+- Works on iOS (PWA), Android, and desktop browsers
+
+### Environment Variables
+```env
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+```
+
+---
+
+## Feature 7: Apple Reminders Integration
+
+**Status:** COMPLETE
+**Priority:** Medium
+**Complexity:** Medium
+**Completed:** February 2, 2026
+
+### Description
+Import reminders from Apple Reminders app via iOS Shortcuts, displaying them inline with activities in the Today view.
+
+### What Was Implemented
+- `/lib/reminders.ts` - Parsing, storage, and sync logic for reminders
+- `/components/reminders-sync-modal.tsx` - Modal for pasting clipboard data from Shortcuts
+- `/components/reminder-card.tsx` - Card component for displaying reminders
+- Reminders appear in correct time blocks based on due time
+- All-day reminders show in the "Before 6 AM" block
+- Overdue reminders section at top of Today view
+- Completion tracking: mark done in app, stays done even after re-sync
+- One-way sync: completing in the app doesn't update Apple Reminders
+
+### iOS Shortcut Flow
+1. User runs "SyncRemindersToHabitApp" shortcut on iPhone/iPad
+2. Shortcut exports reminders as JSON to clipboard
+3. Shortcut opens the web app with `?fromShortcut=reminders`
+4. App detects return and shows sync modal
+5. User pastes clipboard, reminders import
+
+### Sync Behavior
+- New reminders are added
+- Existing reminders are updated (title, date changes)
+- **Important:** Reminders completed in the app stay completed, even if they're uncompleted in Apple Reminders (one-way sync)
+- Old reminders (>2 months) automatically cleaned up
+
+### Files
+- `lib/reminders.ts` - Core logic
+- `components/reminders-sync-modal.tsx` - Import UI
+- `components/reminder-card.tsx` - Display component
+- `components/today-view.tsx` - Integration into time blocks
+
+---
+
+## Feature 8: Advanced AI Health Coach (Voice Agent)
 
 **Status:** Not Started
 **Priority:** High
@@ -292,10 +367,12 @@ A conversational voice agent that users can talk to naturally. The agent can dis
 3. **Heart-Mind-Body Spectrum** ✓
 4. **Claude AI Health Coach** ✓
 5. **Audio Instruction Mode** ✓
+6. **Push Notifications** ✓
+7. **Apple Reminders Integration** ✓
 
 ### Remaining Features
 
-6. **Advanced AI Health Coach (Voice Agent)** (4-6 sessions)
+8. **Advanced AI Health Coach (Voice Agent)** (4-6 sessions)
    - Most ambitious feature
    - Builds on existing audio and AI infrastructure
    - Could start with turn-based and evolve to streaming
@@ -339,7 +416,7 @@ ELEVENLABS_API_KEY=
 
 ---
 
-## Feature 7: Multi-User Support
+## Feature 9: Multi-User Support
 
 **Status:** Foundation Complete (Single-User Mode Active)
 **Priority:** Low (Future Enhancement)
@@ -517,4 +594,4 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
 
 ---
 
-*Last Updated: February 1, 2026*
+*Last Updated: February 2, 2026*

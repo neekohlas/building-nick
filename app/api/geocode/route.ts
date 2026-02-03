@@ -23,19 +23,64 @@ export async function GET(request: Request) {
     } as GeocodeResponse)
   }
 
-  const apiKey = process.env.OPENWEATHER_API_KEY
+  // OpenWeather geocoding API is free and works with any OpenWeather API key
+  // We can also use Weatherbit's city parameter, but OpenWeather geocoding gives us coordinates
+  const apiKey = process.env.OPENWEATHER_API_KEY || process.env.WEATHERBIT_API_KEY
 
   if (!apiKey) {
     return NextResponse.json({
       success: false,
-      error: 'OpenWeather API key not configured'
+      error: 'Weather API key not configured'
     } as GeocodeResponse)
   }
+
+  // If we only have Weatherbit key, use Nominatim (OpenStreetMap) for geocoding
+  const useNominatim = !process.env.OPENWEATHER_API_KEY && process.env.WEATHERBIT_API_KEY
 
   try {
     // Check if it's a zip code (US format: 5 digits, or with country code like "10001,US")
     const isZipCode = /^\d{5}(,\w{2})?$/.test(query.trim())
 
+    // Use Nominatim (OpenStreetMap) for geocoding - free and doesn't require API key
+    if (useNominatim) {
+      // Nominatim API (OpenStreetMap) - free geocoding service
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&addressdetails=1`
+
+      const response = await fetch(nominatimUrl, {
+        headers: {
+          'User-Agent': 'HabitTrackingApp/1.0' // Nominatim requires a User-Agent
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Geocoding API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (!data || data.length === 0) {
+        return NextResponse.json({
+          success: false,
+          error: 'Location not found'
+        } as GeocodeResponse)
+      }
+
+      const result = data[0]
+      const address = result.address || {}
+
+      return NextResponse.json({
+        success: true,
+        location: {
+          lat: parseFloat(result.lat),
+          lon: parseFloat(result.lon),
+          name: address.city || address.town || address.village || address.county || result.display_name.split(',')[0],
+          country: address.country_code?.toUpperCase() || '',
+          state: address.state
+        }
+      } as GeocodeResponse)
+    }
+
+    // Use OpenWeather geocoding API (free)
     let url: string
     if (isZipCode) {
       // Use zip code geocoding

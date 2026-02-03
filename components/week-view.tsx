@@ -25,7 +25,7 @@ import { Activity, getQuickMindBodyActivities, getPhysicalActivities } from '@/l
 import { DailySchedule } from '@/hooks/use-storage'
 import { useSync } from '@/hooks/use-sync'
 import { useActivities } from '@/hooks/use-activities'
-import { useWeather, getWeatherEmoji, formatTemp, WeatherDay } from '@/hooks/use-weather'
+import { useWeather, getWeatherEmoji, formatTemp, WeatherDay, WeatherHour } from '@/hooks/use-weather'
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventCard, CalendarEventListItem } from './calendar-event-card'
 import { WeatherDetailModal } from './weather-detail-modal'
@@ -41,7 +41,7 @@ type TimeBlock = 'before6am' | 'before9am' | 'beforeNoon' | 'before230pm' | 'bef
 export function WeekView({ onBack }: WeekViewProps) {
   const storage = useSync()
   const { getActivity } = useActivities()
-  const { getWeatherForDate, isLoading: weatherLoading, locationName } = useWeather()
+  const { getWeatherForDate, getHourlyForDate, isLoading: weatherLoading, locationName } = useWeather()
   const { isConnected: calendarConnected, getEventsForDate, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [visibleDates, setVisibleDates] = useState<Date[]>([])
@@ -61,6 +61,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [pushActivity, setPushActivity] = useState<Activity | null>(null)
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [weatherDetailData, setWeatherDetailData] = useState<WeatherDay | null>(null)
+  const [weatherDetailDate, setWeatherDetailDate] = useState<string | null>(null)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
 
   // Initialize extended dates for scrolling (2 weeks before and after)
@@ -473,6 +474,7 @@ export function WeekView({ onBack }: WeekViewProps) {
                 <button
                   onClick={() => {
                     setWeatherDetailData(selectedWeather)
+                    setWeatherDetailDate(formatDateISO(selectedDate))
                     setShowWeatherDetail(true)
                   }}
                   className="text-xs text-muted-foreground flex items-center gap-1 hover:bg-muted px-1.5 py-0.5 rounded transition-colors"
@@ -652,10 +654,12 @@ export function WeekView({ onBack }: WeekViewProps) {
       {showWeatherDetail && weatherDetailData && (
         <WeatherDetailModal
           weather={weatherDetailData}
+          hourly={weatherDetailDate ? getHourlyForDate(weatherDetailDate) : undefined}
           locationName={locationName}
           onClose={() => {
             setShowWeatherDetail(false)
             setWeatherDetailData(null)
+            setWeatherDetailDate(null)
           }}
         />
       )}

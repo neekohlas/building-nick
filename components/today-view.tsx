@@ -17,7 +17,7 @@ import {
   TimeBlock
 } from '@/lib/activities'
 import { useActivities } from '@/hooks/use-activities'
-import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor, WeatherDay } from '@/hooks/use-weather'
+import { useWeather, getWeatherEmoji, formatTemp, isBadWeatherForOutdoor, WeatherDay, WeatherHour } from '@/hooks/use-weather'
 import { useCalendar } from '@/hooks/use-calendar'
 import { CalendarEventCard } from './calendar-event-card'
 import { ReminderCard, OverdueRemindersSection } from './reminder-card'
@@ -80,7 +80,7 @@ const getInstanceKey = (activityId: string, timeBlock: string, index: number) =>
 export function TodayView({ onOpenMenu }: TodayViewProps) {
   const storage = useSync()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
-  const { weather, getWeatherForDate, locationName } = useWeather()
+  const { weather, getWeatherForDate, getHourlyForDate, locationName, isLoading: weatherLoading, error: weatherError } = useWeather()
   const { isConnected: calendarConnected, getEventsForTimeBlock, formatEventTime, getEventDuration } = useCalendar()
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
   // Instance-based completion tracking: keys are `${activityId}_${timeBlock}_${index}`
@@ -815,7 +815,9 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
         let insertIndex = activities.length // Default to end
 
         for (let i = 0; i < activities.length; i++) {
-          const itemEl = itemRefs.current.get(`${block}-${activities[i]}`)
+          // Use the same key format as in the render: ${block}-${activityId}-${index}
+          const itemKey = `${block}-${activities[i]}-${i}`
+          const itemEl = itemRefs.current.get(itemKey)
           if (itemEl) {
             const itemRect = itemEl.getBoundingClientRect()
             const itemMiddle = itemRect.top + itemRect.height / 2
@@ -966,7 +968,11 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   }
 
   // Get selected date's weather
-  const selectedDateWeather = getWeatherForDate(dateStr)
+  // OpenWeather 2.5 API (fallback) may not include today in forecasts - use first available day as fallback
+  const exactDateWeather = getWeatherForDate(dateStr)
+  const selectedDateWeather = exactDateWeather || (
+    isToday && weather?.daily?.[0] ? weather.daily[0] : undefined
+  )
   const hasOutdoorActivities = schedule && Object.values(schedule.activities).flat().some(id => {
     const activity = getActivity(id)
     return activity?.outdoor || activity?.weatherDependent
@@ -1029,7 +1035,15 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
       {/* Weather + Motivation Card */}
       <div className="rounded-xl border bg-card p-5 shadow-sm">
-        {selectedDateWeather && (
+        {weatherLoading ? (
+          <div className="flex items-center gap-3 mb-3 pb-3 border-b border-border">
+            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+            <div className="flex-1 space-y-2">
+              <div className="w-16 h-5 bg-muted animate-pulse rounded" />
+              <div className="w-24 h-4 bg-muted animate-pulse rounded" />
+            </div>
+          </div>
+        ) : selectedDateWeather ? (
           <button
             onClick={() => setShowWeatherDetail(true)}
             className="w-full flex items-center gap-3 mb-3 pb-3 border-b border-border hover:bg-muted/50 -mx-2 px-2 py-1 rounded-lg transition-colors text-left"
@@ -1049,7 +1063,13 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
               </div>
             )}
           </button>
-        )}
+        ) : weather?.daily && weather.daily.length > 0 ? (
+          // Weather loaded but no forecast for this specific date (e.g., viewing past/far future date)
+          <div className="flex items-center gap-3 mb-3 pb-3 border-b border-border text-muted-foreground">
+            <span className="text-2xl">📅</span>
+            <p className="text-sm">Weather forecast not available for this date</p>
+          </div>
+        ) : null}
         {badWeatherWarning && (
           <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm">
             ⚠️ Outdoor activities may be affected by weather today
@@ -1351,6 +1371,7 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
       {showWeatherDetail && selectedDateWeather && (
         <WeatherDetailModal
           weather={selectedDateWeather}
+          hourly={getHourlyForDate(dateStr)}
           locationName={locationName}
           onClose={() => setShowWeatherDetail(false)}
         />
