@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
-export function ServiceWorkerRegister() {
+function ServiceWorkerRegisterInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -86,4 +86,12 @@ export function ServiceWorkerRegister() {
   }, [router])
 
   return null
+}
+
+export function ServiceWorkerRegister() {
+  return (
+    <Suspense fallback={null}>
+      <ServiceWorkerRegisterInner />
+    </Suspense>
+  )
 }
