@@ -3,11 +3,5 @@
   "framework": "nextjs",
   "buildCommand": "next build --webpack",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
-  "crons": [
-    {
-      "path": "/api/send-notifications",
-      "schedule": "* * * * *"
-    }
-  ]
+  "installCommand": "npm install"
 }
