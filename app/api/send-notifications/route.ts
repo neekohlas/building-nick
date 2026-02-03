@@ -229,10 +229,11 @@ export async function GET(request: NextRequest) {
         results.sent++
       } catch (e: unknown) {
         results.failed++
-        const err = e as { message?: string; statusCode?: number; body?: string }
-        const errorMsg = `${err.statusCode || 'no-code'}: ${err.message || String(e)}`
+        const err = e as { message?: string; statusCode?: number; body?: string; headers?: Record<string, string> }
+        // Include the response body from Apple - this contains the actual error reason
+        const errorMsg = `${err.statusCode || 'no-code'}: ${err.body || err.message || String(e)}`
         results.errors.push(errorMsg)
-        console.error('[Send Notifications] Force push error:', err)
+        console.error('[Send Notifications] Force push error:', JSON.stringify(err, null, 2))
       }
     }
 
