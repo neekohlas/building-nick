@@ -125,6 +125,28 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const endpoint = searchParams.get('endpoint')
+    const clearAll = searchParams.get('all') === 'true'
+
+    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+    if (clearAll) {
+      // Clear all subscriptions (for debugging)
+      const { error } = await supabase
+        .from('push_subscriptions')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all rows
+
+      if (error) {
+        console.error('[Push API] Error clearing all subscriptions:', error)
+        return NextResponse.json(
+          { error: 'Failed to clear subscriptions' },
+          { status: 500 }
+        )
+      }
+
+      console.log('[Push API] All subscriptions cleared')
+      return NextResponse.json({ success: true, message: 'All subscriptions cleared' })
+    }
 
     if (!endpoint) {
       return NextResponse.json(
@@ -132,8 +154,6 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       )
     }
-
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
     const { error } = await supabase
       .from('push_subscriptions')
