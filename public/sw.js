@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 5
+const SW_VERSION = 6
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -20,21 +20,25 @@ self.addEventListener('notificationclick', (event) => {
 
   event.notification.close()
 
-  // Get the URL from notification data, default to root
-  const url = event.notification.data?.url || '/'
+  // Get the URL from notification data, default to Today page
+  const targetUrl = event.notification.data?.url || '/today'
+  const fullUrl = new URL(targetUrl, self.location.origin).href
 
-  // Focus existing window or open new one
+  console.log('[SW] Opening URL:', fullUrl)
+
+  // Focus existing window and navigate, or open new one
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Try to focus an existing window
+      // Try to find an existing window and navigate it
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          return client.focus()
+          // Navigate to the target URL, then focus
+          return client.navigate(fullUrl).then(() => client.focus())
         }
       }
       // Open new window if none found
       if (clients.openWindow) {
-        return clients.openWindow(url)
+        return clients.openWindow(fullUrl)
       }
     })
   )
@@ -47,7 +51,7 @@ self.addEventListener('notificationclose', (event) => {
 
 // Handle push events (for server-side push notifications)
 self.addEventListener('push', (event) => {
-  console.log('[SW v5] Push event received!')
+  console.log('[SW v6] Push event received!')
 
   // CRITICAL: On iOS, we must show a notification synchronously within waitUntil
   // Create the notification promise immediately
@@ -68,18 +72,18 @@ self.addEventListener('push', (event) => {
         body = data.body || body
         tag = data.tag || tag
         url = data.url || url
-        console.log('[SW v5] Push data parsed:', { title, body, tag, url })
+        console.log('[SW v6] Push data parsed:', { title, body, tag, url })
       } catch (e) {
         // Try as text
         try {
           body = event.data.text() || body
-          console.log('[SW v5] Push data as text:', body)
+          console.log('[SW v6] Push data as text:', body)
         } catch (e2) {
-          console.error('[SW v5] Failed to parse push data:', e, e2)
+          console.error('[SW v6] Failed to parse push data:', e, e2)
         }
       }
     } else {
-      console.log('[SW v5] Push with no data, using defaults')
+      console.log('[SW v6] Push with no data, using defaults')
     }
 
     // iOS requires minimal options - keep it simple but include data for click handler
@@ -90,9 +94,9 @@ self.addEventListener('push', (event) => {
         icon: '/apple-icon.png',
         data: { url: url }
       })
-      console.log('[SW v5] Notification shown successfully')
+      console.log('[SW v6] Notification shown successfully')
     } catch (err) {
-      console.error('[SW v5] Failed to show notification:', err)
+      console.error('[SW v6] Failed to show notification:', err)
       // Absolute minimal fallback
       await self.registration.showNotification(title, { body: body, data: { url: url } })
     }
@@ -155,4 +159,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v5] Custom service worker loaded')
+console.log('[SW v6] Custom service worker loaded')
