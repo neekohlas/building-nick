@@ -68,8 +68,14 @@ export async function subscribeToPush(
   }
 
   try {
-    // Wait for service worker
-    const registration = await navigator.serviceWorker.ready
+    // Wait for service worker with timeout
+    console.log('[Push] Waiting for service worker...')
+    const registrationPromise = navigator.serviceWorker.ready
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Service worker timeout')), 10000)
+    })
+
+    const registration = await Promise.race([registrationPromise, timeoutPromise])
     console.log('[Push] Service worker ready')
 
     // Check for existing subscription

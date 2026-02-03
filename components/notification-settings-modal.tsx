@@ -118,7 +118,8 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
         setSyncStatus('Sync failed - check console')
       }
     } catch (e) {
-      setSyncStatus(`Error: ${e}`)
+      const errMsg = e instanceof Error ? e.message : String(e)
+      setSyncStatus(`Error: ${errMsg}`)
     }
     setTimeout(() => setSyncStatus(null), 5000)
   }
