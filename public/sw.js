@@ -5,7 +5,7 @@
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 7
+const SW_VERSION = 10
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -16,36 +16,63 @@ self.addEventListener('install', (event) => {
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW] Notification clicked:', event.notification.tag)
+  console.log('[SW v10] Notification clicked:', event.notification.tag)
 
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
   const targetUrl = event.notification.data?.url || '/today'
-  const fullUrl = new URL(targetUrl, self.location.origin).href
+  // Add a query param to force navigation - this survives app resume
+  const urlWithParam = new URL(targetUrl, self.location.origin)
+  urlWithParam.searchParams.set('from_notification', Date.now().toString())
+  const fullUrl = urlWithParam.href
 
-  console.log('[SW] Opening URL:', fullUrl)
+  console.log('[SW v10] Opening URL with notification param:', fullUrl)
 
-  // Focus existing window and tell it to navigate, or open new one
+  // On iOS PWA, always use openWindow with the full URL including the notification param
+  // This is the most reliable way to ensure navigation happens
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
-      // Try to find an existing window
+    (async () => {
+      // First, close any existing windows and open fresh to the target URL
+      // This ensures we always land on the right page
+      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true })
+      console.log('[SW v10] Found', clientList.length, 'existing clients')
+
+      // If we have an existing client, try to navigate it
       for (const client of clientList) {
         if (client.url.includes(self.location.origin)) {
-          // Tell the client to navigate via postMessage
+          console.log('[SW v10] Trying to navigate existing client')
+
+          // Send postMessage (works if app is active)
           client.postMessage({ type: 'NAVIGATE', url: targetUrl })
-          // Focus the window
-          if ('focus' in client) {
-            return client.focus()
+
+          // Focus and try navigate
+          try {
+            if ('focus' in client) await client.focus()
+            if ('navigate' in client) {
+              await client.navigate(fullUrl)
+              console.log('[SW v10] client.navigate succeeded')
+              return
+            }
+          } catch (e) {
+            console.log('[SW v10] Navigation failed, will open new window:', e)
+          }
+
+          // If navigate didn't work, open a new window anyway
+          // The app will handle the from_notification param
+          if (clients.openWindow) {
+            return clients.openWindow(fullUrl)
           }
           return
         }
       }
-      // Open new window if none found
+
+      // No existing window, open new one
+      console.log('[SW v10] No existing client, opening new window')
       if (clients.openWindow) {
         return clients.openWindow(fullUrl)
       }
-    })
+    })()
   )
 })
 
@@ -112,10 +139,10 @@ self.addEventListener('push', (event) => {
 
 // Handle messages from the main thread
 self.addEventListener('message', (event) => {
-  console.log('[SW] Message received:', event.data)
+  console.log('[SW v10] Message received:', event.data)
 
   if (event.data?.type === 'SKIP_WAITING') {
-    console.log('[SW] Skip waiting requested')
+    console.log('[SW v10] Skip waiting requested')
     self.skipWaiting()
     return
   }
@@ -164,4 +191,4 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-console.log('[SW v7] Custom service worker loaded')
+console.log('[SW v10] Custom service worker loaded')

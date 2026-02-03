@@ -1,10 +1,34 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 
 export function ServiceWorkerRegister() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+
+  // Check if we were opened from a notification and need to navigate
+  useEffect(() => {
+    const fromNotification = searchParams.get('from_notification')
+    if (fromNotification) {
+      console.log('[SW Register] Opened from notification, current path:', pathname)
+      // Remove the query param and ensure we're on the right page
+      // The SW opened us with /today?from_notification=timestamp
+      // We need to clean up the URL
+      const url = new URL(window.location.href)
+      url.searchParams.delete('from_notification')
+
+      // If we're not on /today, navigate there
+      if (pathname !== '/today') {
+        console.log('[SW Register] Navigating to /today')
+        router.replace('/today')
+      } else {
+        // Just clean up the URL
+        window.history.replaceState({}, '', url.pathname)
+      }
+    }
+  }, [searchParams, pathname, router])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
