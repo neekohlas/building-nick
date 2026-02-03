@@ -298,6 +298,22 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
             </button>
           )}
 
+          {/* Request Permission Button - show if not granted */}
+          {permissionStatus !== 'granted' && (
+            <button
+              type="button"
+              onClick={async () => {
+                const result = await Notification.requestPermission()
+                alert(`Permission result: ${result}`)
+                window.location.reload()
+              }}
+              className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border bg-yellow-50 border-yellow-200 text-yellow-700"
+            >
+              <Bell className="h-4 w-4" />
+              <span className="text-sm font-medium">Request Permission ({permissionStatus})</span>
+            </button>
+          )}
+
           {/* Debug */}
           <div className="text-[10px] text-muted-foreground font-mono text-center space-y-1">
             <p>{permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'}</p>
