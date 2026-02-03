@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Bell, BellOff, Plus, Trash2, TestTube, RefreshCw } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { X, Bell, BellOff, Plus, Trash2, TestTube, RefreshCw, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNotifications } from '@/hooks/use-notifications'
 import { formatNotificationTime, parseTimeString } from '@/lib/notifications'
@@ -29,6 +29,33 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
   const [newTimeValue, setNewTimeValue] = useState('12:00')
   const [testStatus, setTestStatus] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [serverPushStatus, setServerPushStatus] = useState<string | null>(null)
+  const [swVersion, setSwVersion] = useState<string>('checking...')
+
+  // Check service worker version
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => {
+        // Try to get version by fetching the SW file
+        fetch('/sw.js')
+          .then(r => r.text())
+          .then(text => {
+            const match = text.match(/SW_VERSION\s*=\s*(\d+)/)
+            if (match) {
+              setSwVersion(`v${match[1]} (file)`)
+            }
+          })
+        // Also check if SW is active
+        if (reg.active) {
+          setSwVersion(prev => prev.includes('file') ? prev : 'active')
+        }
+      }).catch(() => {
+        setSwVersion('not ready')
+      })
+    } else {
+      setSwVersion('unsupported')
+    }
+  }, [])
 
   const handleEnableNotifications = async () => {
     if (permissionStatus === 'denied') {
@@ -94,6 +121,22 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
       setSyncStatus(`Error: ${e}`)
     }
     setTimeout(() => setSyncStatus(null), 5000)
+  }
+
+  const handleServerPush = async () => {
+    setServerPushStatus('Sending...')
+    try {
+      const response = await fetch('/api/send-notifications?force=true')
+      const data = await response.json()
+      if (data.forceResults) {
+        setServerPushStatus(`Sent: ${data.forceResults.sent}, Failed: ${data.forceResults.failed}`)
+      } else {
+        setServerPushStatus('No results')
+      }
+    } catch (e) {
+      setServerPushStatus(`Error: ${e}`)
+    }
+    setTimeout(() => setServerPushStatus(null), 5000)
   }
 
   const formatCountdown = (ms: number | null): string => {
@@ -220,7 +263,7 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
             </button>
           )}
 
-          {/* Test Button */}
+          {/* Test Button - Local */}
           <button
             type="button"
             onClick={handleSendTest}
@@ -232,13 +275,33 @@ export function NotificationSettingsModal({ onClose }: NotificationSettingsModal
             )}
           >
             <TestTube className="h-4 w-4" />
-            <span className="text-sm font-medium">{testStatus || 'Send Test Notification'}</span>
+            <span className="text-sm font-medium">{testStatus || 'Test Local (SW)'}</span>
           </button>
 
+          {/* Test Button - Server Push */}
+          {preferences.enabled && (
+            <button
+              type="button"
+              onClick={handleServerPush}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 p-3 rounded-xl border touch-manipulation",
+                serverPushStatus?.startsWith('Sent')
+                  ? "bg-green-50 border-green-200 text-green-700"
+                  : serverPushStatus?.startsWith('Error')
+                    ? "bg-red-50 border-red-200 text-red-700"
+                    : "bg-purple-50 border-purple-200 text-purple-700 active:bg-purple-100"
+              )}
+            >
+              <Send className="h-4 w-4" />
+              <span className="text-sm font-medium">{serverPushStatus || 'Test Server Push'}</span>
+            </button>
+          )}
+
           {/* Debug */}
-          <p className="text-[10px] text-muted-foreground font-mono text-center">
-            {permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'}
-          </p>
+          <div className="text-[10px] text-muted-foreground font-mono text-center space-y-1">
+            <p>{permissionStatus} | sw={'serviceWorker' in navigator ? 'yes' : 'no'} | push={isPushSubscribed ? 'yes' : 'no'}</p>
+            <p>SW: {swVersion}</p>
+          </div>
         </div>
 
         {/* Footer */}
