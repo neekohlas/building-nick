@@ -1,12 +1,18 @@
 /**
  * Building Nick - Custom Service Worker for Push Notifications
- * Version: 2
+ * Version: 3
  *
  * This file handles push notifications and notification interactions.
  */
 
-const SW_VERSION = 2
+const SW_VERSION = 3
 console.log('[SW] Service worker version:', SW_VERSION)
+
+// Install event - skip waiting immediately
+self.addEventListener('install', (event) => {
+  console.log('[SW] Installing version', SW_VERSION)
+  self.skipWaiting()
+})
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
@@ -71,25 +77,31 @@ self.addEventListener('push', (event) => {
     console.log('[SW] Push with no data, using defaults')
   }
 
+  // iOS-compatible notification options (no vibrate, renotify, etc.)
   const options = {
     body: body,
     tag: tag,
     icon: '/apple-icon.png',
     badge: '/icon-light-32x32.png',
-    vibrate: [100, 50, 100],
-    requireInteraction: false,
-    renotify: true,
     data: {
       url: url,
       timestamp: new Date().toISOString()
     }
   }
 
+  console.log('[SW] Showing notification with options:', JSON.stringify(options))
+
   // CRITICAL: iOS requires waitUntil with showNotification for push to work
   event.waitUntil(
     self.registration.showNotification(title, options)
-      .then(() => console.log('[SW] Notification shown successfully'))
-      .catch((err) => console.error('[SW] Failed to show notification:', err))
+      .then(() => {
+        console.log('[SW] Notification shown successfully')
+      })
+      .catch((err) => {
+        console.error('[SW] Failed to show notification:', err)
+        // Try with minimal options as fallback
+        return self.registration.showNotification(title, { body: body })
+      })
   )
 })
 
@@ -112,8 +124,6 @@ self.addEventListener('message', (event) => {
         tag: tag || 'building-nick-scheduled',
         icon: '/apple-icon.png',
         badge: '/icon-light-32x32.png',
-        vibrate: [100, 50, 100],
-        requireInteraction: false,
         data: {
           url: '/',
           timestamp: new Date().toISOString()
@@ -135,8 +145,6 @@ self.addEventListener('message', (event) => {
       tag: tag || 'building-nick',
       icon: '/apple-icon.png',
       badge: '/icon-light-32x32.png',
-      vibrate: [100, 50, 100],
-      requireInteraction: false,
       data: {
         url: '/',
         timestamp: new Date().toISOString()
