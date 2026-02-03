@@ -139,9 +139,17 @@ export function saveReminders(reminders: Reminder[]): void {
 
 /**
  * Get last sync time
+ * Only returns a sync time if we actually have stored reminders
+ * (prevents showing stale timestamps when no actual sync has occurred)
  */
 export function getLastRemindersSyncTime(): Date | null {
   if (typeof window === 'undefined') return null
+
+  // Only show sync time if we have actual reminders stored
+  const reminders = getStoredReminders()
+  if (reminders.length === 0) {
+    return null
+  }
 
   const stored = localStorage.getItem(REMINDERS_SYNC_TIME_KEY)
   return stored ? new Date(stored) : null
@@ -151,7 +159,8 @@ export function getLastRemindersSyncTime(): Date | null {
  * Sync reminders from clipboard data
  * - New reminders get added
  * - Existing reminders get updated (completion status, date changes)
- * - Preserves completedInApp flag
+ * - IMPORTANT: If you completed a reminder in the app, it stays completed
+ *   even if it shows as incomplete in the Reminders app (one-way sync)
  */
 export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
   const existing = getStoredReminders()
@@ -170,25 +179,27 @@ export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
       merged.push(newReminder)
       added++
     } else {
-      // Update existing - preserve completedInApp if it was completed in the app
+      // Update existing reminder
+      // KEY LOGIC: Once completed in our app, it stays completed regardless of Reminders app status
+      const wasCompletedInApp = existing.completedInApp === true
+      const wasCompletedInReminders = existing.isCompleted && !existing.completedInApp
+      const nowCompletedInReminders = newReminder.isCompleted
+
+      // Determine final completion status:
+      // - If completed in our app (completedInApp flag), ALWAYS keep it completed
+      // - If completed in Reminders app (incoming isCompleted), mark as completed
+      // - Otherwise, not completed
+      const finalIsCompleted = wasCompletedInApp || nowCompletedInReminders
+
       const mergedReminder: Reminder = {
         ...newReminder,
-        completedInApp: existing.completedInApp
-      }
-
-      // If completed in Reminders app but not marked in our app, update
-      if (newReminder.isCompleted && !existing.isCompleted) {
-        mergedReminder.isCompleted = true
-      }
-
-      // If we completed it in app, keep that status
-      if (existing.completedInApp) {
-        mergedReminder.isCompleted = true
+        isCompleted: finalIsCompleted,
+        completedInApp: wasCompletedInApp // Preserve the flag
       }
 
       merged.push(mergedReminder)
 
-      // Count as updated if anything changed
+      // Count as updated if anything changed (excluding sync time)
       if (existing.dueDate.getTime() !== newReminder.dueDate.getTime() ||
           existing.isCompleted !== mergedReminder.isCompleted ||
           existing.title !== newReminder.title) {

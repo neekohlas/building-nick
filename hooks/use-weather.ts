@@ -2,6 +2,23 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
+export interface WeatherHour {
+  datetime: string // YYYY-MM-DDTHH format
+  temp: number
+  feels_like: number
+  humidity: number
+  wind_speed: number
+  weather: {
+    id: number
+    main: string
+    description: string
+    icon: string
+  }
+  pop: number // Probability of precipitation (0-1)
+  precip?: number
+  snow?: number
+}
+
 export interface WeatherDay {
   date: string
   temp: {
@@ -39,6 +56,7 @@ interface WeatherResponse {
     }
   }
   daily?: WeatherDay[]
+  hourly?: WeatherHour[]
   error?: string
   cached?: boolean
 }
@@ -54,6 +72,7 @@ const LOCATION_CACHE_KEY = 'weather_location'
 const LOCATION_NAME_KEY = 'weather_location_name'
 
 // Weather icon mapping
+// Weatherbit codes: https://www.weatherbit.io/api/codes
 export function getWeatherEmoji(main: string, id?: number): string {
   // Use weather code for more specific icons if available
   if (id) {
@@ -62,14 +81,17 @@ export function getWeatherEmoji(main: string, id?: number): string {
     if (id >= 500 && id < 600) return '🌧️' // Rain
     if (id >= 600 && id < 700) return '❄️' // Snow
     if (id >= 700 && id < 800) return '🌫️' // Atmosphere (fog, mist)
-    if (id === 800) return '☀️' // Clear
-    if (id > 800) return '☁️' // Clouds
+    if (id === 800) return '☀️' // Clear sky
+    if (id === 801) return '🌤️' // Few clouds (11-25%)
+    if (id === 802) return '⛅' // Scattered clouds (25-50%)
+    if (id === 803) return '🌥️' // Broken clouds (51-84%)
+    if (id === 804) return '☁️' // Overcast clouds (85-100%)
   }
 
   // Fallback to main condition
   switch (main.toLowerCase()) {
     case 'clear': return '☀️'
-    case 'clouds': return '☁️'
+    case 'clouds': return '🌤️' // Default to partly cloudy for generic "clouds"
     case 'rain': return '🌧️'
     case 'drizzle': return '🌧️'
     case 'thunderstorm': return '⛈️'
@@ -225,6 +247,12 @@ export function useWeather() {
     return weather?.daily?.find(d => d.date === dateStr)
   }, [weather])
 
+  // Get hourly weather for a specific date (returns hours for that day)
+  const getHourlyForDate = useCallback((dateStr: string): WeatherHour[] => {
+    if (!weather?.hourly) return []
+    return weather.hourly.filter(h => h.datetime.startsWith(dateStr))
+  }, [weather])
+
   // Check if a date has bad weather for outdoor activities
   const hasBadWeather = useCallback((dateStr: string): boolean => {
     const dayWeather = getWeatherForDate(dateStr)
@@ -275,6 +303,7 @@ export function useWeather() {
     weather,
     current: weather?.current,
     daily: weather?.daily || [],
+    hourly: weather?.hourly || [],
     isLoading,
     error,
     isCached: weather?.cached || false,
@@ -282,6 +311,7 @@ export function useWeather() {
     locationName: location?.name,
     refetch,
     getWeatherForDate,
+    getHourlyForDate,
     hasBadWeather,
     updateLocation,
     resetLocation

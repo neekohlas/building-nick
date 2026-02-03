@@ -1,15 +1,40 @@
 'use client'
 
-import { X, Droplets, Wind, Thermometer, Eye, Sun, Sunset } from 'lucide-react'
-import { WeatherDay, getWeatherEmoji, formatTemp } from '@/hooks/use-weather'
+import { X, Droplets, Wind, Thermometer, Eye, Sun, Sunset, Clock } from 'lucide-react'
+import { WeatherDay, WeatherHour, getWeatherEmoji, formatTemp } from '@/hooks/use-weather'
 
 interface WeatherDetailModalProps {
   weather: WeatherDay
+  hourly?: WeatherHour[]
   locationName?: string
   onClose: () => void
 }
 
-export function WeatherDetailModal({ weather, locationName, onClose }: WeatherDetailModalProps) {
+// Format hour from datetime string (e.g., "2024-01-15T14" -> "2 PM")
+function formatHour(datetime: string): string {
+  // Extract hour from formats like "2024-01-15T14" or "2024-01-15:14"
+  const hourMatch = datetime.match(/[T:](\d{2})/)
+  if (!hourMatch) return ''
+  const hour = parseInt(hourMatch[1], 10)
+  if (hour === 0) return '12 AM'
+  if (hour === 12) return '12 PM'
+  if (hour < 12) return `${hour} AM`
+  return `${hour - 12} PM`
+}
+
+// Get cloud coverage description based on weather code
+function getCloudCoverageDescription(weatherId: number): string | null {
+  switch (weatherId) {
+    case 800: return 'Clear sky (0% cloudy)'
+    case 801: return 'Few clouds (11-25% cloudy)'
+    case 802: return 'Scattered clouds (25-50% cloudy)'
+    case 803: return 'Broken clouds (51-84% cloudy)'
+    case 804: return 'Overcast (85-100% cloudy)'
+    default: return null
+  }
+}
+
+export function WeatherDetailModal({ weather, hourly, locationName, onClose }: WeatherDetailModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -75,9 +100,18 @@ export function WeatherDetailModal({ weather, locationName, onClose }: WeatherDe
               <Sun className="h-4 w-4 text-yellow-500" />
               <span className="text-sm font-medium">Conditions</span>
             </div>
+            {/* Cloud coverage detail for cloud-related weather codes */}
+            {getCloudCoverageDescription(weather.weather.id) && (
+              <p className="text-sm font-medium mb-1">
+                {getCloudCoverageDescription(weather.weather.id)}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               {weather.weather.main === 'Clear' && 'Clear skies expected. Great day for outdoor activities!'}
-              {weather.weather.main === 'Clouds' && 'Cloudy conditions. Outdoor activities should be fine.'}
+              {weather.weather.main === 'Clouds' && weather.weather.id === 801 && 'Mostly sunny with a few clouds. Great for outdoor activities!'}
+              {weather.weather.main === 'Clouds' && weather.weather.id === 802 && 'Partly cloudy skies. Good conditions for outdoor activities.'}
+              {weather.weather.main === 'Clouds' && weather.weather.id === 803 && 'Mostly cloudy with some sun breaks. Outdoor activities should be fine.'}
+              {weather.weather.main === 'Clouds' && weather.weather.id === 804 && 'Overcast skies. Outdoor activities should still be fine.'}
               {weather.weather.main === 'Rain' && 'Rain expected. Consider indoor alternatives for outdoor activities.'}
               {weather.weather.main === 'Drizzle' && 'Light drizzle possible. Outdoor activities may be affected.'}
               {weather.weather.main === 'Thunderstorm' && 'Thunderstorms expected. Plan for indoor activities.'}
@@ -87,6 +121,31 @@ export function WeatherDetailModal({ weather, locationName, onClose }: WeatherDe
                 `${weather.weather.description}. Check conditions before outdoor activities.`}
             </p>
           </div>
+
+          {/* Hourly Forecast */}
+          {hourly && hourly.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Hourly Forecast</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-thin">
+                {hourly.map((hour, index) => (
+                  <div
+                    key={index}
+                    className="flex-shrink-0 flex flex-col items-center p-2 rounded-lg bg-muted/50 min-w-[60px]"
+                  >
+                    <span className="text-xs text-muted-foreground">{formatHour(hour.datetime)}</span>
+                    <span className="text-lg my-1">{getWeatherEmoji(hour.weather.main, hour.weather.id)}</span>
+                    <span className="text-sm font-medium">{formatTemp(hour.temp)}</span>
+                    {hour.pop > 0.1 && (
+                      <span className="text-xs text-blue-500">{Math.round(hour.pop * 100)}%</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Activity Recommendations */}
           {weather.pop > 0.3 && (
