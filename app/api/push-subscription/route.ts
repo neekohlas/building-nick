@@ -5,6 +5,46 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const defaultUserId = process.env.NEXT_PUBLIC_DEFAULT_USER_ID || 'default-user'
 
+// GET - Debug info and clear all option
+export async function GET(request: NextRequest) {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const clearAll = searchParams.get('clear') === 'all'
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+  if (clearAll) {
+    const { error } = await supabase
+      .from('push_subscriptions')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000')
+
+    if (error) {
+      return NextResponse.json({ error: 'Failed to clear', details: error }, { status: 500 })
+    }
+    return NextResponse.json({ success: true, message: 'All subscriptions cleared' })
+  }
+
+  // Return current subscriptions
+  const { data, error } = await supabase.from('push_subscriptions').select('*')
+  if (error) {
+    return NextResponse.json({ error: 'Failed to fetch', details: error }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    count: data?.length || 0,
+    subscriptions: data?.map(s => ({
+      id: s.id,
+      endpoint: s.endpoint?.substring(0, 50) + '...',
+      timezone: s.timezone,
+      times: s.notification_times
+    }))
+  })
+}
+
 // POST - Subscribe to push notifications
 export async function POST(request: NextRequest) {
   if (!supabaseUrl || !supabaseAnonKey) {
