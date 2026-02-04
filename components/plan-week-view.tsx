@@ -30,7 +30,6 @@ import { CalendarEventListItem } from './calendar-event-card'
 import { HealthCoachModal } from './health-coach-modal'
 import { RoutinesModal } from './routines-modal'
 import { SpectrumBar } from './spectrum-bar'
-import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 import { formatDateISO, addDays, isWeekday, getShortDayName, getDayNumber } from '@/lib/date-utils'
 
 interface PlanWeekViewProps {
@@ -1611,7 +1610,7 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
                                 {!activity.video && activity.link && (
                                   <ExternalLink className="h-3 w-3" title="External link" />
                                 )}
-                                {hasMultipleSteps(activity.instructions || '') && (
+                                {activity.voiceGuided && (
                                   <Volume2 className="h-3 w-3" title="Audio guide available" />
                                 )}
                               </div>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp } from 'lucide-react'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
@@ -49,9 +49,11 @@ interface ActivityDetailModalProps {
   isCompleted: boolean
   onClose: () => void
   onComplete: () => void
-  onSwap: () => void
+  onSwap?: () => void
   onPush?: () => void
   onRemove?: () => void
+  onAddToToday?: () => void  // For library view - opens time slot picker
+  mode?: 'today' | 'library'  // Determines which actions to show
 }
 
 export function ActivityDetailModal({
@@ -61,7 +63,9 @@ export function ActivityDetailModal({
   onComplete,
   onSwap,
   onPush,
-  onRemove
+  onRemove,
+  onAddToToday,
+  mode = 'today'
 }: ActivityDetailModalProps) {
   const [showAudioMode, setShowAudioMode] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -237,48 +241,64 @@ export function ActivityDetailModal({
 
         {/* Actions - Fixed at bottom */}
         <div className="flex flex-col gap-3 p-4 border-t bg-card shrink-0">
-          <div className="flex gap-3">
+          {mode === 'library' ? (
+            /* Library mode - Add to Today button */
             <Button
-              variant="outline"
-              className="flex-1 bg-transparent"
-              onClick={onSwap}
+              className="w-full"
+              onClick={onAddToToday}
             >
-              Swap Activity
+              <Plus className="h-4 w-4 mr-2" />
+              Add to Today
             </Button>
-            <Button
-              className="flex-1"
-              onClick={onComplete}
-              disabled={isCompleted}
-            >
-              {isCompleted ? (
-                <>
-                  <Check className="h-4 w-4 mr-2" />
-                  Completed
-                </>
-              ) : (
-                'Mark Complete'
+          ) : (
+            /* Today mode - Swap and Complete buttons */
+            <>
+              <div className="flex gap-3">
+                {onSwap && (
+                  <Button
+                    variant="outline"
+                    className="flex-1 bg-transparent"
+                    onClick={onSwap}
+                  >
+                    Swap Activity
+                  </Button>
+                )}
+                <Button
+                  className={onSwap ? "flex-1" : "w-full"}
+                  onClick={onComplete}
+                  disabled={isCompleted}
+                >
+                  {isCompleted ? (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Completed
+                    </>
+                  ) : (
+                    'Mark Complete'
+                  )}
+                </Button>
+              </div>
+              {onPush && !isCompleted && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-muted-foreground"
+                  onClick={onPush}
+                >
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  Push to Tomorrow
+                </Button>
               )}
-            </Button>
-          </div>
-          {onPush && !isCompleted && (
-            <Button
-              variant="ghost"
-              className="w-full text-muted-foreground"
-              onClick={onPush}
-            >
-              <CalendarClock className="h-4 w-4 mr-2" />
-              Push to Tomorrow
-            </Button>
-          )}
-          {onRemove && (
-            <Button
-              variant="ghost"
-              className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={onRemove}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remove from Schedule
-            </Button>
+              {onRemove && (
+                <Button
+                  variant="ghost"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={onRemove}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove from Schedule
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

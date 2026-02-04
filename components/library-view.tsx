@@ -1,14 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, ExternalLink, Star, Loader2, Video, Volume2 } from 'lucide-react'
+import { Clock, ExternalLink, Star, Loader2, Video, Volume2, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category } from '@/lib/activities'
-import { formatDuration } from '@/lib/date-utils'
+import { formatDuration, formatDateISO } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SpectrumBar } from './spectrum-bar'
 import { useActivities } from '@/hooks/use-activities'
-import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
+import { useStorage, TimeBlock } from '@/hooks/use-storage'
+import { TIME_BLOCKS, BLOCK_LABELS } from '@/lib/notifications'
+import { Button } from '@/components/ui/button'
 
 interface LibraryViewProps {
   onBack: () => void
@@ -23,8 +25,12 @@ const FILTERS: { value: 'all' | Category; label: string }[] = [
 
 export function LibraryView({ onBack }: LibraryViewProps) {
   const { getAllActivities, isLoading } = useActivities()
+  const storage = useStorage()
   const [filter, setFilter] = useState<'all' | Category>('all')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
+  const [showTimeSlotPicker, setShowTimeSlotPicker] = useState(false)
+  const [activityToAdd, setActivityToAdd] = useState<Activity | null>(null)
+  const [addedMessage, setAddedMessage] = useState<string | null>(null)
 
   // Get all activities from Notion-synced data, filter by category if needed
   const allActivities = getAllActivities()
@@ -40,6 +46,52 @@ export function LibraryView({ onBack }: LibraryViewProps) {
     return a.name.localeCompare(b.name)
   })
 
+  const handleAddToToday = () => {
+    if (selectedActivity) {
+      setActivityToAdd(selectedActivity)
+      setShowTimeSlotPicker(true)
+      setSelectedActivity(null)
+    }
+  }
+
+  const handleSelectTimeSlot = async (timeBlock: TimeBlock) => {
+    if (!activityToAdd || !storage.isReady) return
+
+    const today = formatDateISO(new Date())
+
+    // Get current schedule for today
+    let schedule = await storage.getDailySchedule(today)
+
+    if (!schedule) {
+      // Create new schedule with empty time blocks
+      schedule = {
+        date: today,
+        activities: {
+          before6am: [],
+          before9am: [],
+          beforeNoon: [],
+          before230pm: [],
+          before5pm: [],
+          before9pm: []
+        }
+      }
+    }
+
+    // Add activity to selected time block if not already there
+    if (!schedule.activities[timeBlock].includes(activityToAdd.id)) {
+      schedule.activities[timeBlock].push(activityToAdd.id)
+      await storage.saveDailySchedule(schedule)
+    }
+
+    // Show success message
+    setAddedMessage(`Added "${activityToAdd.name}" to ${BLOCK_LABELS[timeBlock]}`)
+    setTimeout(() => setAddedMessage(null), 3000)
+
+    // Close picker
+    setShowTimeSlotPicker(false)
+    setActivityToAdd(null)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -51,6 +103,14 @@ export function LibraryView({ onBack }: LibraryViewProps) {
 
   return (
     <div className="space-y-6">
+      {/* Success Message Toast */}
+      {addedMessage && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <Check className="h-4 w-4" />
+          {addedMessage}
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold">Activity Library</h2>
@@ -110,7 +170,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
                   {!activity.video && activity.link && (
                     <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" title="External link" />
                   )}
-                  {hasMultipleSteps(activity.instructions) && (
+                  {activity.voiceGuided && (
                     <Volume2 className="h-3.5 w-3.5 text-muted-foreground" title="Audio guide available" />
                   )}
                 </div>
@@ -147,8 +207,54 @@ export function LibraryView({ onBack }: LibraryViewProps) {
           isCompleted={false}
           onClose={() => setSelectedActivity(null)}
           onComplete={() => setSelectedActivity(null)}
-          onSwap={() => {}}
+          onAddToToday={handleAddToToday}
+          mode="library"
         />
+      )}
+
+      {/* Time Slot Picker Modal */}
+      {showTimeSlotPicker && activityToAdd && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => {
+            setShowTimeSlotPicker(false)
+            setActivityToAdd(null)
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-card p-6 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Select Time Slot</h3>
+              <button
+                onClick={() => {
+                  setShowTimeSlotPicker(false)
+                  setActivityToAdd(null)
+                }}
+                className="p-2 rounded-lg text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Add "{activityToAdd.name}" to today's schedule:
+            </p>
+            <div className="space-y-2">
+              {TIME_BLOCKS.map(block => (
+                <Button
+                  key={block}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleSelectTimeSlot(block)}
+                >
+                  <Clock className="h-4 w-4 mr-2" />
+                  {BLOCK_LABELS[block]}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
