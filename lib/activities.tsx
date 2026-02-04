@@ -573,6 +573,15 @@ export function getRunningActivities(): Activity[] {
   ].filter(Boolean) as Activity[]
 }
 
+// Check if activity has any videos (either via video field or lessons)
+export function hasVideo(activity: Activity): boolean {
+  // Check direct video field
+  if (activity.video) return true
+  // Check lessons for youtube or vimeo types
+  if (activity.lessons?.some(l => l.type === 'youtube' || l.type === 'vimeo')) return true
+  return false
+}
+
 // Get activities by their default time block
 export function getActivitiesByTimeBlock(timeBlock: TimeBlock): Activity[] {
   return Object.values(ACTIVITIES).filter(a => a.defaultTimeBlock === timeBlock)

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Clock, ExternalLink, Star, Loader2, Video, Volume2, X, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Activity, CATEGORIES, Category } from '@/lib/activities'
+import { Activity, CATEGORIES, Category, hasVideo } from '@/lib/activities'
 import { formatDuration, formatDateISO } from '@/lib/date-utils'
 import { ActivityDetailModal } from './activity-detail-modal'
 import { SpectrumBar } from './spectrum-bar'
@@ -164,10 +164,10 @@ export function LibraryView({ onBack }: LibraryViewProps) {
                   <span className="font-medium text-foreground">
                     {activity.name}
                   </span>
-                  {activity.video && (
+                  {hasVideo(activity) && (
                     <Video className="h-3.5 w-3.5 text-muted-foreground" title="Has video" />
                   )}
-                  {!activity.video && activity.link && (
+                  {!hasVideo(activity) && activity.link && (
                     <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" title="External link" />
                   )}
                   {activity.voiceGuided && (

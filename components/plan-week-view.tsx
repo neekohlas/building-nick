@@ -16,6 +16,7 @@ import {
   CATEGORIES,
   getAllActivities,
   getVariantsForActivity,
+  hasVideo,
   type Activity,
   type PlanFrequency,
   type ActivitySelection,
@@ -1604,10 +1605,10 @@ export function PlanWeekView({ onComplete, onBack, preSelectedActivities = [], p
                               </span>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                 <span>{activity.duration} min</span>
-                                {activity.video && (
+                                {hasVideo(activity) && (
                                   <Video className="h-3 w-3" title="Has video" />
                                 )}
-                                {!activity.video && activity.link && (
+                                {!hasVideo(activity) && activity.link && (
                                   <ExternalLink className="h-3 w-3" title="External link" />
                                 )}
                                 {activity.voiceGuided && (

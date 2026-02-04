@@ -2,7 +2,7 @@
 
 import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2, GripVertical, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Activity, CATEGORIES } from '@/lib/activities'
+import { Activity, CATEGORIES, hasVideo } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { SpectrumBar } from './spectrum-bar'
 import {
@@ -84,10 +84,10 @@ export function ActivityCard({
               Pairs with workout
             </span>
           )}
-          {activity.video && (
+          {hasVideo(activity) && (
             <Video className="h-3 w-3" title="Has video" />
           )}
-          {!activity.video && activity.link && (
+          {!hasVideo(activity) && activity.link && (
             <ExternalLink className="h-3 w-3" title="External link" />
           )}
           {activity.voiceGuided && (
