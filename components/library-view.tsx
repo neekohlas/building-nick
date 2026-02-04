@@ -9,7 +9,7 @@ import { ActivityDetailModal } from './activity-detail-modal'
 import { SpectrumBar } from './spectrum-bar'
 import { useActivities } from '@/hooks/use-activities'
 import { useStorage, TimeBlock } from '@/hooks/use-storage'
-import { TIME_BLOCKS, BLOCK_LABELS } from '@/lib/notifications'
+import { TIME_BLOCKS, getCurrentTimeBlock } from '@/lib/notifications'
 import { Button } from '@/components/ui/button'
 
 interface LibraryViewProps {
@@ -22,6 +22,16 @@ const FILTERS: { value: 'all' | Category; label: string }[] = [
   { value: 'physical', label: 'Physical' },
   { value: 'professional', label: 'Professional' }
 ]
+
+// Time block labels with ranges for better UX
+const TIME_BLOCK_RANGE_LABELS: Record<TimeBlock, string> = {
+  before6am: 'Before 6 AM',
+  before9am: '6 AM - 9 AM',
+  beforeNoon: '9 AM - 12 PM',
+  before230pm: '12 PM - 2:30 PM',
+  before5pm: '2:30 PM - 5 PM',
+  before9pm: '5 PM - 9 PM'
+}
 
 export function LibraryView({ onBack }: LibraryViewProps) {
   const { getAllActivities, isLoading } = useActivities()
@@ -54,6 +64,50 @@ export function LibraryView({ onBack }: LibraryViewProps) {
     }
   }
 
+  const handleMarkComplete = async () => {
+    if (!selectedActivity || !storage.isReady) return
+
+    const today = formatDateISO(new Date())
+    const currentTimeBlock = getCurrentTimeBlock()
+
+    // Get current schedule for today
+    let schedule = await storage.getDailySchedule(today)
+
+    if (!schedule) {
+      // Create new schedule with empty time blocks
+      schedule = {
+        date: today,
+        activities: {
+          before6am: [],
+          before9am: [],
+          beforeNoon: [],
+          before230pm: [],
+          before5pm: [],
+          before9pm: []
+        }
+      }
+    }
+
+    // Add activity to current time block if not already there
+    if (!schedule.activities[currentTimeBlock].includes(selectedActivity.id)) {
+      schedule.activities[currentTimeBlock].push(selectedActivity.id)
+      await storage.saveDailySchedule(schedule)
+    }
+
+    // Mark as complete
+    await storage.saveCompletion({
+      date: today,
+      activityId: selectedActivity.id,
+      completedAt: new Date().toISOString()
+    })
+
+    // Show success message
+    setAddedMessage(`Completed "${selectedActivity.name}"`)
+    setTimeout(() => setAddedMessage(null), 3000)
+
+    setSelectedActivity(null)
+  }
+
   const handleSelectTimeSlot = async (timeBlock: TimeBlock) => {
     if (!activityToAdd || !storage.isReady) return
 
@@ -84,7 +138,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
     }
 
     // Show success message
-    setAddedMessage(`Added "${activityToAdd.name}" to ${BLOCK_LABELS[timeBlock]}`)
+    setAddedMessage(`Added "${activityToAdd.name}" to ${TIME_BLOCK_RANGE_LABELS[timeBlock]}`)
     setTimeout(() => setAddedMessage(null), 3000)
 
     // Close picker
@@ -206,7 +260,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
           activity={selectedActivity}
           isCompleted={false}
           onClose={() => setSelectedActivity(null)}
-          onComplete={() => setSelectedActivity(null)}
+          onComplete={handleMarkComplete}
           onAddToToday={handleAddToToday}
           mode="library"
         />
@@ -249,7 +303,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
                   onClick={() => handleSelectTimeSlot(block)}
                 >
                   <Clock className="h-4 w-4 mr-2" />
-                  {BLOCK_LABELS[block]}
+                  {TIME_BLOCK_RANGE_LABELS[block]}
                 </Button>
               ))}
             </div>

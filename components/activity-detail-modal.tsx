@@ -242,14 +242,26 @@ export function ActivityDetailModal({
         {/* Actions - Fixed at bottom */}
         <div className="flex flex-col gap-3 p-4 border-t bg-card shrink-0">
           {mode === 'library' ? (
-            /* Library mode - Add to Today button */
-            <Button
-              className="w-full"
-              onClick={onAddToToday}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add to Today
-            </Button>
+            /* Library mode - Add to Today and Mark Complete buttons */
+            <>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 bg-transparent"
+                  onClick={onAddToToday}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add to Today
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={onComplete}
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Mark Complete
+                </Button>
+              </div>
+            </>
           ) : (
             /* Today mode - Swap and Complete buttons */
             <>
