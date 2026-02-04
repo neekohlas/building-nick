@@ -4,7 +4,6 @@ import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
-import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 import { SpectrumBar } from './spectrum-bar'
 import {
   DropdownMenu,
@@ -91,7 +90,7 @@ export function ActivityCard({
           {!activity.video && activity.link && (
             <ExternalLink className="h-3 w-3" title="External link" />
           )}
-          {hasMultipleSteps(activity.instructions) && !activity.lessons?.some(l => l.type === 'tool_card' || l.type === 'intro_card') && (
+          {activity.voiceGuided && (
             <Volume2 className="h-3 w-3" title="Audio guide available" />
           )}
         </div>

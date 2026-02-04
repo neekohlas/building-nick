@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
 import { SpectrumBar } from '@/components/spectrum-bar'
 import { LessonCards } from '@/components/lesson-cards'
-import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
 function getYouTubeVideoId(url: string): string | null {
@@ -65,16 +64,11 @@ export function ActivityDetailModal({
   onRemove
 }: ActivityDetailModalProps) {
   const [showAudioMode, setShowAudioMode] = useState(false)
-  const [showAudioButton, setShowAudioButton] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
   const category = CATEGORIES[activity.category]
 
-  // Check for multi-step instructions on client side only
-  // Don't show audio button if activity has tool_card or intro_card lessons (self-contained visual guides)
-  useEffect(() => {
-    const hasToolCards = activity.lessons?.some(l => l.type === 'tool_card' || l.type === 'intro_card')
-    setShowAudioButton(!hasToolCards && hasMultipleSteps(activity.instructions))
-  }, [activity.instructions, activity.lessons])
+  // Show audio button based on Notion's Voice Guided checkbox
+  const showAudioButton = activity.voiceGuided === true
 
   return (
     <div

@@ -34,6 +34,7 @@ interface NotionActivity {
   spectrum?: SpectrumScores
   lessons?: Lesson[]
   claude_prompt?: string
+  voice_guided?: boolean
 }
 
 // Convert Notion API response to our Activity type
@@ -69,7 +70,8 @@ function notionToActivity(notion: NotionActivity): Activity {
     mindBodyType: notion.mind_body_type,
     spectrum: notion.spectrum,
     lessons: notion.lessons,
-    claudePrompt: notion.claude_prompt
+    claudePrompt: notion.claude_prompt,
+    voiceGuided: notion.voice_guided
   }
 }
 

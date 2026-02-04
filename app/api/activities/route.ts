@@ -61,6 +61,7 @@ interface NotionActivity {
   spectrum?: SpectrumScores
   lessons?: Lesson[]
   claude_prompt?: string
+  voice_guided?: boolean
 }
 
 export async function GET() {
@@ -313,7 +314,9 @@ export async function GET() {
           return undefined
         })(),
         // Claude Prompt - custom prompt for Claude-generated audio guides
-        claude_prompt: props['Claude Prompt']?.rich_text?.[0]?.plain_text || undefined
+        claude_prompt: props['Claude Prompt']?.rich_text?.[0]?.plain_text || undefined,
+        // Voice Guided - whether this activity has an audio guide
+        voice_guided: props['Voice Guided']?.checkbox || false
       }
     })
 

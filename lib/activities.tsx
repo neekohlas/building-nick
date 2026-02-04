@@ -84,6 +84,7 @@ export interface Activity {
   // Multi-lesson support (swipeable cards for activities with multiple videos/guides)
   lessons?: Lesson[]            // Array of video/audio lessons for this activity
   claudePrompt?: string         // Custom prompt for Claude-generated audio guides
+  voiceGuided?: boolean         // Whether this activity has an audio guide (from Notion)
 }
 
 export const ACTIVITIES: Record<string, Activity> = {
