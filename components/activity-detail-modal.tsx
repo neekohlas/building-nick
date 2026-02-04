@@ -127,6 +127,17 @@ export function ActivityDetailModal({
             </Button>
           )}
 
+          {/* Tool Cards - show prominently for activities with tool_card/intro_card lessons */}
+          {activity.lessons?.some(l => l.type === 'tool_card' || l.type === 'intro_card') && (
+            <div className="mb-4">
+              <LessonCards
+                lessons={activity.lessons}
+                activityId={activity.id}
+                claudePrompt={activity.claudePrompt}
+              />
+            </div>
+          )}
+
           {/* Description with expandable details */}
           <div className="rounded-lg bg-muted p-3 text-foreground text-sm">
             <p className={showDetails ? '' : 'line-clamp-2'}>{activity.description}</p>
@@ -134,8 +145,8 @@ export function ActivityDetailModal({
             {/* Expandable instructions */}
             {showDetails && (
               <div className="mt-3 pt-3 border-t border-border/50">
-                {/* Lesson Cards - swipeable carousel for multi-video/guide activities */}
-                {activity.lessons && activity.lessons.length > 0 && (
+                {/* Lesson Cards - swipeable carousel for multi-video/guide activities (non-tool_card) */}
+                {activity.lessons && activity.lessons.length > 0 && !activity.lessons.some(l => l.type === 'tool_card' || l.type === 'intro_card') && (
                   <div className="mb-4">
                     <LessonCards
                       lessons={activity.lessons}
