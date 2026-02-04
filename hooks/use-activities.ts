@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Activity, ACTIVITIES, CATEGORIES, Category, TimeBlock, DayType, MindBodyType, SpectrumScores } from '@/lib/activities'
+import { Activity, ACTIVITIES, CATEGORIES, Category, TimeBlock, DayType, MindBodyType, SpectrumScores, Lesson } from '@/lib/activities'
 import { useStorage } from './use-storage'
 
 interface NotionApiResponse {
@@ -32,6 +32,8 @@ interface NotionActivity {
   sort_order?: number
   mind_body_type?: MindBodyType
   spectrum?: SpectrumScores
+  lessons?: Lesson[]
+  claude_prompt?: string
 }
 
 // Convert Notion API response to our Activity type
@@ -65,7 +67,9 @@ function notionToActivity(notion: NotionActivity): Activity {
     favorite: notion.favorite || false,
     sortOrder: notion.sort_order,
     mindBodyType: notion.mind_body_type,
-    spectrum: notion.spectrum
+    spectrum: notion.spectrum,
+    lessons: notion.lessons,
+    claudePrompt: notion.claude_prompt
   }
 }
 
