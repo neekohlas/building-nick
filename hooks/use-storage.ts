@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react'
  */
 
 const DB_NAME = 'BuildingNickDB'
-const DB_VERSION = 5  // Bumped for instance-based completions (removed dateActivity unique index)
+const DB_VERSION = 6  // v6: Added audioCache store for TTS audio caching
 const OPERATION_TIMEOUT = 5000 // 5 seconds
 
 export interface Completion {
@@ -53,6 +53,18 @@ export interface SavedPlanConfig {
   heavyDaySchedule: DailySchedule['activities']
   lightDaySchedule: DailySchedule['activities']
   startWithHeavy: boolean
+}
+
+// TTS Audio Cache entry
+export interface CachedAudio {
+  id: string       // Hash of text + voice for regular TTS, or activityId_lessonId for Claude-generated
+  text: string     // Original text (for debugging/verification)
+  voice: string    // Voice used (e.g., 'rachel' for OpenAI)
+  audioBlob: Blob  // The cached audio file
+  createdAt: string
+  type: 'tts' | 'claude_generated'  // Regular TTS or Claude-generated script
+  activityId?: string  // For Claude-generated audio, the activity ID
+  lessonId?: string    // For Claude-generated audio, the lesson ID
 }
 
 // Single shared promise for database connection
@@ -111,7 +123,7 @@ function getDB(): Promise<IDBDatabase> {
       currentDb = db
 
       // Verify all stores exist
-      const requiredStores = ['completions', 'schedules', 'weekPlans', 'activities', 'metadata', 'savedPlanConfigs']
+      const requiredStores = ['completions', 'schedules', 'weekPlans', 'activities', 'metadata', 'savedPlanConfigs', 'audioCache']
       const missingStores = requiredStores.filter(s => !db.objectStoreNames.contains(s))
       if (missingStores.length > 0) {
         console.warn('Missing stores after open:', missingStores)
@@ -228,6 +240,14 @@ function getDB(): Promise<IDBDatabase> {
       if (!database.objectStoreNames.contains('savedPlanConfigs')) {
         console.log('Creating savedPlanConfigs store')
         database.createObjectStore('savedPlanConfigs', { keyPath: 'id' })
+      }
+
+      // Audio cache for TTS (v6+)
+      if (!database.objectStoreNames.contains('audioCache')) {
+        console.log('Creating audioCache store')
+        const audioCacheStore = database.createObjectStore('audioCache', { keyPath: 'id' })
+        audioCacheStore.createIndex('activityId', 'activityId', { unique: false })
+        audioCacheStore.createIndex('type', 'type', { unique: false })
       }
     }
 
@@ -614,14 +634,62 @@ export function useStorage() {
     }
   }, [])
 
-  // Activities cache
+  // Activities cache - batch save for better performance
   const saveActivities = useCallback(async (activities: Record<string, unknown>): Promise<void> => {
-    // Save each activity individually
-    for (const [id, activity] of Object.entries(activities)) {
-      await dbPut('activities', { ...(activity as object), id }, 'id')
-    }
-    // Save sync timestamp
-    await dbPut('metadata', { key: 'activitiesSyncTime', value: new Date().toISOString() }, 'key')
+    const db = await getDB()
+
+    return new Promise<void>((resolve, reject) => {
+      let resolved = false
+
+      const finish = (success: boolean, error?: Error) => {
+        if (resolved) return
+        resolved = true
+        if (success) resolve()
+        else reject(error || new Error('Save activities failed'))
+      }
+
+      try {
+        // Use a single transaction for all activities
+        const tx = db.transaction(['activities', 'metadata'], 'readwrite')
+        const activitiesStore = tx.objectStore('activities')
+        const metadataStore = tx.objectStore('metadata')
+
+        // Save all activities in the same transaction
+        for (const [id, activity] of Object.entries(activities)) {
+          activitiesStore.put({ ...(activity as object), id })
+        }
+
+        // Save sync timestamp
+        metadataStore.put({ key: 'activitiesSyncTime', value: new Date().toISOString() })
+
+        tx.oncomplete = () => {
+          console.log(`Saved ${Object.keys(activities).length} activities in batch`)
+          finish(true)
+        }
+
+        tx.onerror = () => {
+          console.error('Batch save failed:', tx.error)
+          finish(false, tx.error || new Error('Transaction failed'))
+        }
+
+        tx.onabort = () => {
+          console.error('Batch save aborted')
+          finish(false, new Error('Transaction aborted'))
+        }
+
+        // Timeout fallback
+        setTimeout(() => {
+          if (!resolved) {
+            console.error('Batch save timed out')
+            finish(false, new Error('Save activities timed out'))
+          }
+        }, 15000) // 15 second timeout for batch
+
+      } catch (e) {
+        console.error('Failed to create batch transaction:', e)
+        finish(false, e instanceof Error ? e : new Error('Transaction creation failed'))
+      }
+    })
   }, [])
 
   const getCachedActivities = useCallback(async (): Promise<Record<string, unknown>> => {
@@ -820,6 +888,91 @@ export function useStorage() {
     return result
   }, [getDailySchedule])
 
+  // Audio Cache
+  // Generate a cache key from text and voice
+  const generateAudioCacheKey = useCallback((text: string, voice: string): string => {
+    // Simple hash function for cache key
+    const str = `${text}_${voice}`
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32bit integer
+    }
+    return `tts_${Math.abs(hash).toString(36)}`
+  }, [])
+
+  const getCachedAudio = useCallback(async (text: string, voice: string): Promise<Blob | null> => {
+    const id = generateAudioCacheKey(text, voice)
+    const cached = await dbGet<CachedAudio>('audioCache', id)
+    if (cached?.audioBlob) {
+      console.log('Audio cache hit for:', text.substring(0, 50) + '...')
+      return cached.audioBlob
+    }
+    return null
+  }, [generateAudioCacheKey])
+
+  const saveAudioToCache = useCallback(async (text: string, voice: string, audioBlob: Blob): Promise<void> => {
+    const id = generateAudioCacheKey(text, voice)
+    const entry: CachedAudio = {
+      id,
+      text,
+      voice,
+      audioBlob,
+      createdAt: new Date().toISOString(),
+      type: 'tts'
+    }
+    await dbPut('audioCache', entry, 'id')
+    console.log('Audio cached for:', text.substring(0, 50) + '...')
+  }, [generateAudioCacheKey])
+
+  // Claude-generated audio (for activities with custom prompts)
+  const getClaudeGeneratedAudio = useCallback(async (activityId: string, lessonId: string): Promise<Blob | null> => {
+    const id = `claude_${activityId}_${lessonId}`
+    const cached = await dbGet<CachedAudio>('audioCache', id)
+    if (cached?.audioBlob) {
+      console.log('Claude audio cache hit for:', activityId, lessonId)
+      return cached.audioBlob
+    }
+    return null
+  }, [])
+
+  const saveClaudeGeneratedAudio = useCallback(async (
+    activityId: string,
+    lessonId: string,
+    text: string,
+    audioBlob: Blob
+  ): Promise<void> => {
+    const id = `claude_${activityId}_${lessonId}`
+    const entry: CachedAudio = {
+      id,
+      text,
+      voice: 'claude_generated',
+      audioBlob,
+      createdAt: new Date().toISOString(),
+      type: 'claude_generated',
+      activityId,
+      lessonId
+    }
+    await dbPut('audioCache', entry, 'id')
+    console.log('Claude audio cached for:', activityId, lessonId)
+  }, [])
+
+  const deleteClaudeGeneratedAudio = useCallback(async (activityId: string, lessonId: string): Promise<void> => {
+    const id = `claude_${activityId}_${lessonId}`
+    await dbDelete('audioCache', id)
+    console.log('Claude audio deleted for:', activityId, lessonId)
+  }, [])
+
+  // Clear all audio cache (useful for debugging or freeing space)
+  const clearAudioCache = useCallback(async (): Promise<void> => {
+    const all = await dbGetAll<CachedAudio>('audioCache')
+    for (const entry of all) {
+      await dbDelete('audioCache', entry.id)
+    }
+    console.log('Audio cache cleared')
+  }, [])
+
   // Recovery utilities
   const clearDatabase = useCallback(async () => {
     await deleteDatabase()
@@ -874,6 +1027,14 @@ export function useStorage() {
     toggleRoutineStar,
     promoteRoutine,
     getScheduledActivitiesForRange,
+    // Audio cache
+    getCachedAudio,
+    saveAudioToCache,
+    getClaudeGeneratedAudio,
+    saveClaudeGeneratedAudio,
+    deleteClaudeGeneratedAudio,
+    clearAudioCache,
+    // Recovery
     clearDatabase,
     retryConnection
   }

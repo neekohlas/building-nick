@@ -40,6 +40,20 @@ export interface SpectrumScores {
   learn: number  // Learning/professional (courses, job search, structured programs)
 }
 
+// Lesson types for multi-video/guide activities (swipeable cards)
+export interface Lesson {
+  id: string
+  title: string
+  type: 'youtube' | 'vimeo' | 'claude_audio' | 'url' | 'instructions' | 'tool_card' | 'intro_card'
+  url?: string           // Video URL for youtube/vimeo/url types
+  prompt?: string        // For claude_audio type, references the prompt ID
+  instructions?: string  // For instructions type, HTML instructions for preset TTS
+  image?: string         // For tool_card/intro_card type, image path (e.g., book cover)
+  cue?: string           // For tool_card type, when to use this tool
+  steps?: string[]       // For tool_card type, the steps to follow
+  mappings?: { problem: string; tool: string }[]  // For intro_card type, problem→tool list
+}
+
 export interface Activity {
   id: string
   name: string
@@ -67,6 +81,9 @@ export interface Activity {
   isGeneric?: boolean           // true for parent activities like 'run', 'walk'
   variants?: string[]           // e.g., ['run_green_lake', 'run_neighborhood']
   parentActivityId?: string     // e.g., 'run' for run_green_lake
+  // Multi-lesson support (swipeable cards for activities with multiple videos/guides)
+  lessons?: Lesson[]            // Array of video/audio lessons for this activity
+  claudePrompt?: string         // Custom prompt for Claude-generated audio guides
 }
 
 export const ACTIVITIES: Record<string, Activity> = {

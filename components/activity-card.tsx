@@ -91,7 +91,7 @@ export function ActivityCard({
           {!activity.video && activity.link && (
             <ExternalLink className="h-3 w-3" title="External link" />
           )}
-          {hasMultipleSteps(activity.instructions) && (
+          {hasMultipleSteps(activity.instructions) && !activity.lessons?.some(l => l.type === 'tool_card' || l.type === 'intro_card') && (
             <Volume2 className="h-3 w-3" title="Audio guide available" />
           )}
         </div>

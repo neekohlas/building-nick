@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 280" fill="none">
+  <rect width="400" height="280" fill="#fafafa"/>
+
+  <!-- You figure -->
+  <circle cx="120" cy="100" r="12" stroke="#333" stroke-width="2" fill="none"/>
+  <line x1="120" y1="112" x2="120" y2="145" stroke="#333" stroke-width="2"/>
+  <line x1="120" y1="125" x2="100" y2="140" stroke="#333" stroke-width="2"/>
+  <line x1="120" y1="125" x2="140" y2="140" stroke="#333" stroke-width="2"/>
+  <line x1="120" y1="145" x2="105" y2="175" stroke="#333" stroke-width="2"/>
+  <line x1="120" y1="145" x2="135" y2="175" stroke="#333" stroke-width="2"/>
+  <text x="120" y="195" text-anchor="middle" font-family="system-ui" font-size="13" font-style="italic" fill="#333">You</text>
+
+  <!-- Shadow figure (filled/darker) -->
+  <circle cx="180" cy="100" r="12" stroke="#333" stroke-width="2" fill="#ddd"/>
+  <line x1="180" y1="112" x2="180" y2="145" stroke="#333" stroke-width="3"/>
+  <line x1="180" y1="125" x2="160" y2="140" stroke="#333" stroke-width="3"/>
+  <line x1="180" y1="125" x2="200" y2="140" stroke="#333" stroke-width="3"/>
+  <line x1="180" y1="145" x2="165" y2="175" stroke="#333" stroke-width="3"/>
+  <line x1="180" y1="145" x2="195" y2="175" stroke="#333" stroke-width="3"/>
+  <text x="180" y="80" text-anchor="middle" font-family="system-ui" font-size="13" font-style="italic" fill="#333">Shadow</text>
+
+  <!-- Connection lines between You and Shadow -->
+  <line x1="132" y1="100" x2="168" y2="100" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="135" y1="145" x2="165" y2="145" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- SELF-EXPRESSION text (diagonal) -->
+  <text x="80" y="240" text-anchor="middle" font-family="system-ui" font-size="14" font-weight="bold" fill="#333">SELF-</text>
+  <text x="80" y="258" text-anchor="middle" font-family="system-ui" font-size="14" font-weight="bold" fill="#333">EXPRESSION</text>
+
+  <!-- INNER AUTHORITY text (diagonal) -->
+  <text x="200" y="240" transform="rotate(-25, 200, 240)" text-anchor="middle" font-family="system-ui" font-size="12" font-weight="bold" fill="#333">INNER AUTHORITY</text>
+
+  <!-- Audience (small stick figures) -->
+  <g transform="translate(300, 180)">
+    <circle cx="0" cy="0" r="6" stroke="#333" stroke-width="1.5" fill="none"/>
+    <line x1="0" y1="6" x2="0" y2="20" stroke="#333" stroke-width="1.5"/>
+
+    <circle cx="25" cy="5" r="6" stroke="#333" stroke-width="1.5" fill="none"/>
+    <line x1="25" y1="11" x2="25" y2="25" stroke="#333" stroke-width="1.5"/>
+
+    <circle cx="50" cy="0" r="6" stroke="#333" stroke-width="1.5" fill="none"/>
+    <line x1="50" y1="6" x2="50" y2="20" stroke="#333" stroke-width="1.5"/>
+
+    <circle cx="75" cy="8" r="6" stroke="#333" stroke-width="1.5" fill="none"/>
+    <line x1="75" y1="14" x2="75" y2="28" stroke="#333" stroke-width="1.5"/>
+  </g>
+</svg>

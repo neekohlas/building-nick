@@ -26,6 +26,20 @@ interface SpectrumScores {
   learn: number  // Learning/professional
 }
 
+// Lesson types for multi-video/guide activities
+interface Lesson {
+  id: string
+  title: string
+  type: 'youtube' | 'vimeo' | 'claude_audio' | 'url' | 'instructions' | 'tool_card' | 'intro_card'
+  url?: string
+  prompt?: string      // For claude_audio type, references the prompt ID
+  instructions?: string // For instructions type, HTML content for preset TTS
+  image?: string       // For tool_card/intro_card type
+  cue?: string         // For tool_card type, when to use this tool
+  steps?: string[]     // For tool_card type, the steps to follow
+  mappings?: { problem: string; tool: string }[] // For intro_card type
+}
+
 interface NotionActivity {
   id: string
   name: string
@@ -45,6 +59,8 @@ interface NotionActivity {
   sort_order?: number
   mind_body_type?: MindBodyType
   spectrum?: SpectrumScores
+  lessons?: Lesson[]
+  claude_prompt?: string
 }
 
 export async function GET() {
@@ -257,7 +273,47 @@ export async function GET() {
             }
           }
           return undefined
-        })()
+        })(),
+        // Lessons - JSON array of video/audio lesson objects
+        // Supports compact format with short keys to fit within Notion's 2000 char limit
+        lessons: (() => {
+          const lessonsJson = props['Lessons']?.rich_text?.[0]?.plain_text
+          if (lessonsJson) {
+            try {
+              const parsed = JSON.parse(lessonsJson)
+              if (Array.isArray(parsed)) {
+                // Expand short keys to full format if needed
+                return parsed.map((lesson: any) => {
+                  // Check if using compact format (short keys)
+                  if (lesson.i || lesson.y) {
+                    return {
+                      id: lesson.i || lesson.id,
+                      title: lesson.t || lesson.title,
+                      type: lesson.y || lesson.type,
+                      url: lesson.u || lesson.url,
+                      prompt: lesson.p || lesson.prompt,
+                      instructions: lesson.n || lesson.instructions,
+                      image: lesson.m || lesson.image,
+                      cue: lesson.c || lesson.cue,
+                      steps: lesson.s || lesson.steps,
+                      // mappings for intro_card - expand from {p,t} to {problem,tool}
+                      mappings: lesson.mp ? lesson.mp.map((m: any) => ({
+                        problem: m.p || m.problem,
+                        tool: m.t || m.tool
+                      })) : lesson.mappings
+                    }
+                  }
+                  return lesson
+                }) as Lesson[]
+              }
+            } catch (e) {
+              console.error(`Failed to parse lessons JSON for activity "${activityName}":`, e)
+            }
+          }
+          return undefined
+        })(),
+        // Claude Prompt - custom prompt for Claude-generated audio guides
+        claude_prompt: props['Claude Prompt']?.rich_text?.[0]?.plain_text || undefined
       }
     })
 

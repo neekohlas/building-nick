@@ -7,6 +7,7 @@ import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
 import { SpectrumBar } from '@/components/spectrum-bar'
+import { LessonCards } from '@/components/lesson-cards'
 import { hasMultipleSteps } from '@/hooks/use-audio-instructions'
 
 // Extract YouTube video ID from various URL formats
@@ -69,9 +70,11 @@ export function ActivityDetailModal({
   const category = CATEGORIES[activity.category]
 
   // Check for multi-step instructions on client side only
+  // Don't show audio button if activity has tool_card or intro_card lessons (self-contained visual guides)
   useEffect(() => {
-    setShowAudioButton(hasMultipleSteps(activity.instructions))
-  }, [activity.instructions])
+    const hasToolCards = activity.lessons?.some(l => l.type === 'tool_card' || l.type === 'intro_card')
+    setShowAudioButton(!hasToolCards && hasMultipleSteps(activity.instructions))
+  }, [activity.instructions, activity.lessons])
 
   return (
     <div
@@ -131,8 +134,19 @@ export function ActivityDetailModal({
             {/* Expandable instructions */}
             {showDetails && (
               <div className="mt-3 pt-3 border-t border-border/50">
-                {/* Video Preview */}
-                {activity.video && (
+                {/* Lesson Cards - swipeable carousel for multi-video/guide activities */}
+                {activity.lessons && activity.lessons.length > 0 && (
+                  <div className="mb-4">
+                    <LessonCards
+                      lessons={activity.lessons}
+                      activityId={activity.id}
+                      claudePrompt={activity.claudePrompt}
+                    />
+                  </div>
+                )}
+
+                {/* Video Preview - only show if no lessons (legacy single video) */}
+                {activity.video && (!activity.lessons || activity.lessons.length === 0) && (
                   <div className="space-y-2 mb-3">
                     {/* YouTube - click to open fullscreen */}
                     {getYouTubeVideoId(activity.video) && (
