@@ -48,6 +48,13 @@ export function AudioInstructionsOverlay({
     }
   }, [instructions, startAudioMode, isTTSSupported])
 
+  // Cleanup on unmount - ensure audio stops
+  useEffect(() => {
+    return () => {
+      stopAudioMode()
+    }
+  }, [stopAudioMode])
+
   // Handle close
   const handleClose = () => {
     stopAudioMode()
@@ -185,66 +192,57 @@ export function AudioInstructionsOverlay({
         )}
       </div>
 
-      {/* Manual controls */}
+      {/* Main navigation controls - large touch targets */}
       <div className="border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="max-w-md mx-auto flex items-center justify-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10"
+        {/* Primary: Back / Repeat / Next - large buttons */}
+        <div className="max-w-md mx-auto flex items-center justify-center gap-3 mb-3">
+          <button
             onClick={previousStep}
             disabled={currentStepIndex === 0 || !isActive}
+            className="flex-1 flex items-center justify-center gap-2 h-14 rounded-xl border border-white/20 text-white/80 hover:text-white hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-all"
           >
             <SkipBack className="h-5 w-5" />
-          </Button>
+            <span className="text-sm font-medium">Back</span>
+          </button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10"
+          <button
             onClick={repeatStep}
             disabled={!isActive}
+            className="flex items-center justify-center gap-2 h-14 w-14 rounded-xl border border-white/20 text-white/60 hover:text-white hover:bg-white/10 active:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-all"
           >
             <RotateCcw className="h-5 w-5" />
-          </Button>
+          </button>
 
-          {phase === 'paused' ? (
-            <Button
-              variant="default"
-              size="lg"
-              className="px-8"
-              onClick={resume}
-            >
-              <Play className="h-5 w-5 mr-2" />
-              Resume
-            </Button>
-          ) : (
-            <Button
-              variant="secondary"
-              size="lg"
-              className="px-8"
-              onClick={pause}
-              disabled={!isActive}
-            >
-              <Pause className="h-5 w-5 mr-2" />
-              Pause
-            </Button>
-          )}
-
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-white/70 hover:text-white hover:bg-white/10"
+          <button
             onClick={nextStep}
             disabled={currentStepIndex >= steps.length - 1 || !isActive}
+            className="flex-1 flex items-center justify-center gap-2 h-14 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80 disabled:opacity-30 disabled:pointer-events-none transition-all font-medium"
           >
+            <span className="text-sm font-medium">Next</span>
             <SkipForward className="h-5 w-5" />
-          </Button>
+          </button>
         </div>
 
-        {/* Keyboard hints */}
-        <div className="text-center text-white/20 text-xs mt-4">
-          Keyboard: ← Back · → Next · R Repeat · P Pause · Esc Exit
+        {/* Secondary: Pause/Resume */}
+        <div className="max-w-md mx-auto flex justify-center">
+          {phase === 'paused' ? (
+            <button
+              onClick={resume}
+              className="flex items-center justify-center gap-2 h-10 px-6 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-all text-sm"
+            >
+              <Play className="h-4 w-4" />
+              Resume
+            </button>
+          ) : (
+            <button
+              onClick={pause}
+              disabled={!isActive}
+              className="flex items-center justify-center gap-2 h-10 px-6 rounded-lg text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:pointer-events-none transition-all text-sm"
+            >
+              <Pause className="h-4 w-4" />
+              Pause
+            </button>
+          )}
         </div>
       </div>
     </div>

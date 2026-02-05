@@ -7,6 +7,7 @@ import {
   parseRemindersFromClipboard,
   syncReminders,
   getStoredReminders,
+  deduplicateReminders,
   type ReminderSyncResult
 } from '@/lib/reminders'
 import { useSync } from '@/hooks/use-sync'
@@ -40,6 +41,11 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
           const reminders = parseRemindersFromClipboard(text)
           if (reminders.length > 0) {
             const result = syncReminders(reminders)
+            // Run dedup pass to clean up any duplicates from prior syncs
+            const dedupRemoved = deduplicateReminders()
+            if (dedupRemoved > 0) {
+              console.log(`[RemindersSyncModal] Deduplication removed ${dedupRemoved} duplicates`)
+            }
             setSyncResult(result)
             setStatus('success')
 
@@ -86,6 +92,11 @@ export function RemindersSyncModal({ onClose, onSyncComplete }: RemindersSyncMod
       }
 
       const result = syncReminders(reminders)
+      // Run dedup pass to clean up any duplicates from prior syncs
+      const dedupRemoved = deduplicateReminders()
+      if (dedupRemoved > 0) {
+        console.log(`[RemindersSyncModal] Manual dedup removed ${dedupRemoved} duplicates`)
+      }
       console.log('[RemindersSyncModal] Sync result:', result)
       setSyncResult(result)
       setStatus('success')

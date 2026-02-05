@@ -20,6 +20,7 @@ import {
   getStoredReminders,
   saveReminders,
   toggleReminderCompletion as toggleReminderCompletionLocal,
+  deduplicateReminders,
   type Reminder,
 } from '@/lib/reminders'
 
@@ -383,11 +384,26 @@ export function useSync() {
           const localReminders = getStoredReminders()
           const localRemindersMap = new Map(localReminders.map(r => [r.id, r]))
 
+          // Also build a dedup key map (title + normalized date) to catch duplicates
+          // where the raw ID format differs between shortcut runs
+          const getDedupeKey = (r: { title: string; dueDate: Date }) => {
+            const t = r.title.toLowerCase().trim()
+            const d = r.dueDate
+            return `${t}|${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}-${d.getMinutes()}`
+          }
+          const localByKey = new Map(localReminders.map(r => [getDedupeKey(r), r]))
+
           // Merge cloud reminders with local, preserving local completedInApp if set
           const mergedReminders: Reminder[] = []
+          const seenKeys = new Set<string>()
 
           for (const cloudReminder of cloudData.reminders) {
-            const localReminder = localRemindersMap.get(cloudReminder.id)
+            const key = getDedupeKey(cloudReminder)
+            if (seenKeys.has(key)) continue
+            seenKeys.add(key)
+
+            // Find local match by ID or dedup key
+            const localReminder = localRemindersMap.get(cloudReminder.id) || localByKey.get(key)
 
             if (localReminder) {
               // Merge: prefer cloud completion status unless completed in app locally
@@ -399,15 +415,21 @@ export function useSync() {
                   : cloudReminder.isCompleted,
               }
               mergedReminders.push(merged)
+              localRemindersMap.delete(localReminder.id)
               localRemindersMap.delete(cloudReminder.id)
+              localByKey.delete(key)
             } else {
               mergedReminders.push(cloudReminder)
             }
           }
 
-          // Add any local-only reminders (not in cloud yet)
+          // Add any local-only reminders (not in cloud yet), deduplicating
           for (const localReminder of localRemindersMap.values()) {
-            mergedReminders.push(localReminder)
+            const key = getDedupeKey(localReminder)
+            if (!seenKeys.has(key)) {
+              mergedReminders.push(localReminder)
+              seenKeys.add(key)
+            }
           }
 
           // Sort by due date and save

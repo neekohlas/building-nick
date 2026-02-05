@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useStorage } from './use-storage'
 
 // Types for speech recognition (not fully typed in lib.dom.d.ts)
 interface SpeechRecognitionEvent {
@@ -122,6 +123,7 @@ export function hasMultipleSteps(html: string): boolean {
 }
 
 export function useAudioInstructions(): UseAudioInstructionsReturn {
+  const storage = useStorage()
   const [state, setState] = useState<AudioInstructionsState>({
     phase: 'idle',
     currentStepIndex: 0,
@@ -138,6 +140,15 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const stateRef = useRef(state)
   const useOpenAITTS = useRef(true) // Try OpenAI first, fall back to browser if unavailable
+  const storageRef = useRef(storage) // Keep storage ref current
+  const isStoppedRef = useRef(false) // Track if audio mode has been stopped to prevent callbacks
+  const keepAliveTimerRef = useRef<NodeJS.Timeout | null>(null) // Periodic restart for iOS Safari
+  const lastInterimRef = useRef<string>('') // Track interim results for quick keyword matching
+
+  // Keep storageRef in sync
+  useEffect(() => {
+    storageRef.current = storage
+  }, [storage])
 
   // Keep stateRef in sync
   useEffect(() => {
@@ -171,13 +182,16 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         audioRef.current.pause()
         audioRef.current = null
       }
+      if (keepAliveTimerRef.current) {
+        clearInterval(keepAliveTimerRef.current)
+        keepAliveTimerRef.current = null
+      }
     }
   }, [])
 
   // Browser TTS fallback
   const speakWithBrowser = useCallback((text: string, onEnd?: () => void) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      onEnd?.()
+    if (typeof window === 'undefined' || !window.speechSynthesis || isStoppedRef.current) {
       return
     }
 
@@ -191,20 +205,30 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
 
     utterance.onend = () => {
       utteranceRef.current = null
-      onEnd?.()
+      // Only call onEnd if not stopped
+      if (!isStoppedRef.current) {
+        onEnd?.()
+      }
     }
 
     utterance.onerror = () => {
       utteranceRef.current = null
-      setState((prev) => ({ ...prev, error: 'Speech synthesis error' }))
+      if (!isStoppedRef.current) {
+        setState((prev) => ({ ...prev, error: 'Speech synthesis error' }))
+      }
     }
 
     utteranceRef.current = utterance
     window.speechSynthesis.speak(utterance)
   }, [])
 
-  // OpenAI TTS with caching
+  // OpenAI TTS with IndexedDB caching
   const speakWithOpenAI = useCallback(async (text: string, onEnd?: () => void) => {
+    // Don't start if already stopped
+    if (isStoppedRef.current) return
+
+    const voice = 'rachel'
+
     try {
       // Stop any current audio
       if (audioRef.current) {
@@ -212,25 +236,54 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         audioRef.current = null
       }
 
-      const response = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, voice: 'rachel' }),
-      })
+      // Check if stopped during cleanup
+      if (isStoppedRef.current) return
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}))
-        if (data.fallback) {
-          // OpenAI not available, fall back to browser TTS
-          console.log('OpenAI TTS unavailable, using browser TTS')
-          useOpenAITTS.current = false
-          speakWithBrowser(text, onEnd)
-          return
-        }
-        throw new Error('TTS failed')
+      // Check cache first
+      let audioBlob: Blob | null = null
+      if (storageRef.current.isReady) {
+        audioBlob = await storageRef.current.getCachedAudio(text, voice)
       }
 
-      const audioBlob = await response.blob()
+      // Check if stopped during cache lookup
+      if (isStoppedRef.current) return
+
+      // If not cached, fetch from API
+      if (!audioBlob) {
+        const response = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, voice }),
+        })
+
+        // Check if stopped during fetch
+        if (isStoppedRef.current) return
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}))
+          if (data.fallback) {
+            // OpenAI not available, fall back to browser TTS
+            console.log('OpenAI TTS unavailable, using browser TTS')
+            useOpenAITTS.current = false
+            speakWithBrowser(text, onEnd)
+            return
+          }
+          throw new Error('TTS failed')
+        }
+
+        audioBlob = await response.blob()
+
+        // Cache the audio for future use
+        if (storageRef.current.isReady) {
+          storageRef.current.saveAudioToCache(text, voice, audioBlob).catch(err => {
+            console.warn('Failed to cache audio:', err)
+          })
+        }
+      }
+
+      // Check if stopped before playing
+      if (isStoppedRef.current) return
+
       const audioUrl = URL.createObjectURL(audioBlob)
       const audio = new Audio(audioUrl)
       audioRef.current = audio
@@ -238,28 +291,38 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl)
         audioRef.current = null
-        onEnd?.()
+        // Only call onEnd if not stopped
+        if (!isStoppedRef.current) {
+          onEnd?.()
+        }
       }
 
       audio.onerror = () => {
         URL.revokeObjectURL(audioUrl)
         audioRef.current = null
-        // Fall back to browser TTS
-        console.log('Audio playback error, using browser TTS')
-        speakWithBrowser(text, onEnd)
+        // Only fall back if not stopped
+        if (!isStoppedRef.current) {
+          console.log('Audio playback error, using browser TTS')
+          speakWithBrowser(text, onEnd)
+        }
       }
 
       await audio.play()
     } catch (error) {
       console.error('OpenAI TTS error:', error)
-      // Fall back to browser TTS
-      useOpenAITTS.current = false
-      speakWithBrowser(text, onEnd)
+      // Only fall back if not stopped
+      if (!isStoppedRef.current) {
+        useOpenAITTS.current = false
+        speakWithBrowser(text, onEnd)
+      }
     }
   }, [speakWithBrowser])
 
   // Main speak function - tries OpenAI first, falls back to browser
   const speak = useCallback((text: string, onEnd?: () => void) => {
+    // Don't speak if stopped
+    if (isStoppedRef.current) return
+
     // Cancel any ongoing browser speech
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
@@ -272,7 +335,27 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     }
   }, [speakWithOpenAI, speakWithBrowser])
 
+  // Quick keyword check for interim results - skips Claude API for obvious commands
+  const quickKeywordCheck = useCallback((transcript: string): AudioCommand | null => {
+    const words = transcript.toLowerCase().trim().split(/\s+/)
+    // Only match very clear, unambiguous single-word commands from interim results
+    const nextWords = ['next', 'continue', 'forward', 'okay', 'ok', 'ready', 'done', 'yes', 'yep', 'alright']
+    const repeatWords = ['repeat', 'again']
+    const backWords = ['back', 'previous']
+    const stopWords = ['stop', 'quit', 'exit', 'end']
+    const pauseWords = ['pause', 'wait', 'hold']
+
+    if (words.some(w => nextWords.includes(w))) return 'next'
+    if (words.some(w => repeatWords.includes(w))) return 'repeat'
+    if (words.some(w => backWords.includes(w))) return 'back'
+    if (words.some(w => stopWords.includes(w))) return 'stop'
+    if (words.some(w => pauseWords.includes(w))) return 'pause'
+    return null
+  }, [])
+
   const startListening = useCallback(() => {
+    // Don't start listening if stopped
+    if (isStoppedRef.current) return
     if (typeof window === 'undefined') return
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -282,33 +365,137 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       return
     }
 
+    // Stop any existing recognition first
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort()
+      } catch {
+        // Ignore abort errors
+      }
+    }
+
+    // Clear any existing keep-alive timer
+    if (keepAliveTimerRef.current) {
+      clearInterval(keepAliveTimerRef.current)
+      keepAliveTimerRef.current = null
+    }
+
     try {
       const recognition = new SpeechRecognition()
-      recognition.continuous = false
-      recognition.interimResults = false
+      // Keep listening continuously so user doesn't have to rush
+      recognition.continuous = true
+      // Enable interim results so we can detect short words faster
+      recognition.interimResults = true
       recognition.lang = 'en-US'
 
+      let hasProcessedCommand = false
+
       recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results[0][0].transcript.toLowerCase().trim()
-        setState((prev) => ({ ...prev, lastTranscript: transcript }))
-        handleCommand(transcript)
+        // Don't process if stopped or already processing a command from this session
+        if (isStoppedRef.current || hasProcessedCommand) return
+
+        // Get the most recent result
+        const lastResultIndex = event.results.length - 1
+        const result = event.results[lastResultIndex]
+        const transcript = result[0].transcript.toLowerCase().trim()
+
+        if (result.isFinal) {
+          // Final result - process through full pipeline
+          hasProcessedCommand = true
+          setState((prev) => ({ ...prev, lastTranscript: transcript }))
+          lastInterimRef.current = ''
+
+          // Stop recognition while we process and speak
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.stop()
+            } catch {
+              // Ignore stop errors
+            }
+          }
+          handleCommand(transcript)
+        } else {
+          // Interim result - check for obvious keyword commands for faster response
+          lastInterimRef.current = transcript
+          setState((prev) => ({ ...prev, lastTranscript: `${transcript}...` }))
+
+          const quickCommand = quickKeywordCheck(transcript)
+          if (quickCommand) {
+            hasProcessedCommand = true
+            setState((prev) => ({ ...prev, lastTranscript: transcript }))
+            lastInterimRef.current = ''
+
+            // Stop recognition and execute immediately (skip Claude API)
+            if (recognitionRef.current) {
+              try {
+                recognitionRef.current.stop()
+              } catch {
+                // Ignore stop errors
+              }
+            }
+            setState((prev) => ({ ...prev, phase: 'processing' }))
+            executeCommand(quickCommand)
+          }
+        }
       }
 
-      recognition.onerror = () => {
-        // On error, fall back to paused state (user can use manual controls)
+      recognition.onerror = (event) => {
+        // Don't handle errors if stopped
+        if (isStoppedRef.current) return
+
+        // "no-speech" is expected when user is quiet - restart listening
+        const errorEvent = event as unknown as { error?: string }
+        if (errorEvent.error === 'no-speech' || errorEvent.error === 'aborted') {
+          // Restart listening after a brief pause
+          setTimeout(() => {
+            if (!isStoppedRef.current && stateRef.current.phase === 'listening') {
+              startListening()
+            }
+          }, 200)
+          return
+        }
+        // On other errors, fall back to paused state (user can use manual controls)
+        console.log('Speech recognition error:', errorEvent.error)
         setState((prev) => ({ ...prev, phase: 'paused' }))
       }
 
       recognition.onend = () => {
-        // If we're still in listening phase, restart (in case it times out)
+        // Don't restart if stopped
+        if (isStoppedRef.current) return
+
+        // If we're still supposed to be listening, restart
+        // This handles browser timeouts (usually ~60 seconds)
         if (stateRef.current.phase === 'listening') {
-          setState((prev) => ({ ...prev, phase: 'paused' }))
+          setTimeout(() => {
+            if (!isStoppedRef.current && stateRef.current.phase === 'listening') {
+              startListening()
+            }
+          }, 100)
         }
       }
 
       recognitionRef.current = recognition
       recognition.start()
       setState((prev) => ({ ...prev, phase: 'listening' }))
+
+      // iOS Safari keep-alive: periodically restart recognition to prevent silent death
+      keepAliveTimerRef.current = setInterval(() => {
+        if (isStoppedRef.current || stateRef.current.phase !== 'listening') {
+          if (keepAliveTimerRef.current) {
+            clearInterval(keepAliveTimerRef.current)
+            keepAliveTimerRef.current = null
+          }
+          return
+        }
+        // Restart recognition to prevent iOS Safari from silently stopping
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop()
+          } catch {
+            // Will be restarted by onend handler
+          }
+        }
+      }, 45000) // Restart every 45 seconds (before the ~60s browser timeout)
     } catch {
       setState((prev) => ({ ...prev, phase: 'paused' }))
     }
@@ -449,6 +636,9 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       return
     }
 
+    // Reset stopped flag when starting
+    isStoppedRef.current = false
+
     setState((prev) => ({
       ...prev,
       phase: 'speaking',
@@ -464,14 +654,27 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   }, [speak, startListening])
 
   const stopAudioMode = useCallback(() => {
+    // Set stopped flag FIRST to prevent any callbacks from firing
+    isStoppedRef.current = true
+
+    if (keepAliveTimerRef.current) {
+      clearInterval(keepAliveTimerRef.current)
+      keepAliveTimerRef.current = null
+    }
     if (recognitionRef.current) {
-      recognitionRef.current.abort()
+      try {
+        recognitionRef.current.abort()
+      } catch {
+        // Ignore abort errors
+      }
+      recognitionRef.current = null
     }
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       window.speechSynthesis.cancel()
     }
     if (audioRef.current) {
       audioRef.current.pause()
+      audioRef.current.src = '' // Clear the source to fully stop
       audioRef.current = null
     }
     setState((prev) => ({

@@ -137,6 +137,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
   // Date navigation state
   const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const [snapAnimation, setSnapAnimation] = useState<'snap-to-today-from-future' | 'snap-to-today-from-past' | null>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   const touchStartX = useRef(0)
   const touchEndX = useRef(0)
 
@@ -202,8 +204,28 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
   }
 
   const navigateToToday = () => {
-    setSelectedDate(new Date())
-    hasLoadedRef.current = false
+    if (isToday) {
+      // Already on today — just scroll to top
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    // Determine direction: if viewing future, slide content right (going back to today)
+    // If viewing past, slide content left (going forward to today)
+    const today = new Date()
+    const direction = selectedDate > today ? 'snap-to-today-from-future' : 'snap-to-today-from-past'
+
+    setSnapAnimation(direction)
+
+    // Switch date and scroll to top during the animation
+    setTimeout(() => {
+      setSelectedDate(new Date())
+      hasLoadedRef.current = false
+      window.scrollTo({ top: 0, behavior: 'instant' })
+    }, 150)
+
+    // Clear animation after it completes
+    setTimeout(() => setSnapAnimation(null), 400)
   }
 
   // Touch handlers for swipe navigation
@@ -981,7 +1003,8 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
 
   return (
     <div
-      className="space-y-6"
+      ref={contentRef}
+      className={cn("space-y-6", snapAnimation)}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

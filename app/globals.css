@@ -96,3 +96,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Snap-to-today animations */
+@keyframes snap-to-today-from-past {
+  0% { opacity: 1; transform: translateX(0); }
+  40% { opacity: 0; transform: translateX(-60px); }
+  41% { opacity: 0; transform: translateX(60px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes snap-to-today-from-future {
+  0% { opacity: 1; transform: translateX(0); }
+  40% { opacity: 0; transform: translateX(60px); }
+  41% { opacity: 0; transform: translateX(-60px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.snap-to-today-from-past {
+  animation: snap-to-today-from-past 0.4s ease-in-out;
+}
+
+.snap-to-today-from-future {
+  animation: snap-to-today-from-future 0.4s ease-in-out;
+}

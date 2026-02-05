@@ -31,6 +31,8 @@ import { CalendarEventCard, CalendarEventListItem } from './calendar-event-card'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { pickRandom } from '@/lib/messages'
 import { Button } from '@/components/ui/button'
+import { getRemindersForTimeBlock, getOverdueReminders } from '@/lib/reminders'
+import { ReminderCard, OverdueRemindersSection } from './reminder-card'
 
 interface WeekViewProps {
   onBack: () => void
@@ -63,6 +65,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [weatherDetailData, setWeatherDetailData] = useState<WeatherDay | null>(null)
   const [weatherDetailDate, setWeatherDetailDate] = useState<string | null>(null)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
+  const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
 
   // Initialize extended dates for scrolling (2 weeks before and after)
   useEffect(() => {
@@ -204,6 +207,12 @@ export function WeekView({ onBack }: WeekViewProps) {
       setCompletedIds(prev => new Set([...prev, activityId]))
       setShowCelebration(true)
     }
+  }
+
+  // Handle reminder completion toggle
+  const handleToggleReminderComplete = (reminderId: string) => {
+    storage.toggleReminderCompletion(reminderId)
+    setRemindersRefreshKey(k => k + 1)
   }
 
   // Handle swap
@@ -506,13 +515,27 @@ export function WeekView({ onBack }: WeekViewProps) {
         </Button>
       </div>
 
+      {/* Overdue Reminders */}
+      {(() => {
+        // Use remindersRefreshKey to trigger re-render on toggle
+        const _ = remindersRefreshKey
+        const overdueReminders = getOverdueReminders(selectedDate)
+        return overdueReminders.length > 0 ? (
+          <OverdueRemindersSection
+            reminders={overdueReminders}
+            onToggleComplete={handleToggleReminderComplete}
+          />
+        ) : null
+      })()}
+
       {/* Activities for Selected Day - with time dividers */}
       {schedule && (
         <div className="space-y-2">
           {(['before6am', 'before9am', 'beforeNoon', 'before230pm', 'before5pm', 'before9pm'] as TimeBlock[]).map(block => {
             const activities = schedule.activities[block] || []
             const calendarEvents = calendarConnected ? getEventsForTimeBlock(formatDateISO(selectedDate), block) : []
-            const hasContent = activities.length > 0 || calendarEvents.length > 0
+            const blockReminders = getRemindersForTimeBlock(selectedDate, block)
+            const hasContent = activities.length > 0 || calendarEvents.length > 0 || blockReminders.length > 0
 
             // Time labels for dividers (shown AFTER the content as deadlines)
             const timeLabel = {
@@ -536,6 +559,19 @@ export function WeekView({ onBack }: WeekViewProps) {
                         compact={true}
                         formatTime={formatEventTime}
                         getDuration={getEventDuration}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Reminders for this time block */}
+                {blockReminders.length > 0 && (
+                  <div className="space-y-2 mb-2">
+                    {blockReminders.map(reminder => (
+                      <ReminderCard
+                        key={reminder.id}
+                        reminder={reminder}
+                        onToggleComplete={() => handleToggleReminderComplete(reminder.id)}
                       />
                     ))}
                   </div>

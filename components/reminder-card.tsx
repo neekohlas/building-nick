@@ -38,7 +38,7 @@ export function ReminderCard({
       className={cn(
         'flex items-center gap-3 rounded-lg border p-3 transition-all',
         reminder.isCompleted
-          ? 'bg-muted/30 border-muted opacity-60'
+          ? 'bg-purple-50/50 dark:bg-purple-950/20 border-purple-200/60 dark:border-purple-800/60 opacity-60'
           : isOverdue
             ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
             : 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800'
@@ -46,7 +46,7 @@ export function ReminderCard({
       style={{
         borderLeftWidth: '3px',
         borderLeftColor: reminder.isCompleted
-          ? 'var(--muted)'
+          ? 'rgb(168 85 247)' // purple-500 faded
           : isOverdue
             ? 'rgb(239 68 68)'
             : 'rgb(147 51 234)'
@@ -61,7 +61,7 @@ export function ReminderCard({
         className={cn(
           'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all',
           reminder.isCompleted
-            ? 'border-green-500 bg-green-500 text-white'
+            ? 'border-purple-500 bg-purple-500 text-white'
             : isOverdue
               ? 'border-red-400 hover:border-red-500'
               : 'border-purple-400 hover:border-purple-500'
@@ -75,7 +75,7 @@ export function ReminderCard({
         className={cn(
           'flex h-6 w-6 shrink-0 items-center justify-center rounded-full',
           reminder.isCompleted
-            ? 'bg-muted text-muted-foreground'
+            ? 'bg-purple-100/60 dark:bg-purple-900/30 text-purple-400 dark:text-purple-500'
             : isOverdue
               ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
               : 'bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400'

@@ -156,23 +156,47 @@ export function getLastRemindersSyncTime(): Date | null {
 }
 
 /**
+ * Create a normalized dedup key from title + date
+ * This handles cases where the raw ID format varies between shortcut runs
+ */
+function getDedupeKey(reminder: { title: string; dueDate: Date }): string {
+  const normalizedTitle = reminder.title.toLowerCase().trim()
+  const d = reminder.dueDate
+  // Use local date/time components to avoid timezone format differences
+  const normalizedDate = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}-${d.getHours()}-${d.getMinutes()}`
+  return `${normalizedTitle}|${normalizedDate}`
+}
+
+/**
  * Sync reminders from clipboard data
  * - New reminders get added
  * - Existing reminders get updated (completion status, date changes)
  * - IMPORTANT: If you completed a reminder in the app, it stays completed
  *   even if it shows as incomplete in the Reminders app (one-way sync)
+ * - Deduplicates by title + normalized date to prevent duplicates from
+ *   slight ID format variations between shortcut runs
  */
 export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
   const existing = getStoredReminders()
-  const existingMap = new Map(existing.map(r => [r.id, r]))
+  // Build lookup maps using both raw ID and normalized dedup key
+  const existingById = new Map(existing.map(r => [r.id, r]))
+  const existingByKey = new Map(existing.map(r => [getDedupeKey(r), r]))
 
   let added = 0
   let updated = 0
 
   const merged: Reminder[] = []
+  const seenKeys = new Set<string>()
 
   for (const newReminder of newReminders) {
-    const existing = existingMap.get(newReminder.id)
+    const dedupeKey = getDedupeKey(newReminder)
+
+    // Skip if we already processed a reminder with this dedup key in this batch
+    if (seenKeys.has(dedupeKey)) continue
+    seenKeys.add(dedupeKey)
+
+    // Try to find existing by raw ID first, then by dedup key
+    const existing = existingById.get(newReminder.id) || existingByKey.get(dedupeKey)
 
     if (!existing) {
       // New reminder
@@ -182,7 +206,6 @@ export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
       // Update existing reminder
       // KEY LOGIC: Once completed in our app, it stays completed regardless of Reminders app status
       const wasCompletedInApp = existing.completedInApp === true
-      const wasCompletedInReminders = existing.isCompleted && !existing.completedInApp
       const nowCompletedInReminders = newReminder.isCompleted
 
       // Determine final completion status:
@@ -206,18 +229,25 @@ export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
         updated++
       }
 
-      existingMap.delete(newReminder.id)
+      // Remove from both maps so we don't re-add it below
+      existingById.delete(existing.id)
+      existingByKey.delete(getDedupeKey(existing))
+      // Also remove by the new ID in case it differs
+      existingById.delete(newReminder.id)
     }
   }
 
   // Keep reminders that weren't in the sync (might be outside the date range)
   // but only if they're not too old (more than 2 months past)
+  // Also deduplicate against what we've already merged
   const twoMonthsAgo = new Date()
   twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2)
 
-  for (const old of existingMap.values()) {
-    if (old.dueDate >= twoMonthsAgo) {
+  for (const old of existingById.values()) {
+    const key = getDedupeKey(old)
+    if (old.dueDate >= twoMonthsAgo && !seenKeys.has(key)) {
       merged.push(old)
+      seenKeys.add(key)
     }
   }
 
@@ -232,6 +262,43 @@ export function syncReminders(newReminders: Reminder[]): ReminderSyncResult {
     updated,
     message: `Synced ${newReminders.length} reminders (${added} new, ${updated} updated)`
   }
+}
+
+/**
+ * Deduplicate stored reminders (fix for duplicate imports)
+ * Keeps the most recently synced version of each reminder.
+ * Returns the number of duplicates removed.
+ */
+export function deduplicateReminders(): number {
+  const reminders = getStoredReminders()
+  const seen = new Map<string, Reminder>()
+
+  for (const r of reminders) {
+    const key = getDedupeKey(r)
+    const existing = seen.get(key)
+    if (!existing) {
+      seen.set(key, r)
+    } else {
+      // Keep the one that's completed (prefer completedInApp), or the most recently synced
+      if (r.completedInApp && !existing.completedInApp) {
+        seen.set(key, r)
+      } else if (r.isCompleted && !existing.isCompleted && !existing.completedInApp) {
+        seen.set(key, r)
+      } else if (r.syncedAt > existing.syncedAt && !existing.completedInApp) {
+        seen.set(key, r)
+      }
+    }
+  }
+
+  const deduped = Array.from(seen.values())
+  deduped.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
+
+  const removed = reminders.length - deduped.length
+  if (removed > 0) {
+    saveReminders(deduped)
+  }
+
+  return removed
 }
 
 /**
@@ -271,17 +338,31 @@ export function getRemindersForDate(date: Date): Reminder[] {
 
 /**
  * Get overdue reminders (incomplete and past due)
+ * Uses the ACTUAL current date to determine overdue status, not the viewed date.
+ * A reminder is only overdue if its due date has actually passed in real time.
+ * When viewing a future date, overdue reminders are still shown relative to today.
  */
-export function getOverdueReminders(asOfDate: Date): Reminder[] {
+export function getOverdueReminders(viewingDate: Date): Reminder[] {
   const reminders = getStoredReminders()
-  const today = new Date(asOfDate)
-  today.setHours(0, 0, 0, 0)
+
+  // Always use the actual current date for overdue calculation
+  const actualToday = new Date()
+  actualToday.setHours(0, 0, 0, 0)
+
+  // Also normalize the viewing date to compare
+  const viewDate = new Date(viewingDate)
+  viewDate.setHours(0, 0, 0, 0)
+
+  // Use whichever is earlier: the actual today or the viewing date
+  // This way, when viewing the past we show overdue relative to that date,
+  // but when viewing the future we don't prematurely mark things overdue
+  const cutoffDate = viewDate <= actualToday ? viewDate : actualToday
 
   return reminders.filter(r => {
     if (r.isCompleted) return false
     const reminderDate = new Date(r.dueDate)
     reminderDate.setHours(0, 0, 0, 0)
-    return reminderDate < today
+    return reminderDate < cutoffDate
   }).sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime())
 }
 
