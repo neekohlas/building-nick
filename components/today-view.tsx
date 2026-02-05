@@ -204,7 +204,8 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
     hasLoadedRef.current = false // Allow reloading data for new date
   }
 
-  const navigateToToday = () => {
+  // Snap to today with animation (triggered by bottom nav Today tab)
+  const snapToToday = () => {
     if (isToday) {
       // Already on today — just scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -235,7 +236,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
     // Skip the initial render
     if (snapToTodayKey !== undefined && snapToTodayKey !== snapToTodayKeyRef.current) {
       snapToTodayKeyRef.current = snapToTodayKey
-      navigateToToday()
+      snapToToday()
     }
   }, [snapToTodayKey])
 
@@ -1043,20 +1044,14 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
           <ChevronLeft className="h-5 w-5" />
         </button>
 
-        <button
-          onClick={navigateToToday}
+        <div
           className={cn(
-            "px-4 py-2 rounded-full transition-colors text-center",
-            isToday
-              ? "bg-primary/10 text-primary font-semibold"
-              : "hover:bg-muted"
+            "px-4 py-2 rounded-full text-center",
+            isToday && "bg-primary/10 text-primary font-semibold"
           )}
         >
           <span className="text-lg font-semibold">{getDateHeaderLabel()}</span>
-          {!isToday && (
-            <span className="block text-xs text-muted-foreground">Tap to return to today</span>
-          )}
-        </button>
+        </div>
 
         <button
           onClick={navigateToNextDay}
