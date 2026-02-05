@@ -38,6 +38,7 @@ import { useNotificationScheduler } from '@/hooks/use-notifications'
 
 interface TodayViewProps {
   onOpenMenu: () => void
+  snapToTodayKey?: number
 }
 
 // Visible time blocks in Today view
@@ -77,7 +78,7 @@ const TIME_BLOCK_HOURS: Record<TimeBlock, number> = {
 const getInstanceKey = (activityId: string, timeBlock: string, index: number) =>
   `${activityId}_${timeBlock}_${index}`
 
-export function TodayView({ onOpenMenu }: TodayViewProps) {
+export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
   const storage = useSync()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
   const { weather, getWeatherForDate, getHourlyForDate, locationName, isLoading: weatherLoading, error: weatherError } = useWeather()
@@ -227,6 +228,16 @@ export function TodayView({ onOpenMenu }: TodayViewProps) {
     // Clear animation after it completes
     setTimeout(() => setSnapAnimation(null), 400)
   }
+
+  // Watch for external "snap to today" signal (e.g. bottom nav Today tab tapped)
+  const snapToTodayKeyRef = useRef(snapToTodayKey)
+  useEffect(() => {
+    // Skip the initial render
+    if (snapToTodayKey !== undefined && snapToTodayKey !== snapToTodayKeyRef.current) {
+      snapToTodayKeyRef.current = snapToTodayKey
+      navigateToToday()
+    }
+  }, [snapToTodayKey])
 
   // Touch handlers for swipe navigation
   const handleTouchStart = (e: React.TouchEvent) => {

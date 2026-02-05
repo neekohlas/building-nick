@@ -18,6 +18,7 @@ export default function Home() {
   const [preSelectedActivities, setPreSelectedActivities] = useState<string[]>([])
   const [preLoadedRoutine, setPreLoadedRoutine] = useState<SavedPlanConfig | null>(null)
   const [globalToast, setGlobalToast] = useState<string | null>(null)
+  const [snapToTodayKey, setSnapToTodayKey] = useState(0)
   const today = new Date()
   const { hasConnectionError, retryConnection, clearDatabase } = useStorage()
 
@@ -51,7 +52,7 @@ export default function Home() {
         {/* Main Content */}
         <main className="flex-1 px-4 pt-4 pb-6">
         {activeView === 'today' && (
-          <TodayView onOpenMenu={() => setActiveView('menu')} />
+          <TodayView onOpenMenu={() => setActiveView('menu')} snapToTodayKey={snapToTodayKey} />
         )}
         {activeView === 'week' && (
           <WeekView onBack={() => setActiveView('today')} />
@@ -107,7 +108,14 @@ export default function Home() {
         </main>
 
         {/* Bottom Navigation */}
-        <BottomNav activeView={activeView as View} onViewChange={setActiveView} />
+        <BottomNav activeView={activeView as View} onViewChange={(view) => {
+          if (view === 'today' && activeView === 'today') {
+            // Already on today view — signal TodayView to snap back to today
+            setSnapToTodayKey(k => k + 1)
+          } else {
+            setActiveView(view)
+          }
+        }} />
       </div>
 
       {/* Global Toast - persists across view changes */}
