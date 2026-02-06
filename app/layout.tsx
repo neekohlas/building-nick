@@ -12,7 +12,6 @@ const _geistMono = Geist_Mono({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: 'Building Nick',
   description: 'Your personal habit coach for building consistency',
-  generator: 'v0.app',
   manifest: '/manifest.json',
   icons: {
     icon: [
