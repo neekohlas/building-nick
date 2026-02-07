@@ -139,46 +139,48 @@ export function ActivityCard({
         </div>
       </div>
 
-        {/* Actions menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              onClick={(e) => e.stopPropagation()}
-              className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {onSwap && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
-                <ArrowRightLeft className="h-4 w-4 mr-2" />
-                Swap Activity
-              </DropdownMenuItem>
-            )}
-            {onPush && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
-                <CalendarClock className="h-4 w-4 mr-2" />
-                Push to Tomorrow
-              </DropdownMenuItem>
-            )}
-            {onReorder && (
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReorder(); }}>
-                <GripVertical className="h-4 w-4 mr-2" />
-                Reorder
-              </DropdownMenuItem>
-            )}
-            {onDelete && (
-              <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                className="text-destructive focus:text-destructive"
+        {/* Actions menu - only show if there are menu items */}
+        {(onSwap || onPush || onReorder || onDelete) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className="p-2 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Remove
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {onSwap && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
+                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                  Swap Activity
+                </DropdownMenuItem>
+              )}
+              {onPush && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  Push to Tomorrow
+                </DropdownMenuItem>
+              )}
+              {onReorder && (
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReorder(); }}>
+                  <GripVertical className="h-4 w-4 mr-2" />
+                  Reorder
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Remove
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </div>
   )

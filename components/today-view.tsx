@@ -620,9 +620,11 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
     console.log('handleSwap: complete')
   }
 
-  // Remove activity from schedule
+  // Remove activity from schedule (or delete unscheduled completion)
   const handleRemoveActivity = async (activityId: string, timeBlock?: TimeBlock) => {
     if (!schedule) return
+
+    const dateStr = formatDateISO(selectedDate)
 
     // Find which time block the activity is in if not provided
     let activityTimeBlock: TimeBlock | null = timeBlock || null
@@ -634,20 +636,29 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
         }
       }
     }
-    if (!activityTimeBlock) return
 
-    // Remove from schedule
-    const newSchedule: DailySchedule = {
-      ...schedule,
-      activities: {
-        ...schedule.activities,
-        [activityTimeBlock]: schedule.activities[activityTimeBlock].filter(
-          id => id !== activityId
-        )
+    if (activityTimeBlock) {
+      // Remove from schedule
+      const newSchedule: DailySchedule = {
+        ...schedule,
+        activities: {
+          ...schedule.activities,
+          [activityTimeBlock]: schedule.activities[activityTimeBlock].filter(
+            id => id !== activityId
+          )
+        }
       }
+      await storage.saveDailySchedule(newSchedule)
+      setSchedule(newSchedule)
+    } else {
+      // Not in schedule — remove the completion record(s) instead
+      await storage.removeCompletion(dateStr, activityId)
+      // Refresh completions
+      const updatedCompletions = await storage.getCompletionsForDate(dateStr)
+      setCompletions(updatedCompletions)
+      setCompletedInstanceKeys(new Set(updatedCompletions.map(c => getInstanceKey(c.activityId, c.timeBlock as TimeBlock, c.instanceIndex))))
     }
-    await storage.saveDailySchedule(newSchedule)
-    setSchedule(newSchedule)
+
     setSelectedActivity(null)
     setDeleteConfirmActivity(null)
   }
