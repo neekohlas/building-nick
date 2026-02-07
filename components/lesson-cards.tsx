@@ -37,9 +37,38 @@ function getYouTubeVideoId(url: string): string | null {
   return null
 }
 
+// Extract Vimeo video ID from URL
+function getVimeoVideoId(url: string): string | null {
+  const match = url.match(/vimeo\.com\/(\d+)/)
+  return match ? match[1] : null
+}
+
 // Check if URL is a Vimeo video
 function isVimeoUrl(url: string): boolean {
   return /vimeo\.com\/\d+/.test(url)
+}
+
+// Hook to fetch Vimeo thumbnail via oEmbed API
+function useVimeoThumbnail(url: string | undefined) {
+  const [thumbnail, setThumbnail] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!url) return
+    const videoId = getVimeoVideoId(url)
+    if (!videoId) return
+
+    fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.thumbnail_url) {
+          // Request a larger thumbnail (640px wide)
+          setThumbnail(data.thumbnail_url.replace(/\d+x\d+/, '640x360'))
+        }
+      })
+      .catch(() => {})
+  }, [url])
+
+  return thumbnail
 }
 
 interface LessonCardProps {
@@ -76,32 +105,53 @@ function LessonCard({ lesson, activityId, claudePrompt, isActive }: LessonCardPr
     await claudeAudio.regenerate(activityId, lesson.id, claudePrompt)
   }
 
-  // YouTube lesson
+  // YouTube lesson - plays in-app with embedded player
   if (lesson.type === 'youtube' && lesson.url) {
+    const [isPlaying, setIsPlaying] = useState(false)
     const videoId = getYouTubeVideoId(lesson.url)
     if (!videoId) return null
 
+    if (isPlaying) {
+      return (
+        <div className="w-full">
+          <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
+            <iframe
+              src={`https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0`}
+              className="absolute inset-0 w-full h-full"
+              allow="autoplay; fullscreen; accelerometer; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+            <button
+              onClick={() => setIsPlaying(false)}
+              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white z-10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="text-sm font-medium mt-2 text-center">{lesson.title}</p>
+        </div>
+      )
+    }
+
     return (
-      <a
-        href={lesson.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block w-full"
-      >
-        <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-black">
+      <div className="w-full">
+        <button
+          onClick={() => setIsPlaying(true)}
+          className="relative w-full aspect-video rounded-lg overflow-hidden bg-black block group"
+        >
           <img
             src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
             alt={lesson.title}
             className="absolute inset-0 w-full h-full object-cover"
           />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
             <div className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center">
               <Play className="h-7 w-7 text-white ml-1" fill="white" />
             </div>
           </div>
-        </div>
+        </button>
         <p className="text-sm font-medium mt-2 text-center">{lesson.title}</p>
-      </a>
+      </div>
     )
   }
 
@@ -109,6 +159,7 @@ function LessonCard({ lesson, activityId, claudePrompt, isActive }: LessonCardPr
   if (lesson.type === 'vimeo' && lesson.url) {
     const [isPlaying, setIsPlaying] = useState(false)
     const embedUrl = getVimeoEmbedUrl(lesson.url)
+    const thumbnail = useVimeoThumbnail(lesson.url)
 
     if (isPlaying && embedUrl) {
       return (
@@ -138,12 +189,18 @@ function LessonCard({ lesson, activityId, claudePrompt, isActive }: LessonCardPr
           onClick={() => setIsPlaying(true)}
           className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted block group"
         >
-          <div className="absolute inset-0 flex items-center justify-center">
+          {thumbnail && (
+            <img
+              src={thumbnail}
+              alt={lesson.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          )}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
             <div className="w-14 h-14 rounded-full bg-[#1ab7ea] group-hover:bg-[#0d9bd6] flex items-center justify-center transition-colors">
               <Play className="h-7 w-7 text-white ml-1" fill="white" />
             </div>
           </div>
-          <span className="absolute bottom-2 left-2 text-xs text-muted-foreground">Tap to play</span>
         </button>
         <p className="text-sm font-medium mt-2 text-center">{lesson.title}</p>
       </div>
@@ -381,6 +438,14 @@ function LessonCard({ lesson, activityId, claudePrompt, isActive }: LessonCardPr
           </div>
         )}
 
+        {/* What you're fighting against */}
+        {lesson.fightingAgainst && (
+          <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-sm font-medium text-red-700 dark:text-red-400 mb-1">What you're fighting:</p>
+            <p className="text-sm text-muted-foreground">{lesson.fightingAgainst}</p>
+          </div>
+        )}
+
         {/* Steps to follow */}
         {lesson.steps && lesson.steps.length > 0 && (
           <div className="space-y-2">
@@ -392,6 +457,29 @@ function LessonCard({ lesson, activityId, claudePrompt, isActive }: LessonCardPr
                 </li>
               ))}
             </ol>
+          </div>
+        )}
+
+        {/* The higher force */}
+        {lesson.higherForce && (
+          <div className="mt-4 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400 mb-1">The higher force:</p>
+            <p className="text-sm text-muted-foreground">{lesson.higherForce}</p>
+          </div>
+        )}
+
+        {/* Other uses (e.g., Inner Authority) */}
+        {lesson.otherUses && lesson.otherUses.length > 0 && (
+          <div className="mt-4 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-400 mb-2">Other uses:</p>
+            <ul className="space-y-1.5 text-sm text-muted-foreground">
+              {lesson.otherUses.map((use, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="text-blue-500 shrink-0">•</span>
+                  <span>{use}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>
@@ -557,32 +645,29 @@ export function LessonCards({ lessons, activityId, claudePrompt }: LessonCardsPr
         </div>
       </div>
 
-      {/* Carousel container */}
+      {/* Carousel container - only active card is in flow, others are hidden */}
       <div
         ref={containerRef}
-        className="relative overflow-hidden"
+        className="relative"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        <div
-          className="flex transition-transform duration-300 ease-out"
-          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
-        >
-          {lessons.map((lesson, index) => (
-            <div
-              key={lesson.id}
-              className="w-full flex-shrink-0 px-1"
-            >
-              <LessonCard
-                lesson={lesson}
-                activityId={activityId}
-                claudePrompt={claudePrompt}
-                isActive={index === currentIndex}
-              />
-            </div>
-          ))}
-        </div>
+        {lessons.map((lesson, index) => (
+          <div
+            key={lesson.id}
+            className={`w-full px-1 transition-opacity duration-200 ${
+              index === currentIndex ? 'relative opacity-100' : 'absolute top-0 left-0 opacity-0 pointer-events-none'
+            }`}
+          >
+            <LessonCard
+              lesson={lesson}
+              activityId={activityId}
+              claudePrompt={claudePrompt}
+              isActive={index === currentIndex}
+            />
+          </div>
+        ))}
       </div>
 
       {/* Dot indicators */}

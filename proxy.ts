@@ -16,7 +16,7 @@ const publicRoutes = [
 // API routes that need protection
 const protectedApiRoutes = ['/api/activities', '/api/calendar', '/api/weather', '/api/coach']
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // If no APP_PASSWORD is set (empty or missing), skip auth entirely (dev mode)

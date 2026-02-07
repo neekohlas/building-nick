@@ -6,6 +6,7 @@ import { TodayView } from '@/components/today-view'
 import { WeekView } from '@/components/week-view'
 import { PlanWeekView } from '@/components/plan-week-view'
 import { LibraryView } from '@/components/library-view'
+import { StatisticsView } from '@/components/statistics-view'
 import { RoutinesView } from '@/components/routines-view'
 import { MenuView } from '@/components/menu-view'
 import { BottomNav, View } from '@/components/bottom-nav'
@@ -14,7 +15,7 @@ import { useStorage, SavedPlanConfig } from '@/hooks/use-storage'
 import { formatDateFriendly } from '@/lib/date-utils'
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<View | 'plan' | 'library'>('today')
+  const [activeView, setActiveView] = useState<View | 'plan' | 'library' | 'stats'>('today')
   const [preSelectedActivities, setPreSelectedActivities] = useState<string[]>([])
   const [preLoadedRoutine, setPreLoadedRoutine] = useState<SavedPlanConfig | null>(null)
   const [globalToast, setGlobalToast] = useState<string | null>(null)
@@ -52,7 +53,15 @@ export default function Home() {
         {/* Main Content */}
         <main className="flex-1 px-4 pt-4 pb-6">
         {activeView === 'today' && (
-          <TodayView onOpenMenu={() => setActiveView('menu')} snapToTodayKey={snapToTodayKey} />
+          <TodayView
+            onOpenMenu={() => setActiveView('menu')}
+            snapToTodayKey={snapToTodayKey}
+            onFocusForWeek={(activityIds) => {
+              setPreSelectedActivities(activityIds)
+              setPreLoadedRoutine(null)
+              setActiveView('plan')
+            }}
+          />
         )}
         {activeView === 'week' && (
           <WeekView onBack={() => setActiveView('today')} />
@@ -86,6 +95,9 @@ export default function Home() {
         {activeView === 'library' && (
           <LibraryView onBack={() => setActiveView('today')} />
         )}
+        {activeView === 'stats' && (
+          <StatisticsView onBack={() => setActiveView('menu')} />
+        )}
         {activeView === 'menu' && (
           <MenuView
             onBack={() => setActiveView('today')}
@@ -103,6 +115,7 @@ export default function Home() {
             onNavigateToToday={() => setActiveView('today')}
             onShowToast={setGlobalToast}
             onOpenLibrary={() => setActiveView('library')}
+            onOpenStats={() => setActiveView('stats')}
           />
         )}
         </main>

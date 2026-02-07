@@ -51,6 +51,9 @@ export interface Lesson {
   image?: string         // For tool_card/intro_card type, image path (e.g., book cover)
   cue?: string           // For tool_card type, when to use this tool
   steps?: string[]       // For tool_card type, the steps to follow
+  fightingAgainst?: string  // For tool_card type, what negative force you're fighting
+  higherForce?: string      // For tool_card type, the higher force concept
+  otherUses?: string[]      // For tool_card type, additional use cases (e.g., Inner Authority)
   mappings?: { problem: string; tool: string }[]  // For intro_card type, problem→tool list
 }
 

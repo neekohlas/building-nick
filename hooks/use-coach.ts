@@ -134,8 +134,8 @@ export function useCoach() {
       const hasRecentActivity = recentActivities.length > 0
       console.log('Got patterns:', recentActivities.length, 'hasRecentActivity:', hasRecentActivity)
 
-      // Skip recap phase if no recent activity - go directly to feeling phase
-      const nextPhase = hasRecentActivity ? 'recap' : 'feeling'
+      // Always go to feeling phase — the coach starts by asking how you're feeling
+      const nextPhase = 'feeling' as CoachPhase
       console.log('Setting phase to:', nextPhase)
 
       setState(prev => {
@@ -159,74 +159,23 @@ export function useCoach() {
     }
   }, [getRecentMindBodyPatterns])
 
-  // User chooses to continue with similar activities
-  const continueSimilar = useCallback(async () => {
+  // User chooses to continue with similar activities — skip AI, use recent activities directly
+  const continueSimilar = useCallback(() => {
     setState(prev => {
-      // Capture recentActivities from current state to use in the async operation
-      const recentActivities = prev.recentActivities
+      const suggestions = prev.recentActivities.slice(0, 5).map(a => ({
+        activityId: a.activityId,
+        activityName: a.activityName,
+        reasoning: `You've done this ${a.count} time${a.count !== 1 ? 's' : ''} recently`
+      }))
 
-      // Start async operation with captured state
-      const doFetch = async () => {
-        try {
-          const mindBodyActivities = getActivitiesByCategoryRef.current('mind_body')
-          const availableActivities = mindBodyActivities.map(a => ({
-            id: a.id,
-            name: a.name,
-            category: a.category,
-            description: a.description,
-            duration: a.duration,
-            favorite: a.favorite || false
-          }))
-
-          const response = await fetch('/api/coach/suggest', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mode: 'continue_similar',
-              recentPatterns: recentActivities.map(a => ({
-                activityId: a.activityId,
-                activityName: a.activityName,
-                category: 'mind_body',
-                completionCount: a.count,
-                lastCompleted: a.lastCompleted
-              })),
-              availableActivities
-            })
-          })
-
-          const data = await response.json()
-
-          if (data.success) {
-            setState(p => ({
-              ...p,
-              isLoading: false,
-              phase: 'suggestions',
-              message: data.message,
-              suggestions: data.suggestions || [],
-              followUpQuestion: data.followUpQuestion || null
-            }))
-          } else {
-            setState(p => ({
-              ...p,
-              isLoading: false,
-              error: data.error || 'Failed to get suggestions'
-            }))
-          }
-        } catch (error) {
-          console.error('Coach error:', error)
-          setState(p => ({
-            ...p,
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          }))
-        }
+      return {
+        ...prev,
+        phase: 'suggestions',
+        message: 'Keep up the momentum! Here are your recent activities — select the ones you want to continue with.',
+        suggestions
       }
-
-      doFetch()
-
-      return { ...prev, isLoading: true, error: null }
     })
-  }, []) // No dependencies - uses refs and state updater
+  }, [])
 
   // User chooses to personalize - go to feeling phase
   const startPersonalize = useCallback(() => {

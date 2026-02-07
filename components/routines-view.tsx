@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Star, Play, Edit2, Trash2, Check, X, ArrowUpDown, Clock, Calendar, Loader2 } from 'lucide-react'
+import { Star, Play, Edit2, Trash2, Check, X, ArrowUpDown, Clock, Calendar, Loader2, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SavedPlanConfig } from '@/hooks/use-storage'
 import { useSync } from '@/hooks/use-sync'
@@ -334,11 +334,19 @@ export function RoutinesView({ onBack, onLoadRoutine }: RoutinesViewProps) {
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-bold">Routines</h2>
-          <p className="text-sm text-muted-foreground">
-            {routines.length} routine{routines.length === 1 ? '' : 's'} saved
-          </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onBack}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div>
+            <h2 className="text-lg font-bold">Routines</h2>
+            <p className="text-sm text-muted-foreground">
+              {routines.length} routine{routines.length === 1 ? '' : 's'} saved
+            </p>
+          </div>
         </div>
         <button
           onClick={cycleSortMode}

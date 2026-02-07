@@ -55,6 +55,17 @@ export interface DbReminder {
   updated_at: string
 }
 
+export interface DbMoodEntry {
+  id: string  // Format: mood_${date} — one entry per day
+  user_id: string
+  date: string  // ISO date string (YYYY-MM-DD)
+  category: string  // e.g. 'energized', 'calm', 'stressed', 'down', 'meh'
+  emotion: string | null  // e.g. 'hopeful', 'anxious', 'exhausted'
+  notes: string | null  // Free-text notes
+  saved_at: string  // ISO timestamp
+  updated_at: string
+}
+
 export interface DbPushSubscription {
   id: string  // UUID
   user_id: string
@@ -89,6 +100,11 @@ export type Database = {
         Row: DbReminder
         Insert: Omit<DbReminder, 'updated_at'>
         Update: Partial<DbReminder>
+      }
+      mood_entries: {
+        Row: DbMoodEntry
+        Insert: Omit<DbMoodEntry, 'updated_at'>
+        Update: Partial<DbMoodEntry>
       }
       push_subscriptions: {
         Row: DbPushSubscription

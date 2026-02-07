@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, GripVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { ActivityCard } from './activity-card'
 import { ActivityDetailModal } from './activity-detail-modal'
@@ -66,6 +66,23 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [weatherDetailDate, setWeatherDetailDate] = useState<string | null>(null)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
   const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
+  const [isEditMode, setIsEditMode] = useState(false)
+
+  // Drag state for reordering
+  const [dragState, setDragState] = useState<{
+    activityId: string
+    sourceBlock: TimeBlock
+    sourceIndex: number
+    currentY: number
+    startY: number
+    isDragging: boolean
+  } | null>(null)
+  const [dropTarget, setDropTarget] = useState<{ block: TimeBlock; index: number } | null>(null)
+  const blockRefs = useRef<Record<TimeBlock, HTMLDivElement | null>>({
+    before6am: null, before9am: null, beforeNoon: null,
+    before230pm: null, before5pm: null, before9pm: null
+  })
+  const itemRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Initialize extended dates for scrolling (2 weeks before and after)
   useEffect(() => {
@@ -185,7 +202,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   }
 
   // Toggle completion
-  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock) => {
+  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock, durationMinutes?: number) => {
     if (!storage.isReady) return
 
     const dateStr = formatDateISO(selectedDate)
@@ -202,7 +219,8 @@ export function WeekView({ onBack }: WeekViewProps) {
       await storage.saveCompletion({
         date: dateStr,
         activityId,
-        timeBlock
+        timeBlock,
+        ...(durationMinutes != null ? { durationMinutes } : {})
       })
       setCompletedIds(prev => new Set([...prev, activityId]))
       setShowCelebration(true)
@@ -377,6 +395,116 @@ export function WeekView({ onBack }: WeekViewProps) {
     setDeleteConfirmActivity(null)
   }
 
+  // Drag handlers for reordering
+  const TIME_BLOCKS_LIST: TimeBlock[] = ['before6am', 'before9am', 'beforeNoon', 'before230pm', 'before5pm', 'before9pm']
+
+  const getDropTargetFromY = (y: number): { block: TimeBlock; index: number } | null => {
+    if (!schedule) return null
+
+    const blockZones: { block: TimeBlock; top: number; bottom: number }[] = []
+    const blockRects: { block: TimeBlock; rect: DOMRect }[] = []
+
+    for (const block of TIME_BLOCKS_LIST) {
+      const el = blockRefs.current[block]
+      if (!el) continue
+      blockRects.push({ block, rect: el.getBoundingClientRect() })
+    }
+
+    for (let i = 0; i < blockRects.length; i++) {
+      const { block, rect } = blockRects[i]
+      const zoneTop = i === 0 ? 0 : (blockRects[i - 1].rect.bottom + rect.top) / 2
+      const zoneBottom = i === blockRects.length - 1 ? Infinity : (rect.bottom + blockRects[i + 1].rect.top) / 2
+      blockZones.push({ block, top: zoneTop, bottom: zoneBottom })
+    }
+
+    for (const zone of blockZones) {
+      if (y >= zone.top && y < zone.bottom) {
+        const activities = schedule.activities[zone.block] || []
+        let insertIndex = activities.length
+
+        for (let i = 0; i < activities.length; i++) {
+          const itemKey = `${zone.block}-${activities[i]}-${i}`
+          const itemEl = itemRefs.current.get(itemKey)
+          if (itemEl) {
+            const itemRect = itemEl.getBoundingClientRect()
+            const itemMiddle = itemRect.top + itemRect.height / 2
+            if (y < itemMiddle) {
+              insertIndex = i
+              break
+            }
+          }
+        }
+
+        return { block: zone.block, index: insertIndex }
+      }
+    }
+
+    const lastBlock = TIME_BLOCKS_LIST[TIME_BLOCKS_LIST.length - 1]
+    return { block: lastBlock, index: (schedule.activities[lastBlock] || []).length }
+  }
+
+  const handlePointerDown = (e: React.PointerEvent, activityId: string, block: TimeBlock, index: number) => {
+    e.preventDefault()
+    const target = e.currentTarget as HTMLElement
+    target.setPointerCapture(e.pointerId)
+    setDragState({
+      activityId, sourceBlock: block, sourceIndex: index,
+      currentY: e.clientY, startY: e.clientY, isDragging: false
+    })
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragState) return
+    const deltaY = Math.abs(e.clientY - dragState.startY)
+    if (!dragState.isDragging && deltaY > 5) {
+      setDragState(prev => prev ? { ...prev, isDragging: true, currentY: e.clientY } : null)
+    } else if (dragState.isDragging) {
+      setDragState(prev => prev ? { ...prev, currentY: e.clientY } : null)
+      setDropTarget(getDropTargetFromY(e.clientY))
+    }
+  }
+
+  const handlePointerUp = async () => {
+    if (!dragState || !schedule) {
+      setDragState(null)
+      setDropTarget(null)
+      return
+    }
+
+    if (dragState.isDragging && dropTarget) {
+      const { activityId, sourceBlock, sourceIndex } = dragState
+      const { block: targetBlock, index: targetIndex } = dropTarget
+
+      const newSourceActivities = [...schedule.activities[sourceBlock]]
+      newSourceActivities.splice(sourceIndex, 1)
+
+      let adjustedTargetIndex = targetIndex
+      if (sourceBlock === targetBlock && sourceIndex < targetIndex) {
+        adjustedTargetIndex = Math.max(0, targetIndex - 1)
+      }
+
+      const newTargetActivities = sourceBlock === targetBlock
+        ? newSourceActivities
+        : [...schedule.activities[targetBlock]]
+      newTargetActivities.splice(adjustedTargetIndex, 0, activityId)
+
+      const newSchedule: DailySchedule = {
+        ...schedule,
+        activities: {
+          ...schedule.activities,
+          [sourceBlock]: sourceBlock === targetBlock ? newTargetActivities : newSourceActivities,
+          [targetBlock]: newTargetActivities
+        }
+      }
+
+      await storage.saveDailySchedule(newSchedule)
+      setSchedule(newSchedule)
+    }
+
+    setDragState(null)
+    setDropTarget(null)
+  }
+
   // Calculate incomplete count
   const incompleteActivities = schedule
     ? Object.values(schedule.activities).flat().filter(id => !completedIds.has(id))
@@ -528,6 +656,19 @@ export function WeekView({ onBack }: WeekViewProps) {
         ) : null
       })()}
 
+      {/* Edit Mode Banner */}
+      {isEditMode && (
+        <div className="sticky top-0 z-20 -mx-4 px-4 py-3 bg-primary text-primary-foreground flex items-center justify-between shadow-md">
+          <span className="font-medium">Drag activities to reorder</span>
+          <button
+            onClick={() => setIsEditMode(false)}
+            className="px-4 py-1.5 rounded-full bg-white/20 hover:bg-white/30 font-medium transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      )}
+
       {/* Activities for Selected Day - with time dividers */}
       {schedule && (
         <div className="space-y-2">
@@ -548,7 +689,12 @@ export function WeekView({ onBack }: WeekViewProps) {
             }[block]
 
             return (
-              <div key={block}>
+              <div key={block} ref={el => { blockRefs.current[block] = el }}>
+                {/* Drop indicator at start of block */}
+                {dropTarget?.block === block && dropTarget.index === 0 && dragState?.isDragging && (
+                  <div className="h-1 bg-primary rounded-full mx-2 mb-2" />
+                )}
+
                 {/* Calendar events for this time block */}
                 {calendarEvents.length > 0 && (
                   <div className="space-y-2 mb-2">
@@ -580,32 +726,67 @@ export function WeekView({ onBack }: WeekViewProps) {
                 {/* Activities for this time block */}
                 {activities.length > 0 && (
                   <div className="space-y-2 mb-2">
-                    {activities.map(activityId => {
+                    {activities.map((activityId, index) => {
                       const activity = getActivity(activityId)
                       if (!activity) return null
 
+                      const isDragging = dragState?.activityId === activityId && dragState?.isDragging
+                      const itemKey = `${block}-${activityId}-${index}`
+
                       return (
-                        <ActivityCard
-                          key={activityId}
-                          activity={activity}
-                          isCompleted={completedIds.has(activityId)}
-                          timeBlock={block}
-                          onToggleComplete={() => handleToggleComplete(activityId, block)}
-                          onSwap={() => {
-                            setSwapActivity(activity)
-                            setSelectedTimeBlock(block)
-                            setShowSwapModal(true)
-                          }}
-                          onPush={() => {
-                            setPushActivity(activity)
-                            setShowPushModal(true)
-                          }}
-                          onClick={() => {
-                            setSelectedActivity(activity)
-                            setSelectedTimeBlock(block)
-                          }}
-                          onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
-                        />
+                        <div key={itemKey}>
+                          <div
+                            ref={el => {
+                              if (el) itemRefs.current.set(itemKey, el)
+                              else itemRefs.current.delete(itemKey)
+                            }}
+                            className={cn(
+                              'relative flex items-center gap-2',
+                              isDragging && 'opacity-50'
+                            )}
+                          >
+                            {/* Drag handle - only visible in edit mode */}
+                            {isEditMode && (
+                              <div
+                                onPointerDown={(e) => handlePointerDown(e, activityId, block, index)}
+                                onPointerMove={handlePointerMove}
+                                onPointerUp={handlePointerUp}
+                                className="flex-shrink-0 p-1 cursor-grab active:cursor-grabbing text-muted-foreground touch-none"
+                              >
+                                <GripVertical className="h-5 w-5" />
+                              </div>
+                            )}
+
+                            <div className="flex-1">
+                              <ActivityCard
+                                activity={activity}
+                                isCompleted={completedIds.has(activityId)}
+                                timeBlock={block}
+                                onToggleComplete={() => handleToggleComplete(activityId, block)}
+                                onSwap={() => {
+                                  setSwapActivity(activity)
+                                  setSelectedTimeBlock(block)
+                                  setShowSwapModal(true)
+                                }}
+                                onPush={() => {
+                                  setPushActivity(activity)
+                                  setShowPushModal(true)
+                                }}
+                                onClick={() => {
+                                  setSelectedActivity(activity)
+                                  setSelectedTimeBlock(block)
+                                }}
+                                onReorder={() => setIsEditMode(true)}
+                                onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Drop indicator after this item */}
+                          {dropTarget?.block === block && dropTarget.index === index + 1 && dragState?.isDragging && (
+                            <div className="h-1 bg-primary rounded-full mx-2 mt-2" />
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -631,11 +812,17 @@ export function WeekView({ onBack }: WeekViewProps) {
           activity={selectedActivity}
           isCompleted={completedIds.has(selectedActivity.id)}
           onClose={() => setSelectedActivity(null)}
-          onComplete={() => {
+          onComplete={(durationMinutes) => {
             if (selectedTimeBlock) {
-              handleToggleComplete(selectedActivity.id, selectedTimeBlock)
+              handleToggleComplete(selectedActivity.id, selectedTimeBlock, durationMinutes)
             }
             setSelectedActivity(null)
+          }}
+          onDurationChange={(durationMinutes) => {
+            if (selectedTimeBlock) {
+              const dateStr = formatDateISO(selectedDate)
+              storage.updateCompletionDuration(dateStr, selectedActivity.id, selectedTimeBlock, 0, durationMinutes)
+            }
           }}
           onSwap={() => {
             setSwapActivity(selectedActivity)

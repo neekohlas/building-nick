@@ -14,6 +14,7 @@ import {
   hasCloudData,
   syncRemindersToCloud,
   updateReminderCompletionInCloud,
+  syncMoodEntry,
   SyncStatus,
 } from '@/lib/sync-service'
 import {
@@ -315,6 +316,25 @@ export function useSync() {
     return newCompletionState
   }, [isAuthenticated, userId, queueSync])
 
+  // Sync-aware save mood entry
+  const saveMoodEntryWithSync = useCallback(async (entry: {
+    date: string
+    category: string
+    emotion?: string
+    notes?: string
+  }) => {
+    // Save locally first
+    await storage.saveMoodEntry(entry)
+
+    // Queue cloud sync
+    if (isAuthenticated && userId) {
+      const savedAt = new Date().toISOString()
+      queueSync(`mood-${entry.date}`, () =>
+        syncMoodEntry({ ...entry, savedAt }, userId).then(() => {})
+      )
+    }
+  }, [storage.saveMoodEntry, isAuthenticated, userId, queueSync])
+
   // Pull all data from cloud and merge into local storage
   const pullFromCloud = useCallback(async () => {
     if (!isAuthenticated || !userId) return
@@ -438,11 +458,25 @@ export function useSync() {
           console.log('[useSync] Merged', cloudData.reminders.length, 'reminders from cloud')
         }
 
+        // Merge mood entries from cloud
+        if (cloudData.moodEntries && cloudData.moodEntries.length > 0) {
+          for (const moodEntry of cloudData.moodEntries) {
+            await storage.saveMoodEntry({
+              date: moodEntry.date,
+              category: moodEntry.category,
+              emotion: moodEntry.emotion,
+              notes: moodEntry.notes,
+            })
+          }
+          console.log('[useSync] Merged', cloudData.moodEntries.length, 'mood entries from cloud')
+        }
+
         console.log('[useSync] Pulled data from cloud:', {
           completions: cloudData.completions.length,
           schedules: cloudData.schedules.length,
           planConfigs: cloudData.planConfigs.length,
           reminders: cloudData.reminders?.length || 0,
+          moodEntries: cloudData.moodEntries?.length || 0,
         })
       }
 
@@ -677,6 +711,9 @@ export function useSync() {
     renameRoutine: renameRoutineWithSync,
     toggleRoutineStar: toggleRoutineStarWithSync,
     deleteRoutine: deleteRoutineWithSync,
+
+    // Override mood entry with sync version
+    saveMoodEntry: saveMoodEntryWithSync,
 
     // Sync actions
     pullFromCloud,

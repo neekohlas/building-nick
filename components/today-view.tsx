@@ -9,7 +9,8 @@ import { Celebration } from './celebration'
 import { AddActivityModal } from './add-activity-modal'
 import { WeatherDetailModal } from './weather-detail-modal'
 import { Button } from '@/components/ui/button'
-import { CalendarClock, Plus, GripVertical, ChevronLeft, ChevronRight } from 'lucide-react'
+import { HealthCoachModal } from './health-coach-modal'
+import { CalendarClock, Plus, GripVertical, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   Activity,
@@ -39,6 +40,8 @@ import { useNotificationScheduler } from '@/hooks/use-notifications'
 interface TodayViewProps {
   onOpenMenu: () => void
   snapToTodayKey?: number
+  onAddCoachSuggestions?: (activityIds: string[]) => void
+  onFocusForWeek?: (activityIds: string[]) => void
 }
 
 // Visible time blocks in Today view
@@ -78,7 +81,7 @@ const TIME_BLOCK_HOURS: Record<TimeBlock, number> = {
 const getInstanceKey = (activityId: string, timeBlock: string, index: number) =>
   `${activityId}_${timeBlock}_${index}`
 
-export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
+export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, onFocusForWeek }: TodayViewProps) {
   const storage = useSync()
   const { getActivity, getQuickMindBodyActivities } = useActivities()
   const { weather, getWeatherForDate, getHourlyForDate, locationName, isLoading: weatherLoading, error: weatherError } = useWeather()
@@ -105,6 +108,9 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
+
+  // Health Coach state
+  const [showHealthCoach, setShowHealthCoach] = useState(false)
 
   // Reminders state
   const [overdueReminders, setOverdueReminders] = useState<Reminder[]>([])
@@ -543,7 +549,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
   }, [isToday, schedule]) // Recalculate when schedule changes (affects layout)
 
   // Toggle completion (instance-based)
-  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock, instanceIndex: number) => {
+  const handleToggleComplete = async (activityId: string, timeBlock: TimeBlock, instanceIndex: number, durationMinutes?: number) => {
     if (!storage.isReady) return
 
     const instanceKey = getInstanceKey(activityId, timeBlock, instanceIndex)
@@ -561,7 +567,8 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
         date: dateStr,
         activityId,
         timeBlock,
-        instanceIndex
+        instanceIndex,
+        ...(durationMinutes != null ? { durationMinutes } : {})
       })
       setCompletedInstanceKeys(prev => new Set([...prev, instanceKey]))
       setShowCelebration(true)
@@ -824,33 +831,69 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
     setAddActivityDefaultBlock(null)
   }
 
+  // Handle "Add to Today" from Health Coach
+  const handleCoachAddToToday = async (activityIds: string[]) => {
+    if (activityIds.length === 0 || !schedule) return
+
+    const hour = new Date().getHours()
+    let timeBlock: TimeBlock = 'before9pm'
+    if (hour < 6) timeBlock = 'before6am'
+    else if (hour < 9) timeBlock = 'before9am'
+    else if (hour < 12) timeBlock = 'beforeNoon'
+    else if (hour < 14.5) timeBlock = 'before230pm'
+    else if (hour < 17) timeBlock = 'before5pm'
+
+    const existingInBlock = schedule.activities[timeBlock] || []
+    const newActivities = activityIds.filter(id => !existingInBlock.includes(id))
+
+    if (newActivities.length > 0) {
+      const newSchedule: DailySchedule = {
+        ...schedule,
+        activities: {
+          ...schedule.activities,
+          [timeBlock]: [...existingInBlock, ...newActivities]
+        }
+      }
+      await storage.saveDailySchedule(newSchedule)
+      setSchedule(newSchedule)
+    }
+
+    setShowHealthCoach(false)
+  }
+
   // Calculate drop target from Y position
   const getDropTargetFromY = (y: number): { block: TimeBlock; index: number } | null => {
     if (!schedule) return null
 
-    // First check if we're above the first block - if so, return position 0 of first block
-    const firstBlockEl = blockRefs.current.before9am
-    if (firstBlockEl) {
-      const firstRect = firstBlockEl.getBoundingClientRect()
-      if (y < firstRect.top) {
-        return { block: 'before9am', index: 0 }
-      }
+    // Build an array of block rects with their midpoints for zone-based detection
+    // Each block "owns" the vertical space from its midpoint to the next block's midpoint
+    const blockZones: { block: TimeBlock; top: number; bottom: number }[] = []
+    const blockRects: { block: TimeBlock; rect: DOMRect }[] = []
+
+    for (const block of TIME_BLOCKS) {
+      const el = blockRefs.current[block]
+      if (!el) continue
+      blockRects.push({ block, rect: el.getBoundingClientRect() })
     }
 
-    // Find the block and position based on Y coordinate
-    for (const block of TIME_BLOCKS) {
-      const blockEl = blockRefs.current[block]
-      if (!blockEl) continue
+    for (let i = 0; i < blockRects.length; i++) {
+      const { block, rect } = blockRects[i]
+      // Zone top = midpoint between this block's top and previous block's bottom (or 0)
+      const zoneTop = i === 0 ? 0 : (blockRects[i - 1].rect.bottom + rect.top) / 2
+      // Zone bottom = midpoint between this block's bottom and next block's top (or Infinity)
+      const zoneBottom = i === blockRects.length - 1 ? Infinity : (rect.bottom + blockRects[i + 1].rect.top) / 2
 
-      const blockRect = blockEl.getBoundingClientRect()
-      if (y >= blockRect.top && y <= blockRect.bottom) {
-        // We're in this block - now find the position
-        const activities = schedule.activities[block] || []
-        let insertIndex = activities.length // Default to end
+      blockZones.push({ block, top: zoneTop, bottom: zoneBottom })
+    }
+
+    // Find which block zone the Y coordinate falls in
+    for (const zone of blockZones) {
+      if (y >= zone.top && y < zone.bottom) {
+        const activities = schedule.activities[zone.block] || []
+        let insertIndex = activities.length // Default: insert at end (works for empty blocks too)
 
         for (let i = 0; i < activities.length; i++) {
-          // Use the same key format as in the render: ${block}-${activityId}-${index}
-          const itemKey = `${block}-${activities[i]}-${i}`
+          const itemKey = `${zone.block}-${activities[i]}-${i}`
           const itemEl = itemRefs.current.get(itemKey)
           if (itemEl) {
             const itemRect = itemEl.getBoundingClientRect()
@@ -862,32 +905,14 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
           }
         }
 
-        return { block, index: insertIndex }
+        return { block: zone.block, index: insertIndex }
       }
     }
 
-    // If outside all blocks (below), find the closest one
-    let closestBlock: TimeBlock = 'before9pm'
-    let closestDist = Infinity
-
-    for (const block of TIME_BLOCKS) {
-      const blockEl = blockRefs.current[block]
-      if (!blockEl) continue
-
-      const blockRect = blockEl.getBoundingClientRect()
-      // Calculate distance to top and bottom
-      const distToTop = Math.abs(y - blockRect.top)
-      const distToBottom = Math.abs(y - blockRect.bottom)
-      const dist = Math.min(distToTop, distToBottom)
-
-      if (dist < closestDist) {
-        closestDist = dist
-        closestBlock = block
-      }
-    }
-
-    const activities = schedule.activities[closestBlock] || []
-    return { block: closestBlock, index: activities.length }
+    // Fallback: last block
+    const lastBlock = TIME_BLOCKS[TIME_BLOCKS.length - 1]
+    const activities = schedule.activities[lastBlock] || []
+    return { block: lastBlock, index: activities.length }
   }
 
   // Drag handlers
@@ -1325,17 +1350,63 @@ export function TodayView({ onOpenMenu, snapToTodayKey }: TodayViewProps) {
         </div>
       </div>
 
+      {/* Floating Health Coach Button */}
+      <button
+        onClick={() => setShowHealthCoach(true)}
+        className="fixed bottom-24 right-4 z-30 w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 text-white shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+        aria-label="Health Coach"
+      >
+        <Sparkles className="h-5 w-5" />
+      </button>
+
+      {/* Health Coach Modal */}
+      {showHealthCoach && (
+        <HealthCoachModal
+          onClose={() => setShowHealthCoach(false)}
+          onAddToToday={(activityIds) => {
+            handleCoachAddToToday(activityIds)
+          }}
+          onDoItNow={async (activityId) => {
+            // Add to today's current time block
+            await handleCoachAddToToday([activityId])
+            // Open the activity detail modal
+            const activity = getActivity(activityId)
+            if (activity) {
+              const hour = new Date().getHours()
+              let timeBlock: TimeBlock = 'before9pm'
+              if (hour < 6) timeBlock = 'before6am'
+              else if (hour < 9) timeBlock = 'before9am'
+              else if (hour < 12) timeBlock = 'beforeNoon'
+              else if (hour < 14.5) timeBlock = 'before230pm'
+              else if (hour < 17) timeBlock = 'before5pm'
+              setSelectedActivity(activity)
+              setSelectedTimeBlock(timeBlock)
+              setSelectedInstanceIndex(0)
+            }
+          }}
+          onFocusForWeek={(activityIds) => {
+            setShowHealthCoach(false)
+            if (onFocusForWeek) onFocusForWeek(activityIds)
+          }}
+        />
+      )}
+
       {/* Activity Detail Modal */}
       {selectedActivity && !showSwapModal && (
         <ActivityDetailModal
           activity={selectedActivity}
           isCompleted={selectedTimeBlock ? completedInstanceKeys.has(getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)) : false}
           onClose={() => setSelectedActivity(null)}
-          onComplete={() => {
+          onComplete={(durationMinutes) => {
             if (selectedTimeBlock) {
-              handleToggleComplete(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)
+              handleToggleComplete(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
             }
             setSelectedActivity(null)
+          }}
+          onDurationChange={(durationMinutes) => {
+            if (selectedTimeBlock) {
+              storage.updateCompletionDuration(dateStr, selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
+            }
           }}
           onSwap={() => {
             setSwapActivity(selectedActivity)

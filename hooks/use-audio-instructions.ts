@@ -144,6 +144,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const isStoppedRef = useRef(false) // Track if audio mode has been stopped to prevent callbacks
   const keepAliveTimerRef = useRef<NodeJS.Timeout | null>(null) // Periodic restart for iOS Safari
   const lastInterimRef = useRef<string>('') // Track interim results for quick keyword matching
+  const pauseTimerRef = useRef<NodeJS.Timeout | null>(null) // Post-speech pause before listening
 
   // Keep storageRef in sync
   useEffect(() => {
@@ -186,6 +187,10 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         clearInterval(keepAliveTimerRef.current)
         keepAliveTimerRef.current = null
       }
+      if (pauseTimerRef.current) {
+        clearTimeout(pauseTimerRef.current)
+        pauseTimerRef.current = null
+      }
     }
   }, [])
 
@@ -199,7 +204,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     window.speechSynthesis.cancel()
 
     const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 0.9 // Slightly slower for clarity
+    utterance.rate = 0.8 // Slower for meditation/mindfulness clarity
     utterance.pitch = 1
     utterance.volume = 1
 
@@ -322,6 +327,12 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const speak = useCallback((text: string, onEnd?: () => void) => {
     // Don't speak if stopped
     if (isStoppedRef.current) return
+
+    // Clear any pending post-speech pause timer
+    if (pauseTimerRef.current) {
+      clearTimeout(pauseTimerRef.current)
+      pauseTimerRef.current = null
+    }
 
     // Cancel any ongoing browser speech
     if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -501,6 +512,17 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     }
   }, [])
 
+  // Delayed start listening - adds a pause after speech for the user to absorb the step
+  const delayedStartListening = useCallback(() => {
+    if (isStoppedRef.current) return
+    // Keep 'speaking' phase during the brief pause so UI doesn't flash
+    pauseTimerRef.current = setTimeout(() => {
+      if (!isStoppedRef.current && stateRef.current.phase === 'speaking') {
+        startListening()
+      }
+    }, 2500) // 2.5 second pause between steps
+  }, [startListening])
+
   // Execute a command (used by both Claude interpretation and manual buttons)
   const executeCommand = useCallback((command: AudioCommand) => {
     const current = stateRef.current
@@ -510,7 +532,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         if (current.currentStepIndex < current.steps.length - 1) {
           const newIndex = current.currentStepIndex + 1
           setState((prev) => ({ ...prev, currentStepIndex: newIndex, phase: 'speaking' }))
-          speak(current.steps[newIndex], startListening)
+          speak(current.steps[newIndex], delayedStartListening)
         } else if (current.closingContext) {
           setState((prev) => ({ ...prev, phase: 'speaking' }))
           speak(current.closingContext, () => {
@@ -523,17 +545,17 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
 
       case 'repeat':
         setState((prev) => ({ ...prev, phase: 'speaking' }))
-        speak(current.steps[current.currentStepIndex], startListening)
+        speak(current.steps[current.currentStepIndex], delayedStartListening)
         break
 
       case 'back':
         if (current.currentStepIndex > 0) {
           const newIndex = current.currentStepIndex - 1
           setState((prev) => ({ ...prev, currentStepIndex: newIndex, phase: 'speaking' }))
-          speak(current.steps[newIndex], startListening)
+          speak(current.steps[newIndex], delayedStartListening)
         } else {
           setState((prev) => ({ ...prev, phase: 'speaking' }))
-          speak(current.steps[0], startListening)
+          speak(current.steps[0], delayedStartListening)
         }
         break
 
@@ -568,7 +590,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         startListening()
         break
     }
-  }, [speak, startListening])
+  }, [speak, startListening, delayedStartListening])
 
   // Interpret command using Claude API
   const interpretWithClaude = useCallback(async (transcript: string): Promise<AudioCommand> => {
@@ -650,13 +672,17 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     }))
 
     // Start with a brief intro then first step
-    speak(`Step 1 of ${steps.length}. ${steps[0]}`, startListening)
-  }, [speak, startListening])
+    speak(`Step 1 of ${steps.length}. ${steps[0]}`, delayedStartListening)
+  }, [speak, delayedStartListening])
 
   const stopAudioMode = useCallback(() => {
     // Set stopped flag FIRST to prevent any callbacks from firing
     isStoppedRef.current = true
 
+    if (pauseTimerRef.current) {
+      clearTimeout(pauseTimerRef.current)
+      pauseTimerRef.current = null
+    }
     if (keepAliveTimerRef.current) {
       clearInterval(keepAliveTimerRef.current)
       keepAliveTimerRef.current = null
@@ -692,7 +718,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     if (current.currentStepIndex < current.steps.length - 1) {
       const newIndex = current.currentStepIndex + 1
       setState((prev) => ({ ...prev, currentStepIndex: newIndex, phase: 'speaking' }))
-      speak(`Step ${newIndex + 1} of ${current.steps.length}. ${current.steps[newIndex]}`, startListening)
+      speak(`Step ${newIndex + 1} of ${current.steps.length}. ${current.steps[newIndex]}`, delayedStartListening)
     } else if (current.closingContext) {
       setState((prev) => ({ ...prev, phase: 'speaking' }))
       speak(current.closingContext, () => {
@@ -701,24 +727,28 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     } else {
       setState((prev) => ({ ...prev, phase: 'idle' }))
     }
-  }, [speak, startListening])
+  }, [speak, delayedStartListening])
 
   const previousStep = useCallback(() => {
     const current = stateRef.current
     if (current.currentStepIndex > 0) {
       const newIndex = current.currentStepIndex - 1
       setState((prev) => ({ ...prev, currentStepIndex: newIndex, phase: 'speaking' }))
-      speak(`Step ${newIndex + 1} of ${current.steps.length}. ${current.steps[newIndex]}`, startListening)
+      speak(`Step ${newIndex + 1} of ${current.steps.length}. ${current.steps[newIndex]}`, delayedStartListening)
     }
-  }, [speak, startListening])
+  }, [speak, delayedStartListening])
 
   const repeatStep = useCallback(() => {
     const current = stateRef.current
     setState((prev) => ({ ...prev, phase: 'speaking' }))
-    speak(`Step ${current.currentStepIndex + 1} of ${current.steps.length}. ${current.steps[current.currentStepIndex]}`, startListening)
-  }, [speak, startListening])
+    speak(`Step ${current.currentStepIndex + 1} of ${current.steps.length}. ${current.steps[current.currentStepIndex]}`, delayedStartListening)
+  }, [speak, delayedStartListening])
 
   const pause = useCallback(() => {
+    if (pauseTimerRef.current) {
+      clearTimeout(pauseTimerRef.current)
+      pauseTimerRef.current = null
+    }
     if (recognitionRef.current) {
       recognitionRef.current.abort()
     }
@@ -735,8 +765,8 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const resume = useCallback(() => {
     const current = stateRef.current
     setState((prev) => ({ ...prev, phase: 'speaking' }))
-    speak(current.steps[current.currentStepIndex], startListening)
-  }, [speak, startListening])
+    speak(current.steps[current.currentStepIndex], delayedStartListening)
+  }, [speak, delayedStartListening])
 
   return {
     ...state,

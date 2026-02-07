@@ -18,6 +18,7 @@ export interface Completion {
   timeBlock: string
   instanceIndex: number  // Position in the time block array (0-based)
   completedAt: string
+  durationMinutes?: number  // User-overridden duration (falls back to activity default)
 }
 
 export interface DailySchedule {
@@ -551,13 +552,21 @@ export function useStorage() {
     const fullCompletion: Completion = {
       ...completion,
       id: `${completion.date}_${completion.activityId}_${completion.timeBlock}_${completion.instanceIndex}`,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
     }
     await dbPut('completions', fullCompletion, 'id')
   }, [])
 
   const removeCompletion = useCallback(async (date: string, activityId: string, timeBlock: string, instanceIndex: number) => {
     await dbDelete('completions', `${date}_${activityId}_${timeBlock}_${instanceIndex}`)
+  }, [])
+
+  const updateCompletionDuration = useCallback(async (date: string, activityId: string, timeBlock: string, instanceIndex: number, durationMinutes: number) => {
+    const id = `${date}_${activityId}_${timeBlock}_${instanceIndex}`
+    const existing = await dbGet<Completion>('completions', id)
+    if (existing) {
+      await dbPut('completions', { ...existing, durationMinutes }, 'id')
+    }
   }, [])
 
   const getCompletionsForDate = useCallback(async (date: string): Promise<Completion[]> => {
@@ -980,6 +989,32 @@ export function useStorage() {
     getDB().catch(() => {})
   }, [])
 
+  // Mood check-in storage (uses metadata store with key convention mood_${date})
+  const saveMoodEntry = useCallback(async (entry: {
+    date: string
+    category: string      // e.g. 'energized', 'calm', 'stressed', 'down', 'meh'
+    emotion?: string      // e.g. 'hopeful', 'anxious', 'exhausted'
+    notes?: string        // free-text notes
+  }) => {
+    await dbPut('metadata', {
+      key: `mood_${entry.date}`,
+      ...entry,
+      savedAt: new Date().toISOString()
+    }, 'key')
+  }, [])
+
+  const getMoodEntry = useCallback(async (date: string) => {
+    return dbGet<{ key: string; date: string; category: string; emotion?: string; notes?: string; savedAt: string }>('metadata', `mood_${date}`)
+  }, [])
+
+  const getMoodEntriesForRange = useCallback(async (startDate: string, endDate: string) => {
+    // Scan metadata for mood entries in date range
+    const allMetadata = await dbGetAll<{ key: string; date: string; category: string; emotion?: string; notes?: string; savedAt: string }>('metadata')
+    return allMetadata.filter(m =>
+      m.key?.startsWith('mood_') && m.date >= startDate && m.date <= endDate
+    )
+  }, [])
+
   const retryConnection = useCallback(() => {
     dbPromise = null
     setHasConnectionError(false)
@@ -1001,6 +1036,7 @@ export function useStorage() {
     hasConnectionError,
     saveCompletion,
     removeCompletion,
+    updateCompletionDuration,
     getCompletionsForDate,
     isActivityInstanceCompleted,
     saveDailySchedule,
@@ -1034,6 +1070,10 @@ export function useStorage() {
     saveClaudeGeneratedAudio,
     deleteClaudeGeneratedAudio,
     clearAudioCache,
+    // Mood tracking
+    saveMoodEntry,
+    getMoodEntry,
+    getMoodEntriesForRange,
     // Recovery
     clearDatabase,
     retryConnection

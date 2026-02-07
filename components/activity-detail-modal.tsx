@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus } from 'lucide-react'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
@@ -48,12 +48,14 @@ interface ActivityDetailModalProps {
   activity: Activity
   isCompleted: boolean
   onClose: () => void
-  onComplete: () => void
+  onComplete: (durationMinutes?: number) => void
+  onDurationChange?: (durationMinutes: number) => void  // For updating duration on already-completed activities
   onSwap?: () => void
   onPush?: () => void
   onRemove?: () => void
   onAddToToday?: () => void  // For library view - opens time slot picker
   mode?: 'today' | 'library'  // Determines which actions to show
+  savedDuration?: number  // Duration saved on the completion (if already completed)
 }
 
 export function ActivityDetailModal({
@@ -61,14 +63,18 @@ export function ActivityDetailModal({
   isCompleted,
   onClose,
   onComplete,
+  onDurationChange,
   onSwap,
   onPush,
   onRemove,
   onAddToToday,
-  mode = 'today'
+  mode = 'today',
+  savedDuration,
 }: ActivityDetailModalProps) {
   const [showAudioMode, setShowAudioMode] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
+  const [editingDuration, setEditingDuration] = useState(false)
+  const [customDuration, setCustomDuration] = useState(savedDuration ?? activity.duration)
   const category = CATEGORIES[activity.category]
 
   // Show audio button based on Notion's Voice Guided checkbox
@@ -103,10 +109,48 @@ export function ActivityDetailModal({
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Meta info */}
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              {formatDuration(activity.duration)}
-            </span>
+            {editingDuration ? (
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                <button
+                  onClick={() => setCustomDuration(prev => Math.max(1, prev - 5))}
+                  className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-muted-foreground/20"
+                >
+                  <Minus className="h-3 w-3" />
+                </button>
+                <span className="text-sm font-medium w-16 text-center text-foreground">
+                  {formatDuration(customDuration)}
+                </span>
+                <button
+                  onClick={() => setCustomDuration(prev => prev + 5)}
+                  className="w-7 h-7 rounded-full bg-muted flex items-center justify-center hover:bg-muted-foreground/20"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingDuration(false)
+                    if (isCompleted && onDurationChange) {
+                      onDurationChange(customDuration)
+                    }
+                  }}
+                  className="text-xs text-primary font-medium ml-1"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setEditingDuration(true)}
+                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+              >
+                <Clock className="h-4 w-4" />
+                {formatDuration(customDuration)}
+                {customDuration !== activity.duration && (
+                  <span className="text-xs text-primary">(edited)</span>
+                )}
+              </button>
+            )}
             <span className="text-xs text-muted-foreground">
               {category.name}
             </span>
@@ -255,7 +299,7 @@ export function ActivityDetailModal({
                 </Button>
                 <Button
                   className="flex-1"
-                  onClick={onComplete}
+                  onClick={() => onComplete(customDuration !== activity.duration ? customDuration : undefined)}
                 >
                   <Check className="h-4 w-4 mr-2" />
                   Mark Complete
@@ -277,7 +321,7 @@ export function ActivityDetailModal({
                 )}
                 <Button
                   className={onSwap ? "flex-1" : "w-full"}
-                  onClick={onComplete}
+                  onClick={() => onComplete(customDuration !== activity.duration ? customDuration : undefined)}
                   disabled={isCompleted}
                 >
                   {isCompleted ? (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Clock, ExternalLink, Star, Loader2, Video, Volume2, X, Check } from 'lucide-react'
+import { Clock, ExternalLink, Star, Loader2, Video, Volume2, X, Check, ChevronLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, hasVideo } from '@/lib/activities'
 import { formatDuration, formatDateISO } from '@/lib/date-utils'
@@ -64,7 +64,7 @@ export function LibraryView({ onBack }: LibraryViewProps) {
     }
   }
 
-  const handleMarkComplete = async () => {
+  const handleMarkComplete = async (durationMinutes?: number) => {
     if (!selectedActivity || !storage.isReady) return
 
     const today = formatDateISO(new Date())
@@ -98,7 +98,9 @@ export function LibraryView({ onBack }: LibraryViewProps) {
     await storage.saveCompletion({
       date: today,
       activityId: selectedActivity.id,
-      completedAt: new Date().toISOString()
+      timeBlock: currentTimeBlock,
+      instanceIndex: 0,
+      ...(durationMinutes != null ? { durationMinutes } : {})
     })
 
     // Show success message
@@ -166,11 +168,19 @@ export function LibraryView({ onBack }: LibraryViewProps) {
       )}
 
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold">Activity Library</h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          {sortedActivities.length} activities available
-        </p>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onBack}
+          className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <div>
+          <h2 className="text-lg font-bold">Activity Library</h2>
+          <p className="text-sm text-muted-foreground">
+            {sortedActivities.length} activities available
+          </p>
+        </div>
       </div>
 
       {/* Filters */}

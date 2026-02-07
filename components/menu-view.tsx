@@ -31,6 +31,7 @@ interface MenuViewProps {
   onNavigateToToday?: () => void
   onShowToast?: (message: string) => void
   onOpenLibrary?: () => void
+  onOpenStats?: () => void
 }
 
 interface MenuItem {
@@ -42,7 +43,7 @@ interface MenuItem {
   connected?: boolean
 }
 
-export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast, onOpenLibrary }: MenuViewProps) {
+export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast, onOpenLibrary, onOpenStats }: MenuViewProps) {
   const router = useRouter()
   const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
   const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
@@ -243,6 +244,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
 
   const menuItems: MenuItem[] = [
     {
+      icon: Sparkles,
+      label: 'Health Coach',
+      description: 'Get personalized activity suggestions',
+      onClick: () => setShowHealthCoach(true)
+    },
+    {
       icon: CalendarDays,
       label: 'Plan Next 7 Days',
       description: 'Set your focus and schedule activities',
@@ -253,6 +260,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       label: 'Activity Library',
       description: 'Browse all available activities',
       onClick: onOpenLibrary || (() => {})
+    },
+    {
+      icon: BarChart3,
+      label: 'Statistics',
+      description: 'View your weekly activity breakdown',
+      onClick: onOpenStats || (() => {})
     },
     {
       icon: Calendar,
@@ -269,12 +282,6 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       description: getRemindersSyncDescription(),
       onClick: handleRemindersSync,
       connected: !!remindersSyncTime
-    },
-    {
-      icon: Sparkles,
-      label: 'Health Coach',
-      description: 'Get personalized activity suggestions',
-      onClick: () => setShowHealthCoach(true)
     },
     {
       icon: MapPin,
@@ -303,13 +310,6 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       description: 'Upload all local data to cloud',
       onClick: handlePushToCloud,
       disabled: !isAuthenticated || syncStatus === 'syncing'
-    },
-    {
-      icon: BarChart3,
-      label: 'Statistics',
-      description: 'View your progress and streaks',
-      onClick: () => {},
-      disabled: true
     },
     {
       icon: BellRing,
@@ -364,46 +364,51 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
 
       {/* Menu Items */}
       <div className="space-y-3">
-        {menuItems.map((item) => (
-          <button
-            key={item.label}
-            onClick={item.onClick}
-            disabled={item.disabled}
-            className={cn(
-              'w-full flex items-center gap-4 rounded-xl border bg-card p-4 transition-all text-left',
-              item.disabled
-                ? 'opacity-50 cursor-not-allowed'
-                : 'hover:border-muted-foreground/30 hover:shadow-md'
-            )}
-          >
-            <div className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary",
-              syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-pulse'
-            )}>
-              <item.icon className={cn(
-                "h-5 w-5",
-                syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-spin'
-              )} />
-            </div>
-            <div className="flex-1">
-              <span className="font-medium text-foreground">{item.label}</span>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {item.description}
-              </p>
-            </div>
-            {item.connected ? (
-              <Check className="h-5 w-5 text-green-500" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-        ))}
+        {menuItems.map((item) => {
+          const isCoach = item.label === 'Health Coach'
+          return (
+            <button
+              key={item.label}
+              onClick={item.onClick}
+              disabled={item.disabled}
+              className={cn(
+                'w-full flex items-center gap-4 rounded-xl border p-4 transition-all text-left',
+                isCoach
+                  ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 border-purple-300/40 dark:border-purple-700/40'
+                  : 'bg-card',
+                item.disabled
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:border-muted-foreground/30 hover:shadow-md'
+              )}
+            >
+              <div className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-full",
+                isCoach
+                  ? 'bg-gradient-to-br from-purple-500 to-indigo-600 text-white'
+                  : 'bg-primary/10 text-primary',
+                syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-pulse'
+              )}>
+                <item.icon className={cn(
+                  "h-5 w-5",
+                  syncStatus === 'syncing' && item.label === 'Cloud Sync' && 'animate-spin'
+                )} />
+              </div>
+              <div className="flex-1">
+                <span className="font-medium text-foreground">{item.label}</span>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {item.description}
+                </p>
+              </div>
+              {item.connected ? (
+                <Check className="h-5 w-5 text-green-500" />
+              ) : (
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              )}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Coming Soon Note */}
-      <p className="text-xs text-center text-muted-foreground">
-        Statistics coming soon in a future update.
-      </p>
 
       {/* Location Modal */}
       {showLocationModal && (

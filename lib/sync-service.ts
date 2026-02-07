@@ -1,4 +1,4 @@
-import { getSupabaseBrowserClient, DbCompletion, DbSchedule, DbSavedPlanConfig, DbReminder } from './supabase'
+import { getSupabaseBrowserClient, DbCompletion, DbSchedule, DbSavedPlanConfig, DbReminder, DbMoodEntry } from './supabase'
 import { Completion, DailySchedule, SavedPlanConfig } from '@/hooks/use-storage'
 import type { Reminder } from './reminders'
 
@@ -319,6 +319,84 @@ export async function updateReminderCompletionInCloud(
   }
 }
 
+// Mood entry types (local)
+export interface MoodEntryLocal {
+  date: string
+  category: string
+  emotion?: string
+  notes?: string
+  savedAt: string
+}
+
+function moodEntryToDb(entry: MoodEntryLocal, userId: string): Omit<DbMoodEntry, 'updated_at'> {
+  return {
+    id: `mood_${entry.date}`,
+    user_id: userId,
+    date: entry.date,
+    category: entry.category,
+    emotion: entry.emotion || null,
+    notes: entry.notes || null,
+    saved_at: entry.savedAt,
+  }
+}
+
+function dbToMoodEntry(db: DbMoodEntry): MoodEntryLocal {
+  return {
+    date: db.date,
+    category: db.category,
+    emotion: db.emotion || undefined,
+    notes: db.notes || undefined,
+    savedAt: db.saved_at,
+  }
+}
+
+// Sync a mood entry to Supabase
+export async function syncMoodEntry(entry: MoodEntryLocal, userId: string): Promise<boolean> {
+  console.log('[syncService] syncMoodEntry called:', { date: entry.date, category: entry.category })
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) return false
+
+  try {
+    const dbData = moodEntryToDb(entry, userId)
+    const { error } = await supabase
+      .from('mood_entries')
+      .upsert(dbData, { onConflict: 'user_id,id' })
+
+    if (error) {
+      console.error('[syncService] Error syncing mood entry:', error)
+      return false
+    }
+    console.log('[syncService] Mood entry synced successfully')
+    return true
+  } catch (e) {
+    console.error('[syncService] Exception syncing mood entry:', e)
+    return false
+  }
+}
+
+// Pull mood entries from Supabase for a user
+export async function pullMoodEntriesFromCloud(userId: string): Promise<MoodEntryLocal[] | null> {
+  const supabase = getSupabaseBrowserClient()
+  if (!supabase) return null
+
+  try {
+    const { data, error } = await supabase
+      .from('mood_entries')
+      .select('*')
+      .eq('user_id', userId)
+
+    if (error) {
+      console.error('[syncService] Error fetching mood entries:', error)
+      return null
+    }
+
+    return (data || []).map(dbToMoodEntry)
+  } catch (e) {
+    console.error('[syncService] Exception fetching mood entries:', e)
+    return null
+  }
+}
+
 // Pull reminders from Supabase for a user
 export async function pullRemindersFromCloud(userId: string): Promise<Reminder[] | null> {
   console.log('[syncService] pullRemindersFromCloud called:', { userId: userId.substring(0, 8) + '...' })
@@ -353,28 +431,32 @@ export async function pullAllFromCloud(userId: string): Promise<{
   schedules: DailySchedule[]
   planConfigs: SavedPlanConfig[]
   reminders: Reminder[]
+  moodEntries: MoodEntryLocal[]
 } | null> {
   const supabase = getSupabaseBrowserClient()
   if (!supabase) return null
 
   try {
-    const [completionsRes, schedulesRes, configsRes, remindersRes] = await Promise.all([
+    const [completionsRes, schedulesRes, configsRes, remindersRes, moodRes] = await Promise.all([
       supabase.from('completions').select('*').eq('user_id', userId),
       supabase.from('schedules').select('*').eq('user_id', userId),
       supabase.from('saved_plan_configs').select('*').eq('user_id', userId),
       supabase.from('reminders').select('*').eq('user_id', userId),
+      supabase.from('mood_entries').select('*').eq('user_id', userId),
     ])
 
     if (completionsRes.error) console.error('Error fetching completions:', completionsRes.error)
     if (schedulesRes.error) console.error('Error fetching schedules:', schedulesRes.error)
     if (configsRes.error) console.error('Error fetching configs:', configsRes.error)
     if (remindersRes.error) console.error('Error fetching reminders:', remindersRes.error)
+    if (moodRes.error) console.error('Error fetching mood entries:', moodRes.error)
 
     return {
       completions: (completionsRes.data || []).map(dbToCompletion),
       schedules: (schedulesRes.data || []).map(dbToSchedule),
       planConfigs: (configsRes.data || []).map(dbToPlanConfig),
       reminders: (remindersRes.data || []).map(dbToReminder),
+      moodEntries: (moodRes.data || []).map(dbToMoodEntry),
     }
   } catch (e) {
     console.error('Exception pulling from cloud:', e)
@@ -390,6 +472,7 @@ export async function pushAllToCloud(
     schedules: DailySchedule[]
     planConfig: SavedPlanConfig | null
     reminders?: Reminder[]
+    moodEntries?: MoodEntryLocal[]
   }
 ): Promise<SyncResult> {
   const supabase = getSupabaseBrowserClient()
@@ -454,6 +537,18 @@ export async function pushAllToCloud(
         console.error('Error pushing reminders:', error)
       } else {
         remindersCount = data.reminders.length
+      }
+    }
+
+    // Push mood entries
+    if (data.moodEntries && data.moodEntries.length > 0) {
+      const dbMoods = data.moodEntries.map(m => moodEntryToDb(m, userId))
+      const { error } = await supabase
+        .from('mood_entries')
+        .upsert(dbMoods, { onConflict: 'user_id,id' })
+
+      if (error) {
+        console.error('Error pushing mood entries:', error)
       }
     }
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { execFileSync } from 'child_process'
 
 /**
  * Notion API Integration for Building Nick
@@ -83,37 +84,25 @@ export async function GET() {
   try {
     console.log('Fetching from Notion database:', NOTION_DATABASE_ID)
 
-    // Add timeout using AbortController
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 second timeout
-
-    const response = await fetch(
+    // Use curl as a workaround for Node.js v25 ECONNRESET issue with Notion API
+    const curlResult = execFileSync('/usr/bin/curl', [
+      '-s', '--max-time', '8',
+      '-X', 'POST',
       `https://api.notion.com/v1/databases/${NOTION_DATABASE_ID}/query`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${NOTION_API_KEY}`,
-          'Notion-Version': '2022-06-28',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          page_size: 100
-        }),
-        cache: 'no-store', // Disable caching while debugging
-        signal: controller.signal
-      }
-    )
+      '-H', `Authorization: Bearer ${NOTION_API_KEY}`,
+      '-H', 'Notion-Version: 2022-06-28',
+      '-H', 'Content-Type: application/json',
+      '-d', '{"page_size":100}'
+    ], { encoding: 'utf8', timeout: 10000 })
 
-    clearTimeout(timeoutId)
-    console.log('Notion response status:', response.status)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('Notion API error response:', errorText)
-      throw new Error(`Notion API error: ${response.status} - ${errorText}`)
+    if (!curlResult || !curlResult.trim()) {
+      throw new Error('Empty response from Notion API')
     }
-
-    const data = await response.json()
+    const data = JSON.parse(curlResult)
+    if (data.object === 'error') {
+      throw new Error(`Notion API error: ${data.status} - ${data.message}`)
+    }
+    console.log('Notion response received, results:', data.results?.length)
 
     // Transform Notion pages to activities
     const activities: NotionActivity[] = data.results.map((page: any) => {
@@ -277,39 +266,44 @@ export async function GET() {
         })(),
         // Lessons - JSON array of video/audio lesson objects
         // Supports compact format with short keys to fit within Notion's 2000 char limit
+        // Concatenates all rich_text blocks (JSON may be split across multiple blocks)
         lessons: (() => {
-          const lessonsJson = props['Lessons']?.rich_text?.[0]?.plain_text
-          if (lessonsJson) {
-            try {
-              const parsed = JSON.parse(lessonsJson)
-              if (Array.isArray(parsed)) {
-                // Expand short keys to full format if needed
-                return parsed.map((lesson: any) => {
-                  // Check if using compact format (short keys)
-                  if (lesson.i || lesson.y) {
-                    return {
-                      id: lesson.i || lesson.id,
-                      title: lesson.t || lesson.title,
-                      type: lesson.y || lesson.type,
-                      url: lesson.u || lesson.url,
-                      prompt: lesson.p || lesson.prompt,
-                      instructions: lesson.n || lesson.instructions,
-                      image: lesson.m || lesson.image,
-                      cue: lesson.c || lesson.cue,
-                      steps: lesson.s || lesson.steps,
-                      // mappings for intro_card - expand from {p,t} to {problem,tool}
-                      mappings: lesson.mp ? lesson.mp.map((m: any) => ({
-                        problem: m.p || m.problem,
-                        tool: m.t || m.tool
-                      })) : lesson.mappings
-                    }
+          const richText = props['Lessons']?.rich_text
+          if (!richText?.length) return undefined
+          const lessonsJson = richText.map((b: any) => b.plain_text || '').join('')
+          if (!lessonsJson) return undefined
+          try {
+            const parsed = JSON.parse(lessonsJson)
+            if (Array.isArray(parsed)) {
+              // Expand short keys to full format if needed
+              return parsed.map((lesson: any) => {
+                // Check if using compact format (short keys)
+                if (lesson.i || lesson.y) {
+                  return {
+                    id: lesson.i || lesson.id,
+                    title: lesson.t || lesson.title,
+                    type: lesson.y || lesson.type,
+                    url: lesson.u || lesson.url,
+                    prompt: lesson.p || lesson.prompt,
+                    instructions: lesson.n || lesson.instructions,
+                    image: lesson.m || lesson.image,
+                    cue: lesson.c || lesson.cue,
+                    steps: lesson.s || lesson.steps,
+                    fightingAgainst: lesson.fa || lesson.fightingAgainst,
+                    higherForce: lesson.hf || lesson.higherForce,
+                    otherUses: lesson.ou || lesson.otherUses,
+                    // mappings for intro_card - expand from {p,t} to {problem,tool}
+                    mappings: lesson.mp ? lesson.mp.map((m: any) => ({
+                      problem: m.p || m.problem,
+                      tool: m.t || m.tool
+                    })) : lesson.mappings
                   }
-                  return lesson
-                }) as Lesson[]
-              }
-            } catch (e) {
-              console.error(`Failed to parse lessons JSON for activity "${activityName}":`, e)
+                }
+                return lesson
+              }) as Lesson[]
             }
+          } catch (e) {
+            console.error(`Failed to parse lessons JSON for activity "${activityName}":`, e)
           }
           return undefined
         })(),
@@ -328,16 +322,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error('Error fetching from Notion:', error)
-
-    // Check for abort (timeout)
-    if (error instanceof Error && error.name === 'AbortError') {
-      return NextResponse.json({
-        success: false,
-        source: 'local',
-        activities: [],
-        error: 'Notion API request timed out after 8 seconds'
-      }, { status: 504 })
-    }
 
     return NextResponse.json({
       success: false,

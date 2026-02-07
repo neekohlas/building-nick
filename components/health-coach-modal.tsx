@@ -1,81 +1,162 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { X, Sparkles, Check, Loader2, ArrowRight, RefreshCw, Clock, CalendarDays } from 'lucide-react'
+import { X, Sparkles, Check, Loader2, ArrowRight, RefreshCw, Clock, CalendarDays, ChevronLeft, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useCoach, CoachSuggestion } from '@/hooks/use-coach'
+import { useSync } from '@/hooks/use-sync'
+import { formatDateISO } from '@/lib/date-utils'
 
 interface HealthCoachModalProps {
   onClose: () => void
-  onAcceptSuggestion: (activityId: string) => void
   onAddToToday?: (activityIds: string[]) => void
+  onDoItNow?: (activityId: string) => void
   onFocusForWeek?: (activityIds: string[]) => void
 }
 
-const FEELING_OPTIONS = [
-  { label: 'Energized', emoji: '⚡', description: 'Ready to take on challenges' },
-  { label: 'Tired', emoji: '😴', description: 'Low energy, need rest' },
-  { label: 'Stressed', emoji: '😰', description: 'Feeling overwhelmed' },
-  { label: 'Calm', emoji: '😌', description: 'Peaceful and relaxed' },
-  { label: 'Motivated', emoji: '💪', description: 'Ready to push myself' },
-  { label: 'Unfocused', emoji: '🌫️', description: 'Mind is scattered' }
+// 2-step emotion categories based on the How We Feel / mood meter model
+// Optimized for chronic pain context
+interface EmotionOption {
+  id: string
+  label: string
+  emoji: string
+}
+
+interface EmotionCategory {
+  id: string
+  label: string
+  emoji: string
+  color: string
+  description: string
+  emotions: EmotionOption[]
+}
+
+const EMOTION_CATEGORIES: EmotionCategory[] = [
+  {
+    id: 'energized',
+    label: 'Energized',
+    emoji: '✨',
+    color: '#F59E0B',
+    description: 'High energy, positive',
+    emotions: [
+      { id: 'excited', label: 'Excited', emoji: '🤩' },
+      { id: 'motivated', label: 'Motivated', emoji: '🔥' },
+      { id: 'hopeful', label: 'Hopeful', emoji: '🌅' },
+      { id: 'proud', label: 'Proud', emoji: '💪' },
+      { id: 'joyful', label: 'Joyful', emoji: '😄' },
+      { id: 'inspired', label: 'Inspired', emoji: '💡' },
+    ]
+  },
+  {
+    id: 'calm',
+    label: 'Calm',
+    emoji: '😌',
+    color: '#10B981',
+    description: 'Low energy, positive',
+    emotions: [
+      { id: 'peaceful', label: 'Peaceful', emoji: '🕊️' },
+      { id: 'grateful', label: 'Grateful', emoji: '🙏' },
+      { id: 'content', label: 'Content', emoji: '😊' },
+      { id: 'relieved', label: 'Relieved', emoji: '😮‍💨' },
+      { id: 'accepting', label: 'Accepting', emoji: '🤲' },
+      { id: 'safe', label: 'Safe', emoji: '🛡️' },
+    ]
+  },
+  {
+    id: 'meh',
+    label: 'Meh',
+    emoji: '😐',
+    color: '#8B8B8B',
+    description: 'Neutral or mixed',
+    emotions: [
+      { id: 'numb', label: 'Numb', emoji: '😶' },
+      { id: 'distracted', label: 'Distracted', emoji: '🌀' },
+      { id: 'uncertain', label: 'Uncertain', emoji: '🤷' },
+      { id: 'bored', label: 'Bored', emoji: '😒' },
+      { id: 'restless', label: 'Restless', emoji: '⏳' },
+      { id: 'indifferent', label: 'Flat', emoji: '😑' },
+    ]
+  },
+  {
+    id: 'stressed',
+    label: 'Stressed',
+    emoji: '😤',
+    color: '#EF4444',
+    description: 'High energy, unpleasant',
+    emotions: [
+      { id: 'frustrated', label: 'Frustrated', emoji: '😠' },
+      { id: 'anxious', label: 'Anxious', emoji: '😰' },
+      { id: 'overwhelmed', label: 'Overwhelmed', emoji: '🤯' },
+      { id: 'irritable', label: 'Irritable', emoji: '😬' },
+      { id: 'angry', label: 'Angry', emoji: '💢' },
+      { id: 'fearful', label: 'Fearful', emoji: '😨' },
+    ]
+  },
+  {
+    id: 'down',
+    label: 'Down',
+    emoji: '😔',
+    color: '#6366F1',
+    description: 'Low energy, unpleasant',
+    emotions: [
+      { id: 'sad', label: 'Sad', emoji: '😢' },
+      { id: 'exhausted', label: 'Exhausted', emoji: '😩' },
+      { id: 'lonely', label: 'Lonely', emoji: '🥀' },
+      { id: 'hopeless', label: 'Hopeless', emoji: '🌧️' },
+      { id: 'guilty', label: 'Guilty', emoji: '😞' },
+      { id: 'grieving', label: 'Grieving', emoji: '💔' },
+    ]
+  },
 ]
 
 export function HealthCoachModal({
   onClose,
-  onAcceptSuggestion,
   onAddToToday,
+  onDoItNow,
   onFocusForWeek
 }: HealthCoachModalProps) {
   const {
     isLoading,
     error,
     phase,
-    recentActivities,
-    hasRecentActivity,
     message,
     suggestions,
     storageReady,
     initialize,
-    continueSimilar,
-    startPersonalize,
     getPersonalizedSuggestions,
     refreshSuggestions,
     resetConversation
   } = useCoach()
 
-  const [selectedFeeling, setSelectedFeeling] = useState<string | null>(null)
+  const storage = useSync()
+
+  // Emotion selection state (2-step)
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null)
   const [customFeeling, setCustomFeeling] = useState('')
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set())
   const [hasInitialized, setHasInitialized] = useState(false)
   const [localPhase, setLocalPhase] = useState<'suggestions' | 'choice'>('suggestions')
 
-  // Ref to prevent double initialization due to React StrictMode or stale closures
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const initStartedRef = useRef(false)
 
-  // Determine which phase to display (hook phase or local override)
   const displayPhase = phase === 'suggestions' ? localPhase : phase
 
-  // Initialize when storage is ready, or after a timeout
-  // Use ref to prevent double-init from React StrictMode or stale closures
+  // Initialize when storage is ready
   useEffect(() => {
-    console.log('HealthCoachModal useEffect - storageReady:', storageReady, 'hasInitialized:', hasInitialized, 'initStarted:', initStartedRef.current)
     if (hasInitialized || initStartedRef.current) return
 
     if (storageReady) {
-      console.log('Storage ready, calling initialize...')
       initStartedRef.current = true
       setHasInitialized(true)
       initialize()
       return
     }
 
-    // Fallback: if storage isn't ready after 3 seconds, initialize anyway
-    // (will show empty history, which is fine)
     const timeoutId = setTimeout(() => {
       if (!hasInitialized && !initStartedRef.current) {
-        console.log('Storage timeout, initializing without history...')
         initStartedRef.current = true
         setHasInitialized(true)
         initialize()
@@ -85,10 +166,47 @@ export function HealthCoachModal({
     return () => clearTimeout(timeoutId)
   }, [storageReady, hasInitialized, initialize])
 
+  // Build the feeling string from category + emotion + custom text
+  const getFeelingString = (): string => {
+    const parts: string[] = []
+    if (selectedEmotion) {
+      const cat = EMOTION_CATEGORIES.find(c => c.id === selectedCategory)
+      const emo = cat?.emotions.find(e => e.id === selectedEmotion)
+      if (emo) parts.push(emo.label)
+    } else if (selectedCategory) {
+      const cat = EMOTION_CATEGORIES.find(c => c.id === selectedCategory)
+      if (cat) parts.push(cat.label)
+    }
+    if (customFeeling.trim()) parts.push(customFeeling.trim())
+    return parts.join(' — ')
+  }
+
+  const canSubmitFeeling = selectedCategory || selectedEmotion || customFeeling.trim()
+
   const handleGetPersonalized = () => {
-    const feeling = selectedFeeling || customFeeling
+    const feeling = getFeelingString()
     if (feeling) {
+      // Save mood entry to storage
+      if (selectedCategory && storage.isReady) {
+        const today = formatDateISO(new Date())
+        storage.saveMoodEntry({
+          date: today,
+          category: selectedCategory,
+          emotion: selectedEmotion || undefined,
+          notes: customFeeling.trim() || undefined,
+        }).catch(err => console.error('Failed to save mood entry:', err))
+      }
       getPersonalizedSuggestions(feeling)
+    }
+  }
+
+  // Handle Enter key in textarea (submit on Enter, newline on Shift+Enter)
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (canSubmitFeeling) {
+        handleGetPersonalized()
+      }
     }
   }
 
@@ -104,23 +222,13 @@ export function HealthCoachModal({
     })
   }
 
-  const formatLastCompleted = (dateStr: string) => {
-    const date = new Date(dateStr)
-    const today = new Date()
-    const diffDays = Math.floor((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) return 'today'
-    if (diffDays === 1) return 'yesterday'
-    if (diffDays < 7) return `${diffDays} days ago`
-    if (diffDays < 14) return 'last week'
-    return `${Math.floor(diffDays / 7)} weeks ago`
-  }
+  const activeCategory = EMOTION_CATEGORIES.find(c => c.id === selectedCategory)
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 pb-4 px-4 bg-black/50">
       <div
         className="bg-background rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-xl animate-in fade-in zoom-in-95"
-        style={{ maxHeight: 'min(500px, calc(100dvh - 120px))' }}
+        style={{ maxHeight: 'calc(100dvh - 4rem)' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b shrink-0">
@@ -154,109 +262,101 @@ export function HealthCoachModal({
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-primary" />
               <span className="ml-2 text-sm text-muted-foreground">
-                {phase === 'loading' ? 'Loading your activity history...' : 'Thinking...'}
+                {phase === 'loading' ? 'Loading...' : 'Thinking...'}
               </span>
             </div>
           )}
 
-          {/* PHASE: Recap */}
-          {phase === 'recap' && !isLoading && (
-            <div className="space-y-4">
-              <div className="rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-4">
-                <p className="text-sm leading-relaxed">
-                  Let me help you plan your mind-body activities for this week.
-                </p>
-              </div>
-
-              {hasRecentActivity ? (
-                <>
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                      Your recent mind-body activities
-                    </h3>
-                    <div className="space-y-2">
-                      {recentActivities.slice(0, 5).map(activity => (
-                        <div
-                          key={activity.activityId}
-                          className="flex items-center justify-between p-3 rounded-xl border bg-card"
-                        >
-                          <div>
-                            <p className="font-medium text-sm">{activity.activityName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Last: {formatLastCompleted(activity.lastCompleted)}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-lg font-semibold text-primary">{activity.count}</span>
-                            <span className="text-xs text-muted-foreground ml-1">times</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl bg-muted/50 p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Would you like to continue with similar activities, or should I ask you a few questions to suggest something different?
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <div className="rounded-xl bg-muted/50 p-4">
-                  <p className="text-sm text-muted-foreground">
-                    I don't see any recent mind-body activity. Let me ask you a few questions to suggest some activities that might work well for you.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* PHASE: Feeling */}
+          {/* PHASE: Feeling — 2-step emotion selection */}
           {phase === 'feeling' && !isLoading && (
             <div className="space-y-3">
               <div className="rounded-xl bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-3">
                 <p className="text-sm leading-snug">
-                  How have you been feeling lately? This helps me suggest activities that match your current state.
+                  {!selectedCategory
+                    ? 'How are you feeling right now? Tap what resonates.'
+                    : `You're feeling ${activeCategory?.label.toLowerCase()}. Anything more specific?`
+                  }
                 </p>
               </div>
 
-              {/* Feeling options - compact grid */}
-              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
-                {FEELING_OPTIONS.map(option => (
+              {/* Step 1: Category selection */}
+              {!selectedCategory ? (
+                <div className="grid grid-cols-5 gap-1.5">
+                  {EMOTION_CATEGORIES.map(cat => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className="flex flex-col items-center gap-1 p-2 rounded-xl border hover:bg-muted transition-all"
+                    >
+                      <span className="text-2xl">{cat.emoji}</span>
+                      <span className="text-[10px] font-medium text-center leading-tight">{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* Category chip (tappable to go back) */}
                   <button
-                    key={option.label}
                     onClick={() => {
-                      setSelectedFeeling(option.label)
-                      setCustomFeeling('')
+                      setSelectedCategory(null)
+                      setSelectedEmotion(null)
                     }}
-                    className={cn(
-                      "p-2 sm:p-3 rounded-lg sm:rounded-xl border text-left transition-all",
-                      selectedFeeling === option.label
-                        ? "border-primary bg-primary/10 ring-2 ring-primary/20"
-                        : "hover:bg-muted"
-                    )}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors"
+                    style={{
+                      backgroundColor: `${activeCategory?.color}20`,
+                      color: activeCategory?.color,
+                      borderColor: `${activeCategory?.color}40`,
+                      borderWidth: 1,
+                    }}
                   >
-                    <div className="flex items-center gap-1.5 sm:gap-2">
-                      <span className="text-lg sm:text-xl">{option.emoji}</span>
-                      <span className="font-medium text-xs sm:text-sm">{option.label}</span>
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 line-clamp-1">{option.description}</p>
+                    <ChevronLeft className="h-3 w-3" />
+                    <span>{activeCategory?.emoji} {activeCategory?.label}</span>
                   </button>
-                ))}
-              </div>
 
-              {/* Custom input */}
-              <div>
-                <input
-                  type="text"
-                  placeholder="Or describe how you're feeling..."
+                  {/* Step 2: Specific emotions within category */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {activeCategory?.emotions.map(emo => (
+                      <button
+                        key={emo.id}
+                        onClick={() => setSelectedEmotion(
+                          selectedEmotion === emo.id ? null : emo.id
+                        )}
+                        className={cn(
+                          "flex items-center gap-1.5 p-2 rounded-lg border text-left transition-all text-sm",
+                          selectedEmotion === emo.id
+                            ? "ring-2 ring-primary/30"
+                            : "hover:bg-muted"
+                        )}
+                        style={selectedEmotion === emo.id ? {
+                          backgroundColor: `${activeCategory.color}15`,
+                          borderColor: activeCategory.color,
+                        } : undefined}
+                      >
+                        <span className="text-base">{emo.emoji}</span>
+                        <span className="font-medium text-xs">{emo.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Expanded text input — always visible, encourages deeper reflection */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground px-1">
+                  Tell me more about how you're feeling...
+                </label>
+                <textarea
+                  ref={textareaRef}
+                  placeholder="What's on your mind? How's your body feeling? Any pain flares, stress, or things going well?"
                   value={customFeeling}
-                  onChange={(e) => {
-                    setCustomFeeling(e.target.value)
-                    setSelectedFeeling(null)
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  onChange={(e) => setCustomFeeling(e.target.value)}
+                  onKeyDown={handleTextareaKeyDown}
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-lg border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none leading-relaxed"
                 />
+                <p className="text-[10px] text-muted-foreground px-1">
+                  Press Enter to get suggestions, Shift+Enter for new line
+                </p>
               </div>
             </div>
           )}
@@ -264,18 +364,16 @@ export function HealthCoachModal({
           {/* PHASE: Suggestions */}
           {displayPhase === 'suggestions' && phase === 'suggestions' && !isLoading && (
             <div className="space-y-3">
-              {/* Coach message */}
               {message && (
                 <div className="rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-3">
                   <p className="text-sm leading-snug whitespace-pre-wrap">{message}</p>
                 </div>
               )}
 
-              {/* Suggestions */}
               {suggestions.length > 0 && (
                 <div className="space-y-1.5">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                    Suggested for this week
+                    Suggested for you
                   </h3>
                   {suggestions.map(suggestion => {
                     const isSelected = selectedSuggestions.has(suggestion.activityId)
@@ -308,10 +406,8 @@ export function HealthCoachModal({
                     )
                   })}
 
-                  {/* Get more suggestions button */}
                   <button
                     onClick={() => {
-                      // Keep selected suggestions, get more new ones
                       refreshSuggestions(Array.from(selectedSuggestions))
                     }}
                     className="w-full p-2.5 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
@@ -324,25 +420,48 @@ export function HealthCoachModal({
             </div>
           )}
 
-          {/* PHASE: Choice (Add to Today vs Focus for Week) */}
+          {/* PHASE: Choice */}
           {displayPhase === 'choice' && !isLoading && (
             <div className="space-y-3">
               <div className="rounded-lg bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 p-3">
                 <p className="text-sm leading-snug">
-                  Great choices! How would you like to incorporate these activities?
+                  {selectedSuggestions.size === 1
+                    ? 'Great choice! What would you like to do?'
+                    : 'Great choices! How would you like to incorporate these activities?'
+                  }
                 </p>
               </div>
 
               <div className="space-y-2">
-                {/* Add to Today option */}
+                {/* Do It Now — only when exactly 1 activity selected */}
+                {selectedSuggestions.size === 1 && onDoItNow && (
+                  <button
+                    onClick={() => {
+                      const activityId = Array.from(selectedSuggestions)[0]
+                      onDoItNow(activityId)
+                    }}
+                    className="w-full p-3 rounded-lg border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 hover:border-green-400 transition-all text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center shrink-0">
+                        <Play className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-sm">Do It Now</p>
+                        <p className="text-xs text-muted-foreground">
+                          Add to today and start right away
+                        </p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     const activityIds = Array.from(selectedSuggestions)
                     if (onAddToToday) {
                       onAddToToday(activityIds)
-                    } else {
-                      // Fallback: add each suggestion via the old callback
-                      activityIds.forEach(id => onAcceptSuggestion(id))
                     }
                     onClose()
                   }}
@@ -355,22 +474,18 @@ export function HealthCoachModal({
                     <div className="flex-1">
                       <p className="font-semibold text-sm">Add to Today</p>
                       <p className="text-xs text-muted-foreground">
-                        Schedule these activities for today
+                        Schedule for later today
                       </p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </button>
 
-                {/* Focus for Week option */}
                 <button
                   onClick={() => {
                     const activityIds = Array.from(selectedSuggestions)
                     if (onFocusForWeek) {
                       onFocusForWeek(activityIds)
-                    } else {
-                      // Fallback: add each suggestion via the old callback
-                      activityIds.forEach(id => onAcceptSuggestion(id))
                     }
                     onClose()
                   }}
@@ -383,7 +498,7 @@ export function HealthCoachModal({
                     <div className="flex-1">
                       <p className="font-semibold text-sm">Focus for the Week</p>
                       <p className="text-xs text-muted-foreground">
-                        Plan these activities across the next 7 days
+                        Plan across the next 7 days
                       </p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
@@ -396,59 +511,19 @@ export function HealthCoachModal({
 
         {/* Footer */}
         <div className="p-3 sm:p-4 border-t shrink-0">
-          {phase === 'recap' && !isLoading && (
-            <div className="flex gap-2">
-              {hasRecentActivity ? (
-                <>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={continueSimilar}
-                  >
-                    Continue Similar
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={startPersonalize}
-                  >
-                    Personalize
-                    <ArrowRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={onClose}
-                  >
-                    Skip
-                  </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={startPersonalize}
-                  >
-                    Get Started
-                    <ArrowRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
-
           {phase === 'feeling' && !isLoading && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => resetConversation()}
+                onClick={onClose}
               >
-                Back
+                Cancel
               </Button>
               <Button
                 className="flex-1"
                 onClick={handleGetPersonalized}
-                disabled={!selectedFeeling && !customFeeling}
+                disabled={!canSubmitFeeling}
               >
                 Get Suggestions
                 <ArrowRight className="h-4 w-4 ml-1" />
@@ -464,6 +539,9 @@ export function HealthCoachModal({
                 onClick={() => {
                   resetConversation()
                   setLocalPhase('suggestions')
+                  setSelectedCategory(null)
+                  setSelectedEmotion(null)
+                  setCustomFeeling('')
                   initialize()
                 }}
               >
@@ -495,7 +573,7 @@ export function HealthCoachModal({
                 className="flex-1"
                 onClick={onClose}
               >
-                Skip
+                Close
               </Button>
             </div>
           )}
