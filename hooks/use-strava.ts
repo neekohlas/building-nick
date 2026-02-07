@@ -125,16 +125,27 @@ export function useStrava() {
 
   const buildImportItems = useCallback((stravaActivities: StravaActivity[], availableActivityIds?: Set<string>): StravaImportItem[] => {
     return stravaActivities.map(activity => {
-      // Find the best matching activity ID from candidates, validated against available IDs
-      const candidates = STRAVA_TYPE_CANDIDATES[activity.sport_type] || STRAVA_TYPE_CANDIDATES[activity.type] || []
+      const durationMinutes = Math.round(activity.moving_time / 60)
+      const sportType = activity.sport_type || activity.type
+
+      // Walk/Hike: pick Green Lake (≥45 min) vs Neighborhood (<45 min)
+      const isWalkType = sportType === 'Walk' || sportType === 'Hike'
+      let candidates: string[]
+      if (isWalkType) {
+        const preferred = durationMinutes >= 45 ? 'walk_greenlake' : 'walk_neighborhood'
+        const fallback = durationMinutes >= 45 ? 'walk_neighborhood' : 'walk_greenlake'
+        candidates = [preferred, fallback, 'walk']
+      } else {
+        candidates = STRAVA_TYPE_CANDIDATES[sportType] || []
+      }
+
+      // Find the best matching activity ID, validated against available IDs
       let suggestedId: string | null = null
       if (availableActivityIds) {
         suggestedId = candidates.find(id => availableActivityIds.has(id)) || null
       } else {
         suggestedId = candidates[0] || null
       }
-
-      const durationMinutes = Math.round(activity.moving_time / 60)
       const date = activity.start_date_local.split('T')[0]
       const hour = parseInt(activity.start_date_local.split('T')[1]?.split(':')[0] || '9')
       const timeBlock = getTimeBlockFromHour(hour)
