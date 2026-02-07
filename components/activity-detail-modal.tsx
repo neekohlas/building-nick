@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus, Minus } from 'lucide-react'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus, Minus, Pencil } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
@@ -142,10 +142,11 @@ export function ActivityDetailModal({
             ) : (
               <button
                 onClick={() => setEditingDuration(true)}
-                className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                className="flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-lg hover:bg-muted hover:text-foreground transition-colors"
               >
                 <Clock className="h-4 w-4" />
                 {formatDuration(customDuration)}
+                <Pencil className="h-3 w-3 opacity-40" />
                 {customDuration !== activity.duration && (
                   <span className="text-xs text-primary">(edited)</span>
                 )}
