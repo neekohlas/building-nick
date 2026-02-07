@@ -95,7 +95,8 @@ export function StravaImportModal({ onClose, onImported }: StravaImportModalProp
   useEffect(() => {
     async function load() {
       const stravaActivities = await fetchActivities(daysBack)
-      const items = buildImportItems(stravaActivities)
+      const availableIds = new Set(Object.values(appActivities).map((a: AppActivity) => a.id))
+      const items = buildImportItems(stravaActivities, availableIds)
       setImportItems(items)
       setHasLoaded(true)
 
@@ -128,10 +129,13 @@ export function StravaImportModal({ onClose, onImported }: StravaImportModalProp
     setPickerOpen(null)
   }
 
-  const selectedCount = importItems.filter(item => item.selected && item.selectedActivityId).length
+  const isItemAlreadyLogged = (item: StravaImportItem) =>
+    item.selectedActivityId ? existingCompletions.has(`${item.date}_${item.selectedActivityId}`) : false
+
+  const selectedCount = importItems.filter(item => item.selected && item.selectedActivityId && !isItemAlreadyLogged(item)).length
 
   const handleImport = async () => {
-    const toImport = importItems.filter(item => item.selected && item.selectedActivityId)
+    const toImport = importItems.filter(item => item.selected && item.selectedActivityId && !isItemAlreadyLogged(item))
     if (toImport.length === 0) return
 
     setIsImporting(true)
@@ -236,9 +240,7 @@ export function StravaImportModal({ onClose, onImported }: StravaImportModalProp
           )}
 
           {importItems.map((item, index) => {
-            const isAlreadyLogged = item.selectedActivityId
-              ? existingCompletions.has(`${item.date}_${item.selectedActivityId}`)
-              : false
+            const isAlreadyLogged = isItemAlreadyLogged(item)
             const mappedActivity = item.selectedActivityId ? getActivity(item.selectedActivityId) : null
 
             return (

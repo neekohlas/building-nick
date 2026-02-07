@@ -3,19 +3,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { TimeBlock } from './use-storage'
 
-// Strava sport_type/type -> app activity ID mapping
-const STRAVA_TYPE_MAP: Record<string, string> = {
-  'Run': 'run',
-  'TrailRun': 'run',
-  'VirtualRun': 'run',
-  'Ride': 'biking',
-  'MountainBikeRide': 'biking',
-  'GravelRide': 'biking',
-  'VirtualRide': 'biking',
-  'EBikeRide': 'biking',
-  'Walk': 'walk',
-  'Hike': 'walk',
-  'WeightTraining': 'dumbbell_presses',
+// Strava sport_type/type -> candidate app activity IDs (first match wins)
+const STRAVA_TYPE_CANDIDATES: Record<string, string[]> = {
+  'Run': ['run'],
+  'TrailRun': ['run'],
+  'VirtualRun': ['run'],
+  'Ride': ['biking'],
+  'MountainBikeRide': ['biking'],
+  'GravelRide': ['biking'],
+  'VirtualRide': ['biking'],
+  'EBikeRide': ['biking'],
+  'Walk': ['walk_neighborhood', 'walk_greenlake', 'walk'],
+  'Hike': ['walk_neighborhood', 'walk_greenlake', 'walk'],
+  'WeightTraining': ['weights', 'dumbbell_presses', 'home_routine'],
+  'Crossfit': ['weights', 'home_routine'],
 }
 
 export interface StravaActivity {
@@ -122,9 +123,17 @@ export function useStrava() {
     }
   }, [])
 
-  const buildImportItems = useCallback((stravaActivities: StravaActivity[]): StravaImportItem[] => {
+  const buildImportItems = useCallback((stravaActivities: StravaActivity[], availableActivityIds?: Set<string>): StravaImportItem[] => {
     return stravaActivities.map(activity => {
-      const suggestedId = STRAVA_TYPE_MAP[activity.sport_type] || STRAVA_TYPE_MAP[activity.type] || null
+      // Find the best matching activity ID from candidates, validated against available IDs
+      const candidates = STRAVA_TYPE_CANDIDATES[activity.sport_type] || STRAVA_TYPE_CANDIDATES[activity.type] || []
+      let suggestedId: string | null = null
+      if (availableActivityIds) {
+        suggestedId = candidates.find(id => availableActivityIds.has(id)) || null
+      } else {
+        suggestedId = candidates[0] || null
+      }
+
       const durationMinutes = Math.round(activity.moving_time / 60)
       const date = activity.start_date_local.split('T')[0]
       const hour = parseInt(activity.start_date_local.split('T')[1]?.split(':')[0] || '9')
