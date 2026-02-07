@@ -191,7 +191,13 @@ export function ActivityDetailModal({
                 {activity.lessons && activity.lessons.length > 0 && !activity.lessons.some(l => l.type === 'tool_card' || l.type === 'intro_card') && (
                   <div className="mb-4">
                     <LessonCards
-                      lessons={activity.lessons}
+                      lessons={activity.lessons.map(l => {
+                        // If lesson has a placeholder URL (e.g. v=example), use the activity's video URL instead
+                        if (l.url && l.url.includes('v=example') && activity.video) {
+                          return { ...l, url: activity.video }
+                        }
+                        return l
+                      })}
                       activityId={activity.id}
                       claudePrompt={activity.claudePrompt}
                     />

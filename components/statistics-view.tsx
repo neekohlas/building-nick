@@ -1,9 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, DatabaseZap } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
-import { useStorage } from '@/hooks/use-storage'
 import { SpectrumScores } from '@/lib/activities'
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
@@ -323,62 +321,6 @@ function MoodTimeline({ moodEntries, weekStats }: { moodEntries: MoodEntry[]; we
   )
 }
 
-// Sample activities for seeding demo data
-const DEMO_ACTIVITIES = [
-  { id: 'breathing', timeBlock: 'before6am', duration: 5 },
-  { id: 'biking', timeBlock: 'before9am', duration: 30 },
-  { id: 'dumbbell_presses', timeBlock: 'before9am', duration: 15 },
-  { id: 'lin_health_education', timeBlock: 'before9pm', duration: 10 },
-  { id: 'the_tools', timeBlock: 'beforeNoon', duration: 5 },
-  { id: 'expressive_writing', timeBlock: 'before6am', duration: 15 },
-  { id: 'coursera_module', timeBlock: 'beforeNoon', duration: 45 },
-  { id: 'walk', timeBlock: 'before5pm', duration: 30 },
-  { id: 'external_orienting', timeBlock: 'before230pm', duration: 5 },
-  { id: 'movement_coach', timeBlock: 'before5pm', duration: 15 },
-]
-
-function generateDemoCompletions() {
-  const completions: Array<{
-    date: string
-    activityId: string
-    timeBlock: string
-    instanceIndex: number
-    durationMinutes?: number
-  }> = []
-
-  const today = new Date()
-
-  // Generate data for past 4 weeks (28 days back)
-  for (let daysBack = 1; daysBack <= 28; daysBack++) {
-    const date = new Date(today)
-    date.setDate(date.getDate() - daysBack)
-    const dateStr = date.toISOString().split('T')[0]
-    const dayOfWeek = date.getDay() // 0=Sun, 6=Sat
-
-    // Vary how many activities per day (more on weekdays, fewer weekends)
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-    const baseCount = isWeekend ? 2 : 4
-    // Add some randomness
-    const count = baseCount + Math.floor(Math.random() * 3)
-
-    // Pick random activities for this day
-    const shuffled = [...DEMO_ACTIVITIES].sort(() => Math.random() - 0.5)
-    const dayActivities = shuffled.slice(0, Math.min(count, shuffled.length))
-
-    for (const act of dayActivities) {
-      completions.push({
-        date: dateStr,
-        activityId: act.id,
-        timeBlock: act.timeBlock,
-        instanceIndex: 0,
-        durationMinutes: act.duration,
-      })
-    }
-  }
-
-  return completions
-}
-
 export function StatisticsView({ onBack }: StatisticsViewProps) {
   const {
     weekStats,
@@ -386,29 +328,7 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
     isCurrentWeek,
     goToPreviousWeek,
     goToNextWeek,
-    refresh,
   } = useStatistics()
-  const storage = useStorage()
-  const [seeding, setSeeding] = useState(false)
-  const [seeded, setSeeded] = useState(false)
-
-  const handleSeedData = async () => {
-    if (!storage.isReady || seeding) return
-    setSeeding(true)
-    try {
-      const demos = generateDemoCompletions()
-      for (const c of demos) {
-        await storage.saveCompletion(c)
-      }
-      setSeeded(true)
-      // Force statistics to re-compute
-      refresh()
-    } catch (err) {
-      console.error('Failed to seed demo data:', err)
-    } finally {
-      setSeeding(false)
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -521,21 +441,6 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
             <ActivityList breakdown={weekStats.activityBreakdown} />
           </div>
 
-          {/* Seed Demo Data Button */}
-          {!seeded && (
-            <button
-              onClick={handleSeedData}
-              disabled={seeding}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
-            >
-              {seeding ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <DatabaseZap className="h-4 w-4" />
-              )}
-              {seeding ? 'Seeding data...' : 'Load Demo Data (past 4 weeks)'}
-            </button>
-          )}
         </div>
       ) : null}
     </div>
