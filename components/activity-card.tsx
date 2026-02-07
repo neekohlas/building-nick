@@ -16,6 +16,7 @@ interface ActivityCardProps {
   activity: Activity
   isCompleted: boolean
   timeBlock: string
+  customDuration?: number  // User-overridden duration (from completion or edit)
   onToggleComplete: () => void
   onSwap: () => void
   onPush: () => void
@@ -27,6 +28,7 @@ interface ActivityCardProps {
 export function ActivityCard({
   activity,
   isCompleted,
+  customDuration,
   onToggleComplete,
   onSwap,
   onPush,
@@ -34,6 +36,7 @@ export function ActivityCard({
   onReorder,
   onDelete
 }: ActivityCardProps) {
+  const displayDuration = customDuration ?? activity.duration
   return (
     <div
       className={cn(
@@ -77,7 +80,7 @@ export function ActivityCard({
         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
-            {formatDuration(activity.duration)}
+            {formatDuration(displayDuration)}
           </span>
           {activity.pairsWith && (
             <span className="text-primary text-xs">

@@ -91,6 +91,8 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
   const [completedInstanceKeys, setCompletedInstanceKeys] = useState<Set<string>>(new Set())
   // Full completion objects for notifications
   const [completions, setCompletions] = useState<Completion[]>([])
+  // Duration overrides from user edits (before or after completion)
+  const [durationOverrides, setDurationOverrides] = useState<Map<string, number>>(new Map())
   const [motivation, setMotivation] = useState('')
   const [streak, setStreak] = useState(0)
 
@@ -108,6 +110,16 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
+
+  // Get custom duration for an activity instance (from override or completion)
+  const getInstanceDuration = (activityId: string, timeBlock: string, index: number): number | undefined => {
+    const key = getInstanceKey(activityId, timeBlock, index)
+    // Check overrides first (user edited in modal)
+    if (durationOverrides.has(key)) return durationOverrides.get(key)
+    // Then check completion record
+    const completion = completions.find(c => c.activityId === activityId && c.timeBlock === timeBlock && c.instanceIndex === index)
+    return completion?.durationMinutes
+  }
 
   // Health Coach state
   const [showHealthCoach, setShowHealthCoach] = useState(false)
@@ -1244,6 +1256,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                               activity={activity}
                               isCompleted={completedInstanceKeys.has(getInstanceKey(activityId, block, index))}
                               timeBlock={block}
+                              customDuration={getInstanceDuration(activityId, block, index)}
                               onToggleComplete={() => handleToggleComplete(activityId, block, index)}
                               onSwap={() => {
                                 setSwapActivity(activity)
@@ -1396,16 +1409,28 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
         <ActivityDetailModal
           activity={selectedActivity}
           isCompleted={selectedTimeBlock ? completedInstanceKeys.has(getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)) : false}
+          savedDuration={selectedTimeBlock ? getInstanceDuration(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex) : undefined}
           onClose={() => setSelectedActivity(null)}
           onComplete={(durationMinutes) => {
             if (selectedTimeBlock) {
+              // Save duration override so card shows updated time
+              if (durationMinutes != null) {
+                const key = getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)
+                setDurationOverrides(prev => new Map(prev).set(key, durationMinutes))
+              }
               handleToggleComplete(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
             }
             setSelectedActivity(null)
           }}
           onDurationChange={(durationMinutes) => {
             if (selectedTimeBlock) {
-              storage.updateCompletionDuration(dateStr, selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
+              // Update local override so card reflects change immediately
+              const key = getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)
+              setDurationOverrides(prev => new Map(prev).set(key, durationMinutes))
+              // Also persist to completion record if already completed
+              if (completedInstanceKeys.has(key)) {
+                storage.updateCompletionDuration(dateStr, selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
+              }
             }
           }}
           onSwap={() => {
