@@ -100,14 +100,17 @@ export function StravaImportModal({ onClose, onImported }: StravaImportModalProp
       setImportItems(items)
       setHasLoaded(true)
 
-      // Check for existing completions to detect duplicates
+      // Check for existing Strava-imported completions to detect duplicates
+      // Only completions with stravaActivityName count — manual completions don't block import
       const dates = [...new Set(items.map(item => item.date))]
       const existingKeys = new Set<string>()
 
       for (const date of dates) {
         const completions = await storage.getCompletionsForDate(date)
         completions.forEach((c: Completion) => {
-          existingKeys.add(`${c.date}_${c.activityId}`)
+          if (c.stravaActivityName) {
+            existingKeys.add(`${c.date}_${c.activityId}`)
+          }
         })
       }
       setExistingCompletions(existingKeys)
