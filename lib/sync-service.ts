@@ -25,6 +25,12 @@ function completionToDb(completion: Completion, userId: string): Omit<DbCompleti
     time_block: completion.timeBlock,
     instance_index: completion.instanceIndex,
     completed_at: completion.completedAt,
+    duration_minutes: completion.durationMinutes ?? null,
+    strava_activity_name: completion.stravaActivityName ?? null,
+    strava_distance: completion.stravaDistance ?? null,
+    strava_sport_type: completion.stravaSportType ?? null,
+    strava_calories: completion.stravaCalories ?? null,
+    strava_avg_heartrate: completion.stravaAvgHeartrate ?? null,
   }
 }
 
@@ -36,6 +42,12 @@ function dbToCompletion(db: DbCompletion): Completion {
     timeBlock: db.time_block,
     instanceIndex: db.instance_index ?? 0,  // Default to 0 for legacy completions
     completedAt: db.completed_at,
+    ...(db.duration_minutes != null && { durationMinutes: db.duration_minutes }),
+    ...(db.strava_activity_name != null && { stravaActivityName: db.strava_activity_name }),
+    ...(db.strava_distance != null && { stravaDistance: db.strava_distance }),
+    ...(db.strava_sport_type != null && { stravaSportType: db.strava_sport_type }),
+    ...(db.strava_calories != null && { stravaCalories: db.strava_calories }),
+    ...(db.strava_avg_heartrate != null && { stravaAvgHeartrate: db.strava_avg_heartrate }),
   }
 }
 

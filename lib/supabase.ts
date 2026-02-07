@@ -11,6 +11,13 @@ export interface DbCompletion {
   instance_index: number  // Position in the time block array (0-based)
   completed_at: string
   updated_at: string
+  duration_minutes?: number | null
+  // Strava import metadata
+  strava_activity_name?: string | null
+  strava_distance?: number | null
+  strava_sport_type?: string | null
+  strava_calories?: number | null
+  strava_avg_heartrate?: number | null
 }
 
 export interface DbSchedule {

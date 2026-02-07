@@ -352,12 +352,12 @@ export function useSync() {
 
       if (cloudData) {
         // Merge completions - cloud data overwrites local for same IDs (instance-based)
+        // Preserve all fields including durationMinutes and Strava metadata
         for (const completion of cloudData.completions) {
+          const { id, completedAt, ...saveData } = completion
           await storage.saveCompletion({
-            date: completion.date,
-            activityId: completion.activityId,
-            timeBlock: completion.timeBlock,
-            instanceIndex: completion.instanceIndex ?? 0,  // Default to 0 for legacy
+            ...saveData,
+            instanceIndex: saveData.instanceIndex ?? 0,  // Default to 0 for legacy
           })
         }
 
