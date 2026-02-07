@@ -158,7 +158,10 @@ export function getYear(date: Date): number {
 }
 
 export function formatTimeRange(startTimeIso: string, elapsedSeconds: number): string {
-  const start = new Date(startTimeIso)
+  // Strava's start_date_local represents local time but may include a trailing 'Z'.
+  // Strip it so JavaScript parses as local time, not UTC.
+  const localIso = startTimeIso.replace(/Z$/i, '')
+  const start = new Date(localIso)
   const end = new Date(start.getTime() + elapsedSeconds * 1000)
 
   const formatTime = (d: Date) => {

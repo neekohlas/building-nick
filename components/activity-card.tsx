@@ -3,7 +3,7 @@
 import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2, GripVertical, Trash2, Activity as ActivityIcon, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, hasVideo } from '@/lib/activities'
-import { formatDuration, formatTimeRange } from '@/lib/date-utils'
+import { formatDuration } from '@/lib/date-utils'
 import { SpectrumBar } from './spectrum-bar'
 import {
   DropdownMenu,
@@ -33,14 +33,10 @@ interface ActivityCardProps {
   onClick: () => void
   onReorder?: () => void
   onDelete?: () => void
-  // Strava import metadata
+  // Strava import metadata (card shows name, duration, distance, calories only)
   stravaName?: string
   stravaDistance?: number
-  stravaSportType?: string
   stravaCalories?: number
-  stravaAvgHeartrate?: number
-  stravaStartTime?: string
-  stravaElapsedSeconds?: number
 }
 
 export function ActivityCard({
@@ -55,11 +51,7 @@ export function ActivityCard({
   onDelete,
   stravaName,
   stravaDistance,
-  stravaSportType,
   stravaCalories,
-  stravaAvgHeartrate,
-  stravaStartTime,
-  stravaElapsedSeconds,
 }: ActivityCardProps) {
   const displayDuration = customDuration ?? activity.duration
   return (
@@ -114,9 +106,6 @@ export function ActivityCard({
             <Clock className="h-3.5 w-3.5" />
             {formatDuration(displayDuration)}
           </span>
-          {stravaStartTime && stravaElapsedSeconds && (
-            <span className="text-xs">{formatTimeRange(stravaStartTime, stravaElapsedSeconds)}</span>
-          )}
           {stravaDistance != null && stravaDistance > 0 && (
             <span className="flex items-center gap-0.5">
               <MapPin className="h-3 w-3" />
@@ -125,9 +114,6 @@ export function ActivityCard({
           )}
           {stravaCalories != null && stravaCalories > 0 && (
             <span className="text-xs">{formatCalories(stravaCalories)}</span>
-          )}
-          {stravaAvgHeartrate != null && stravaAvgHeartrate > 0 && (
-            <span className="text-xs">♥ {Math.round(stravaAvgHeartrate)} bpm</span>
           )}
           {!stravaName && activity.pairsWith && (
             <span className="text-primary text-xs">

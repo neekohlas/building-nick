@@ -1281,11 +1281,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                                   customDuration={stravaCompletion?.durationMinutes ?? getInstanceDuration(activityId, block, index)}
                                   stravaName={stravaCompletion?.stravaActivityName}
                                   stravaDistance={stravaCompletion?.stravaDistance}
-                                  stravaSportType={stravaCompletion?.stravaSportType}
                                   stravaCalories={stravaCompletion?.stravaCalories}
-                                  stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
-                                  stravaStartTime={stravaCompletion?.stravaStartTime}
-                                  stravaElapsedSeconds={stravaCompletion?.stravaElapsedSeconds}
                                   onToggleComplete={() => handleToggleComplete(activityId, block, index)}
                                   onSwap={() => {
                                     setSwapActivity(activity)
@@ -1341,11 +1337,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                           customDuration={completion.durationMinutes}
                           stravaName={completion.stravaActivityName}
                           stravaDistance={completion.stravaDistance}
-                          stravaSportType={completion.stravaSportType}
                           stravaCalories={completion.stravaCalories}
-                          stravaAvgHeartrate={completion.stravaAvgHeartrate}
-                          stravaStartTime={completion.stravaStartTime}
-                          stravaElapsedSeconds={completion.stravaElapsedSeconds}
                           onToggleComplete={() => {}}
                           onClick={() => {
                             setSelectedActivity(activity)

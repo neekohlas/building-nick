@@ -792,11 +792,7 @@ export function WeekView({ onBack }: WeekViewProps) {
                                 onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
                                 stravaName={stravaCompletion?.stravaActivityName}
                                 stravaDistance={stravaCompletion?.stravaDistance}
-                                stravaSportType={stravaCompletion?.stravaSportType}
                                 stravaCalories={stravaCompletion?.stravaCalories}
-                                stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
-                                stravaStartTime={stravaCompletion?.stravaStartTime}
-                                stravaElapsedSeconds={stravaCompletion?.stravaElapsedSeconds}
                               />
                             </div>
                           </div>
@@ -832,11 +828,7 @@ export function WeekView({ onBack }: WeekViewProps) {
                             customDuration={completion.durationMinutes}
                             stravaName={completion.stravaActivityName}
                             stravaDistance={completion.stravaDistance}
-                            stravaSportType={completion.stravaSportType}
                             stravaCalories={completion.stravaCalories}
-                            stravaAvgHeartrate={completion.stravaAvgHeartrate}
-                            stravaStartTime={completion.stravaStartTime}
-                            stravaElapsedSeconds={completion.stravaElapsedSeconds}
                             onToggleComplete={() => {}}
                             onClick={() => {
                               setSelectedActivity(activity)
