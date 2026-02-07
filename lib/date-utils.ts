@@ -157,6 +157,29 @@ export function getYear(date: Date): number {
   return date.getFullYear()
 }
 
+export function formatTimeRange(startTimeIso: string, elapsedSeconds: number): string {
+  const start = new Date(startTimeIso)
+  const end = new Date(start.getTime() + elapsedSeconds * 1000)
+
+  const formatTime = (d: Date) => {
+    let hours = d.getHours()
+    const minutes = d.getMinutes()
+    const ampm = hours >= 12 ? 'PM' : 'AM'
+    hours = hours % 12 || 12
+    const minStr = minutes > 0 ? `:${String(minutes).padStart(2, '0')}` : ''
+    return { time: `${hours}${minStr}`, ampm }
+  }
+
+  const s = formatTime(start)
+  const e = formatTime(end)
+
+  // Same AM/PM: "2:30 - 4:41 PM", different: "11:30 AM - 1:15 PM"
+  if (s.ampm === e.ampm) {
+    return `${s.time} - ${e.time} ${e.ampm}`
+  }
+  return `${s.time} ${s.ampm} - ${e.time} ${e.ampm}`
+}
+
 export function getExtendedWeekDates(centerDate: Date, daysBeforeAfter: number = 14): Date[] {
   const dates: Date[] = []
   for (let i = -daysBeforeAfter; i <= daysBeforeAfter; i++) {

@@ -25,6 +25,8 @@ export interface Completion {
   stravaSportType?: string       // e.g. "Ride", "Run", "Walk"
   stravaCalories?: number        // Kilojoules (Strava returns as kilojoules for rides)
   stravaAvgHeartrate?: number    // Average heart rate in bpm
+  stravaStartTime?: string       // ISO timestamp from start_date_local (e.g. "2026-02-07T14:30:00")
+  stravaElapsedSeconds?: number  // Total elapsed time in seconds (start to finish)
 }
 
 export interface DailySchedule {

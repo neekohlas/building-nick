@@ -18,6 +18,8 @@ export interface DbCompletion {
   strava_sport_type?: string | null
   strava_calories?: number | null
   strava_avg_heartrate?: number | null
+  strava_start_time?: string | null
+  strava_elapsed_seconds?: number | null
 }
 
 export interface DbSchedule {

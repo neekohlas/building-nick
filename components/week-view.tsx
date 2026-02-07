@@ -68,6 +68,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
   const [remindersRefreshKey, setRemindersRefreshKey] = useState(0)
   const [isEditMode, setIsEditMode] = useState(false)
+  const [selectedStravaCompletion, setSelectedStravaCompletion] = useState<Completion | null>(null)
 
   // Drag state for reordering
   const [dragState, setDragState] = useState<{
@@ -785,6 +786,7 @@ export function WeekView({ onBack }: WeekViewProps) {
                                 onClick={() => {
                                   setSelectedActivity(activity)
                                   setSelectedTimeBlock(block)
+                                  setSelectedStravaCompletion(stravaCompletion || null)
                                 }}
                                 onReorder={() => setIsEditMode(true)}
                                 onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
@@ -793,6 +795,8 @@ export function WeekView({ onBack }: WeekViewProps) {
                                 stravaSportType={stravaCompletion?.stravaSportType}
                                 stravaCalories={stravaCompletion?.stravaCalories}
                                 stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
+                                stravaStartTime={stravaCompletion?.stravaStartTime}
+                                stravaElapsedSeconds={stravaCompletion?.stravaElapsedSeconds}
                               />
                             </div>
                           </div>
@@ -831,10 +835,13 @@ export function WeekView({ onBack }: WeekViewProps) {
                             stravaSportType={completion.stravaSportType}
                             stravaCalories={completion.stravaCalories}
                             stravaAvgHeartrate={completion.stravaAvgHeartrate}
+                            stravaStartTime={completion.stravaStartTime}
+                            stravaElapsedSeconds={completion.stravaElapsedSeconds}
                             onToggleComplete={() => {}}
                             onClick={() => {
                               setSelectedActivity(activity)
                               setSelectedTimeBlock(block)
+                              setSelectedStravaCompletion(completion.stravaActivityName ? completion : null)
                             }}
                           />
                         )
@@ -862,12 +869,20 @@ export function WeekView({ onBack }: WeekViewProps) {
         <ActivityDetailModal
           activity={selectedActivity}
           isCompleted={completedIds.has(selectedActivity.id)}
-          onClose={() => setSelectedActivity(null)}
+          stravaActivityName={selectedStravaCompletion?.stravaActivityName}
+          stravaDistance={selectedStravaCompletion?.stravaDistance}
+          stravaSportType={selectedStravaCompletion?.stravaSportType}
+          stravaCalories={selectedStravaCompletion?.stravaCalories}
+          stravaAvgHeartrate={selectedStravaCompletion?.stravaAvgHeartrate}
+          stravaStartTime={selectedStravaCompletion?.stravaStartTime}
+          stravaElapsedSeconds={selectedStravaCompletion?.stravaElapsedSeconds}
+          onClose={() => { setSelectedActivity(null); setSelectedStravaCompletion(null) }}
           onComplete={(durationMinutes) => {
             if (selectedTimeBlock) {
               handleToggleComplete(selectedActivity.id, selectedTimeBlock, durationMinutes)
             }
             setSelectedActivity(null)
+            setSelectedStravaCompletion(null)
           }}
           onDurationChange={(durationMinutes) => {
             if (selectedTimeBlock) {

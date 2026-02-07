@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus, Minus, Pencil } from 'lucide-react'
+import { X, Clock, ExternalLink, Check, CalendarClock, Trash2, Play, Volume2, ChevronDown, ChevronUp, Plus, Minus, Pencil, Activity as ActivityIcon, MapPin } from 'lucide-react'
 import { Activity, CATEGORIES } from '@/lib/activities'
-import { formatDuration } from '@/lib/date-utils'
+import { formatDuration, formatTimeRange } from '@/lib/date-utils'
 import { Button } from '@/components/ui/button'
 import { AudioInstructionsOverlay } from '@/components/audio-instructions-overlay'
 import { SpectrumBar } from '@/components/spectrum-bar'
@@ -56,6 +56,14 @@ interface ActivityDetailModalProps {
   onAddToToday?: () => void  // For library view - opens time slot picker
   mode?: 'today' | 'library'  // Determines which actions to show
   savedDuration?: number  // Duration saved on the completion (if already completed)
+  // Strava import metadata (optional)
+  stravaActivityName?: string
+  stravaDistance?: number
+  stravaSportType?: string
+  stravaCalories?: number
+  stravaAvgHeartrate?: number
+  stravaStartTime?: string
+  stravaElapsedSeconds?: number
 }
 
 export function ActivityDetailModal({
@@ -70,6 +78,13 @@ export function ActivityDetailModal({
   onAddToToday,
   mode = 'today',
   savedDuration,
+  stravaActivityName,
+  stravaDistance,
+  stravaSportType,
+  stravaCalories,
+  stravaAvgHeartrate,
+  stravaStartTime,
+  stravaElapsedSeconds,
 }: ActivityDetailModalProps) {
   const [showAudioMode, setShowAudioMode] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
@@ -156,6 +171,40 @@ export function ActivityDetailModal({
               {category.name}
             </span>
           </div>
+
+          {/* Strava Activity Details */}
+          {stravaActivityName && (
+            <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-950/20 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-orange-600 dark:text-orange-400">
+                <ActivityIcon className="h-4 w-4" />
+                Strava Activity
+              </div>
+              <div className="text-sm font-medium">{stravaActivityName}</div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                {stravaStartTime && stravaElapsedSeconds && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {formatTimeRange(stravaStartTime, stravaElapsedSeconds)}
+                  </span>
+                )}
+                {stravaSportType && (
+                  <span>{stravaSportType.replace(/([A-Z])/g, ' $1').trim()}</span>
+                )}
+                {stravaDistance != null && stravaDistance > 0 && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {(stravaDistance / 1000).toFixed(1)} km
+                  </span>
+                )}
+                {stravaCalories != null && stravaCalories > 0 && (
+                  <span>{Math.round(stravaCalories)} cal</span>
+                )}
+                {stravaAvgHeartrate != null && stravaAvgHeartrate > 0 && (
+                  <span>&#9829; {Math.round(stravaAvgHeartrate)} bpm</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Audio Mode Button - prominent position for activities with steps */}
           {showAudioButton && (

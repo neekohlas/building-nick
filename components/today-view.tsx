@@ -110,6 +110,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
   const [showWeatherDetail, setShowWeatherDetail] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [deleteConfirmActivity, setDeleteConfirmActivity] = useState<{ id: string; name: string; block: TimeBlock } | null>(null)
+  const [selectedStravaCompletion, setSelectedStravaCompletion] = useState<Completion | null>(null)
 
   // Get custom duration for an activity instance (from override or completion)
   const getInstanceDuration = (activityId: string, timeBlock: string, index: number): number | undefined => {
@@ -1283,6 +1284,8 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                                   stravaSportType={stravaCompletion?.stravaSportType}
                                   stravaCalories={stravaCompletion?.stravaCalories}
                                   stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
+                                  stravaStartTime={stravaCompletion?.stravaStartTime}
+                                  stravaElapsedSeconds={stravaCompletion?.stravaElapsedSeconds}
                                   onToggleComplete={() => handleToggleComplete(activityId, block, index)}
                                   onSwap={() => {
                                     setSwapActivity(activity)
@@ -1297,6 +1300,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                                     setSelectedActivity(activity)
                                     setSelectedTimeBlock(block)
                                     setSelectedInstanceIndex(index)
+                                    setSelectedStravaCompletion(stravaCompletion || null)
                                   }}
                                   onReorder={() => setIsEditMode(true)}
                                   onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
@@ -1340,11 +1344,14 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                           stravaSportType={completion.stravaSportType}
                           stravaCalories={completion.stravaCalories}
                           stravaAvgHeartrate={completion.stravaAvgHeartrate}
+                          stravaStartTime={completion.stravaStartTime}
+                          stravaElapsedSeconds={completion.stravaElapsedSeconds}
                           onToggleComplete={() => {}}
                           onClick={() => {
                             setSelectedActivity(activity)
                             setSelectedTimeBlock(block)
                             setSelectedInstanceIndex(completion.instanceIndex ?? 0)
+                            setSelectedStravaCompletion(completion.stravaActivityName ? completion : null)
                           }}
                         />
                       )
@@ -1475,7 +1482,14 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
           activity={selectedActivity}
           isCompleted={selectedTimeBlock ? completedInstanceKeys.has(getInstanceKey(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex)) : false}
           savedDuration={selectedTimeBlock ? getInstanceDuration(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex) : undefined}
-          onClose={() => setSelectedActivity(null)}
+          stravaActivityName={selectedStravaCompletion?.stravaActivityName}
+          stravaDistance={selectedStravaCompletion?.stravaDistance}
+          stravaSportType={selectedStravaCompletion?.stravaSportType}
+          stravaCalories={selectedStravaCompletion?.stravaCalories}
+          stravaAvgHeartrate={selectedStravaCompletion?.stravaAvgHeartrate}
+          stravaStartTime={selectedStravaCompletion?.stravaStartTime}
+          stravaElapsedSeconds={selectedStravaCompletion?.stravaElapsedSeconds}
+          onClose={() => { setSelectedActivity(null); setSelectedStravaCompletion(null) }}
           onComplete={(durationMinutes) => {
             if (selectedTimeBlock) {
               // Save duration override so card shows updated time
@@ -1486,6 +1500,7 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
               handleToggleComplete(selectedActivity.id, selectedTimeBlock, selectedInstanceIndex, durationMinutes)
             }
             setSelectedActivity(null)
+            setSelectedStravaCompletion(null)
           }}
           onDurationChange={(durationMinutes) => {
             if (selectedTimeBlock) {

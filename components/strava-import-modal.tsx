@@ -165,6 +165,8 @@ export function StravaImportModal({ onClose, onImported }: StravaImportModalProp
           stravaSportType: item.stravaActivity.sport_type,
           stravaCalories: item.stravaActivity.kilojoules,
           stravaAvgHeartrate: item.stravaActivity.average_heartrate,
+          stravaStartTime: item.stravaActivity.start_date_local,
+          stravaElapsedSeconds: item.stravaActivity.elapsed_time,
         })
       }
 
