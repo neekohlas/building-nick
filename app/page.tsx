@@ -20,8 +20,25 @@ export default function Home() {
   const [preLoadedRoutine, setPreLoadedRoutine] = useState<SavedPlanConfig | null>(null)
   const [globalToast, setGlobalToast] = useState<string | null>(null)
   const [snapToTodayKey, setSnapToTodayKey] = useState(0)
+  const [autoOpenStravaImport, setAutoOpenStravaImport] = useState(false)
   const today = new Date()
   const { hasConnectionError, retryConnection, clearDatabase } = useStorage()
+
+  // Handle OAuth redirect query params (e.g. ?strava_connected=true)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('strava_connected') === 'true') {
+      // Navigate to menu and auto-open Strava import
+      setActiveView('menu')
+      setAutoOpenStravaImport(true)
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (params.get('strava_error')) {
+      setGlobalToast(`Strava connection failed: ${params.get('strava_error')}`)
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -116,6 +133,8 @@ export default function Home() {
             onShowToast={setGlobalToast}
             onOpenLibrary={() => setActiveView('library')}
             onOpenStats={() => setActiveView('stats')}
+            autoOpenStravaImport={autoOpenStravaImport}
+            onStravaImportOpened={() => setAutoOpenStravaImport(false)}
           />
         )}
         </main>

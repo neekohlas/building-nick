@@ -1252,29 +1252,46 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
 
                           {/* Activity card */}
                           <div className="flex-1">
-                            <ActivityCard
-                              activity={activity}
-                              isCompleted={completedInstanceKeys.has(getInstanceKey(activityId, block, index))}
-                              timeBlock={block}
-                              customDuration={getInstanceDuration(activityId, block, index)}
-                              onToggleComplete={() => handleToggleComplete(activityId, block, index)}
-                              onSwap={() => {
-                                setSwapActivity(activity)
-                                setSelectedTimeBlock(block)
-                                setShowSwapModal(true)
-                              }}
-                              onPush={() => {
-                                setPushActivity(activity)
-                                setShowPushModal(true)
-                              }}
-                              onClick={() => {
-                                setSelectedActivity(activity)
-                                setSelectedTimeBlock(block)
-                                setSelectedInstanceIndex(index)
-                              }}
-                              onReorder={() => setIsEditMode(true)}
-                              onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
-                            />
+                            {(() => {
+                              // Check for direct completion match first
+                              const directlyCompleted = completedInstanceKeys.has(getInstanceKey(activityId, block, index))
+                              // Also check for Strava completion of same activity in any time block
+                              const stravaCompletion = !directlyCompleted
+                                ? completions.find(c => c.activityId === activityId && c.stravaActivityName)
+                                : completions.find(c => c.activityId === activityId && c.timeBlock === block && c.instanceIndex === index && c.stravaActivityName)
+                              const isCompleted = directlyCompleted || !!stravaCompletion
+
+                              return (
+                                <ActivityCard
+                                  activity={activity}
+                                  isCompleted={isCompleted}
+                                  timeBlock={block}
+                                  customDuration={stravaCompletion?.durationMinutes ?? getInstanceDuration(activityId, block, index)}
+                                  stravaName={stravaCompletion?.stravaActivityName}
+                                  stravaDistance={stravaCompletion?.stravaDistance}
+                                  stravaSportType={stravaCompletion?.stravaSportType}
+                                  stravaCalories={stravaCompletion?.stravaCalories}
+                                  stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
+                                  onToggleComplete={() => handleToggleComplete(activityId, block, index)}
+                                  onSwap={() => {
+                                    setSwapActivity(activity)
+                                    setSelectedTimeBlock(block)
+                                    setShowSwapModal(true)
+                                  }}
+                                  onPush={() => {
+                                    setPushActivity(activity)
+                                    setShowPushModal(true)
+                                  }}
+                                  onClick={() => {
+                                    setSelectedActivity(activity)
+                                    setSelectedTimeBlock(block)
+                                    setSelectedInstanceIndex(index)
+                                  }}
+                                  onReorder={() => setIsEditMode(true)}
+                                  onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
+                                />
+                              )
+                            })()}
                           </div>
                         </div>
 
@@ -1287,6 +1304,43 @@ export function TodayView({ onOpenMenu, snapToTodayKey, onAddCoachSuggestions, o
                   })}
                 </div>
               ) : null}
+
+              {/* Unscheduled completions for this time block (e.g. Strava imports) */}
+              {schedule && completions.length > 0 && (() => {
+                const scheduledInBlock = new Set(activities)
+                const unscheduledCompletions = completions.filter(
+                  c => c.timeBlock === block && !scheduledInBlock.has(c.activityId)
+                )
+                if (unscheduledCompletions.length === 0) return null
+                return (
+                  <div className="space-y-2 mt-2">
+                    {unscheduledCompletions.map(completion => {
+                      const activity = getActivity(completion.activityId)
+                      if (!activity) return null
+                      return (
+                        <ActivityCard
+                          key={`strava-${completion.id}`}
+                          activity={activity}
+                          isCompleted={true}
+                          timeBlock={block}
+                          customDuration={completion.durationMinutes}
+                          stravaName={completion.stravaActivityName}
+                          stravaDistance={completion.stravaDistance}
+                          stravaSportType={completion.stravaSportType}
+                          stravaCalories={completion.stravaCalories}
+                          stravaAvgHeartrate={completion.stravaAvgHeartrate}
+                          onToggleComplete={() => {}}
+                          onClick={() => {
+                            setSelectedActivity(activity)
+                            setSelectedTimeBlock(block)
+                            setSelectedInstanceIndex(completion.instanceIndex ?? 0)
+                          }}
+                        />
+                      )
+                    })}
+                  </div>
+                )
+              })()}
 
               {/* Time deadline divider - shows AFTER activities as the deadline */}
               <div

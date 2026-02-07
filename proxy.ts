@@ -7,6 +7,7 @@ const publicRoutes = [
   '/api/auth/login',
   '/api/auth/logout',
   '/api/auth/google/callback',
+  '/api/auth/strava/callback',
   '/auth/callback', // Supabase OAuth callback
   '/sw.js', // Service worker must be accessible for push notifications
   '/api/push-subscription', // Push subscription management

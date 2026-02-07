@@ -22,7 +22,7 @@ import {
   formatDateShort
 } from '@/lib/date-utils'
 import { Activity, getQuickMindBodyActivities, getPhysicalActivities } from '@/lib/activities'
-import { DailySchedule } from '@/hooks/use-storage'
+import { DailySchedule, Completion } from '@/hooks/use-storage'
 import { useSync } from '@/hooks/use-sync'
 import { useActivities } from '@/hooks/use-activities'
 import { useWeather, getWeatherEmoji, formatTemp, WeatherDay, WeatherHour } from '@/hooks/use-weather'
@@ -49,6 +49,7 @@ export function WeekView({ onBack }: WeekViewProps) {
   const [visibleDates, setVisibleDates] = useState<Date[]>([])
   const [schedule, setSchedule] = useState<DailySchedule | null>(null)
   const [completedIds, setCompletedIds] = useState<Set<string>>(new Set())
+  const [completions, setCompletions] = useState<Completion[]>([])
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const weekDates = getExtendedWeekDates(new Date(), 14)
 
@@ -172,8 +173,9 @@ export function WeekView({ onBack }: WeekViewProps) {
 
       setSchedule(existingSchedule)
 
-      const completions = await storage.getCompletionsForDate(dateStr)
-      setCompletedIds(new Set(completions.map(c => c.activityId)))
+      const loadedCompletions = await storage.getCompletionsForDate(dateStr)
+      setCompletedIds(new Set(loadedCompletions.map(c => c.activityId)))
+      setCompletions(loadedCompletions)
     }
 
     loadSchedule()
@@ -733,6 +735,13 @@ export function WeekView({ onBack }: WeekViewProps) {
                       const isDragging = dragState?.activityId === activityId && dragState?.isDragging
                       const itemKey = `${block}-${activityId}-${index}`
 
+                      // Check for Strava completion for this scheduled activity
+                      const directlyCompleted = completedIds.has(activityId)
+                      const stravaCompletion = !directlyCompleted
+                        ? completions.find(c => c.activityId === activityId && c.stravaActivityName)
+                        : completions.find(c => c.activityId === activityId && c.timeBlock === block && c.stravaActivityName)
+                      const isCompleted = directlyCompleted || !!stravaCompletion
+
                       return (
                         <div key={itemKey}>
                           <div
@@ -760,8 +769,9 @@ export function WeekView({ onBack }: WeekViewProps) {
                             <div className="flex-1">
                               <ActivityCard
                                 activity={activity}
-                                isCompleted={completedIds.has(activityId)}
+                                isCompleted={isCompleted}
                                 timeBlock={block}
+                                customDuration={stravaCompletion?.durationMinutes}
                                 onToggleComplete={() => handleToggleComplete(activityId, block)}
                                 onSwap={() => {
                                   setSwapActivity(activity)
@@ -778,6 +788,11 @@ export function WeekView({ onBack }: WeekViewProps) {
                                 }}
                                 onReorder={() => setIsEditMode(true)}
                                 onDelete={() => setDeleteConfirmActivity({ id: activityId, name: activity.name, block })}
+                                stravaName={stravaCompletion?.stravaActivityName}
+                                stravaDistance={stravaCompletion?.stravaDistance}
+                                stravaSportType={stravaCompletion?.stravaSportType}
+                                stravaCalories={stravaCompletion?.stravaCalories}
+                                stravaAvgHeartrate={stravaCompletion?.stravaAvgHeartrate}
                               />
                             </div>
                           </div>
@@ -791,6 +806,42 @@ export function WeekView({ onBack }: WeekViewProps) {
                     })}
                   </div>
                 )}
+
+                {/* Unscheduled completions for this time block (e.g. Strava imports) */}
+                {schedule && completions.length > 0 && (() => {
+                  const scheduledInBlock = new Set(activities)
+                  const unscheduledCompletions = completions.filter(
+                    c => c.timeBlock === block && !scheduledInBlock.has(c.activityId)
+                  )
+                  if (unscheduledCompletions.length === 0) return null
+                  return (
+                    <div className="space-y-2 mb-2">
+                      {unscheduledCompletions.map(completion => {
+                        const activity = getActivity(completion.activityId)
+                        if (!activity) return null
+                        return (
+                          <ActivityCard
+                            key={`strava-${completion.id}`}
+                            activity={activity}
+                            isCompleted={true}
+                            timeBlock={block}
+                            customDuration={completion.durationMinutes}
+                            stravaName={completion.stravaActivityName}
+                            stravaDistance={completion.stravaDistance}
+                            stravaSportType={completion.stravaSportType}
+                            stravaCalories={completion.stravaCalories}
+                            stravaAvgHeartrate={completion.stravaAvgHeartrate}
+                            onToggleComplete={() => {}}
+                            onClick={() => {
+                              setSelectedActivity(activity)
+                              setSelectedTimeBlock(block)
+                            }}
+                          />
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
 
                 {/* Time divider line */}
                 <div className="flex items-center gap-3 py-3">

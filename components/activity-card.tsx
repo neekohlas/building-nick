@@ -1,6 +1,6 @@
 'use client'
 
-import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2, GripVertical, Trash2 } from 'lucide-react'
+import { Check, Clock, ExternalLink, MoreVertical, ArrowRightLeft, CalendarClock, Video, Volume2, GripVertical, Trash2, Activity as ActivityIcon, MapPin } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, hasVideo } from '@/lib/activities'
 import { formatDuration } from '@/lib/date-utils'
@@ -12,17 +12,33 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+function formatDistance(meters: number): string {
+  const km = meters / 1000
+  if (km >= 1) return `${km.toFixed(1)} km`
+  return `${Math.round(meters)} m`
+}
+
+function formatCalories(cal: number): string {
+  return `${Math.round(cal)} cal`
+}
+
 interface ActivityCardProps {
   activity: Activity
   isCompleted: boolean
   timeBlock: string
   customDuration?: number  // User-overridden duration (from completion or edit)
   onToggleComplete: () => void
-  onSwap: () => void
-  onPush: () => void
+  onSwap?: () => void
+  onPush?: () => void
   onClick: () => void
   onReorder?: () => void
   onDelete?: () => void
+  // Strava import metadata
+  stravaName?: string
+  stravaDistance?: number
+  stravaSportType?: string
+  stravaCalories?: number
+  stravaAvgHeartrate?: number
 }
 
 export function ActivityCard({
@@ -34,7 +50,12 @@ export function ActivityCard({
   onPush,
   onClick,
   onReorder,
-  onDelete
+  onDelete,
+  stravaName,
+  stravaDistance,
+  stravaSportType,
+  stravaCalories,
+  stravaAvgHeartrate,
 }: ActivityCardProps) {
   const displayDuration = customDuration ?? activity.duration
   return (
@@ -77,23 +98,42 @@ export function ActivityCard({
         )}>
           {activity.name}
         </div>
+        {/* Strava activity name subtitle */}
+        {stravaName && (
+          <div className="flex items-center gap-1 text-xs text-orange-500 mt-0.5">
+            <ActivityIcon className="h-3 w-3" />
+            <span className="truncate">{stravaName}</span>
+          </div>
+        )}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
           <span className="flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" />
             {formatDuration(displayDuration)}
           </span>
-          {activity.pairsWith && (
+          {stravaDistance != null && stravaDistance > 0 && (
+            <span className="flex items-center gap-0.5">
+              <MapPin className="h-3 w-3" />
+              {formatDistance(stravaDistance)}
+            </span>
+          )}
+          {stravaCalories != null && stravaCalories > 0 && (
+            <span className="text-xs">{formatCalories(stravaCalories)}</span>
+          )}
+          {stravaAvgHeartrate != null && stravaAvgHeartrate > 0 && (
+            <span className="text-xs">♥ {Math.round(stravaAvgHeartrate)} bpm</span>
+          )}
+          {!stravaName && activity.pairsWith && (
             <span className="text-primary text-xs">
               Pairs with workout
             </span>
           )}
-          {hasVideo(activity) && (
+          {!stravaName && hasVideo(activity) && (
             <Video className="h-3 w-3" title="Has video" />
           )}
-          {!hasVideo(activity) && activity.link && (
+          {!stravaName && !hasVideo(activity) && activity.link && (
             <ExternalLink className="h-3 w-3" title="External link" />
           )}
-          {activity.voiceGuided && (
+          {!stravaName && activity.voiceGuided && (
             <Volume2 className="h-3 w-3" title="Audio guide available" />
           )}
         </div>
@@ -110,14 +150,18 @@ export function ActivityCard({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
-              <ArrowRightLeft className="h-4 w-4 mr-2" />
-              Swap Activity
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
-              <CalendarClock className="h-4 w-4 mr-2" />
-              Push to Tomorrow
-            </DropdownMenuItem>
+            {onSwap && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSwap(); }}>
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Swap Activity
+              </DropdownMenuItem>
+            )}
+            {onPush && (
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onPush(); }}>
+                <CalendarClock className="h-4 w-4 mr-2" />
+                Push to Tomorrow
+              </DropdownMenuItem>
+            )}
             {onReorder && (
               <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onReorder(); }}>
                 <GripVertical className="h-4 w-4 mr-2" />
@@ -130,7 +174,7 @@ export function ActivityCard({
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
-                Remove from Today
+                Remove
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

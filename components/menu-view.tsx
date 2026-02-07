@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library, Bell, BellRing } from 'lucide-react'
+import { CalendarDays, BarChart3, Settings, ChevronRight, MapPin, Database, Calendar, Check, Sparkles, CheckCircle2, LogOut, Cloud, CloudOff, Loader2, Upload, ListChecks, Library, Bell, BellRing, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWeather } from '@/hooks/use-weather'
 import { useActivities } from '@/hooks/use-activities'
@@ -12,6 +12,9 @@ import { useAuth } from '@/hooks/use-auth'
 import { useSync } from '@/hooks/use-sync'
 import { LocationModal } from './location-modal'
 import { CalendarSettingsModal } from './calendar-settings-modal'
+import { useStrava } from '@/hooks/use-strava'
+import { StravaSettingsModal } from './strava-settings-modal'
+import { StravaImportModal } from './strava-import-modal'
 import { HealthCoachModal } from './health-coach-modal'
 import { MigrationModal } from './migration-modal'
 import { RoutinesModal } from './routines-modal'
@@ -32,6 +35,8 @@ interface MenuViewProps {
   onShowToast?: (message: string) => void
   onOpenLibrary?: () => void
   onOpenStats?: () => void
+  autoOpenStravaImport?: boolean
+  onStravaImportOpened?: () => void
 }
 
 interface MenuItem {
@@ -43,7 +48,7 @@ interface MenuItem {
   connected?: boolean
 }
 
-export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast, onOpenLibrary, onOpenStats }: MenuViewProps) {
+export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenPlanWithRoutine, onNavigateToToday, onShowToast, onOpenLibrary, onOpenStats, autoOpenStravaImport, onStravaImportOpened }: MenuViewProps) {
   const router = useRouter()
   const { locationName, hasLocation, updateLocation, resetLocation } = useWeather()
   const { source, lastSyncTime, isSyncing, syncFromNotion } = useActivities()
@@ -57,6 +62,12 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
     refetch: refetchCalendar,
     setSelectedCalendars
   } = useCalendar()
+  const {
+    isConnected: stravaConnected,
+    athleteName: stravaAthleteName,
+    connect: connectStrava,
+    disconnect: disconnectStrava,
+  } = useStrava()
   const { isAuthenticated, isSupabaseEnabled } = useAuth()
   const { syncStatus, lastSyncTime: cloudSyncTime, hasPendingMigration, pullFromCloud, migrateToCloud, dismissMigration } = useSync()
   const [showLocationModal, setShowLocationModal] = useState(false)
@@ -65,6 +76,8 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
   const [showMigrationModal, setShowMigrationModal] = useState(false)
   const [showRoutinesModal, setShowRoutinesModal] = useState(false)
   const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+  const [showStravaModal, setShowStravaModal] = useState(false)
+  const [showStravaImport, setShowStravaImport] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const storage = useStorage()
   const [remindersSyncTime, setRemindersSyncTime] = useState<Date | null>(null)
@@ -74,6 +87,14 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
   useEffect(() => {
     setRemindersSyncTime(getLastRemindersSyncTime())
   }, [])
+
+  // Auto-open Strava import after OAuth redirect
+  useEffect(() => {
+    if (autoOpenStravaImport && stravaConnected) {
+      setShowStravaImport(true)
+      onStravaImportOpened?.()
+    }
+  }, [autoOpenStravaImport, stravaConnected, onStravaImportOpened])
 
   // Show migration modal when user just signed in and has local data
   const shouldShowMigrationPrompt = hasPendingMigration && isAuthenticated
@@ -275,6 +296,15 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
         : 'Connect to see your events',
       onClick: calendarConnected ? () => setShowCalendarModal(true) : connectCalendar,
       connected: calendarConnected
+    },
+    {
+      icon: Activity,
+      label: 'Strava',
+      description: stravaConnected
+        ? `Connected as ${stravaAthleteName || 'Strava Athlete'}`
+        : 'Connect to import workouts',
+      onClick: stravaConnected ? () => setShowStravaModal(true) : connectStrava,
+      connected: stravaConnected
     },
     {
       icon: Bell,
@@ -485,6 +515,33 @@ export function MenuView({ onBack, onOpenPlan, onOpenPlanWithActivities, onOpenP
       {showNotificationSettings && (
         <NotificationSettingsModal
           onClose={() => setShowNotificationSettings(false)}
+        />
+      )}
+
+      {/* Strava Settings Modal */}
+      {showStravaModal && (
+        <StravaSettingsModal
+          athleteName={stravaAthleteName}
+          onClose={() => setShowStravaModal(false)}
+          onDisconnect={async () => {
+            await disconnectStrava()
+            setShowStravaModal(false)
+          }}
+          onOpenImport={() => {
+            setShowStravaModal(false)
+            setShowStravaImport(true)
+          }}
+        />
+      )}
+
+      {/* Strava Import Modal */}
+      {showStravaImport && (
+        <StravaImportModal
+          onClose={() => setShowStravaImport(false)}
+          onImported={(count) => {
+            setToast(`Imported ${count} activit${count === 1 ? 'y' : 'ies'} from Strava`)
+            setTimeout(() => setToast(null), 3000)
+          }}
         />
       )}
 

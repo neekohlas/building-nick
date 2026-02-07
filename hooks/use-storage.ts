@@ -19,6 +19,12 @@ export interface Completion {
   instanceIndex: number  // Position in the time block array (0-based)
   completedAt: string
   durationMinutes?: number  // User-overridden duration (falls back to activity default)
+  // Strava import metadata (optional)
+  stravaActivityName?: string   // e.g. "Wahoo SYSTM: On Location - Provence"
+  stravaDistance?: number        // Distance in meters
+  stravaSportType?: string       // e.g. "Ride", "Run", "Walk"
+  stravaCalories?: number        // Kilojoules (Strava returns as kilojoules for rides)
+  stravaAvgHeartrate?: number    // Average heart rate in bpm
 }
 
 export interface DailySchedule {
