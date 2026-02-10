@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
 import { SpectrumScores } from '@/lib/activities'
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 // Spectrum colors (matching spectrum-bar.tsx)
 const SPECTRUM_COLORS = {
@@ -75,7 +75,7 @@ function formatDateRange(start: Date, end: Date): string {
 }
 
 // Custom tooltip for the chart
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string }>; label?: string }) {
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string; dataKey: string }>; label?: string }) {
   if (!active || !payload?.length) return null
 
   const total = payload.reduce((sum, p) => sum + (p.value || 0), 0)
@@ -88,22 +88,33 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
         <div key={p.name} className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />
           <span className="capitalize">{p.name}:</span>
-          <span className="font-medium">{p.value.toFixed(1)}</span>
+          <span className="font-medium">{Math.round(p.value)} min</span>
         </div>
       ))}
+      <div className="border-t border-border/50 mt-1 pt-1 font-medium">
+        Total: {Math.round(total)} min
+      </div>
     </div>
   )
 }
 
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
-  const chartData = weekStats.days.map(day => ({
-    name: day.dayName,
-    heart: Math.round(day.spectrumSessions.heart * 10) / 10,
-    mind: Math.round(day.spectrumSessions.mind * 10) / 10,
-    body: Math.round(day.spectrumSessions.body * 10) / 10,
-    learn: Math.round(day.spectrumSessions.learn * 10) / 10,
-    sessions: day.sessionCount,
-  }))
+  // Build cumulative data for stacked area chart (like Apple Fitness zone time)
+  let cumHeart = 0, cumMind = 0, cumBody = 0, cumLearn = 0
+  const chartData = weekStats.days.map(day => {
+    cumHeart += day.spectrumMinutes.heart
+    cumMind += day.spectrumMinutes.mind
+    cumBody += day.spectrumMinutes.body
+    cumLearn += day.spectrumMinutes.learn
+    return {
+      name: day.dayName,
+      heart: Math.round(cumHeart),
+      mind: Math.round(cumMind),
+      body: Math.round(cumBody),
+      learn: Math.round(cumLearn),
+      sessions: day.sessionCount,
+    }
+  })
 
   // Check if there's any data
   const hasData = chartData.some(d => d.sessions > 0)
@@ -118,20 +129,26 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={chartData} barCategoryGap="20%">
+      <AreaChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         <XAxis
           dataKey="name"
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
         />
-        <YAxis hide />
+        <YAxis
+          tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+          axisLine={false}
+          tickLine={false}
+          width={32}
+          tickFormatter={(v) => `${v}`}
+        />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Bar dataKey="heart" stackId="a" fill={SPECTRUM_COLORS.heart} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="mind" stackId="a" fill={SPECTRUM_COLORS.mind} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="body" stackId="a" fill={SPECTRUM_COLORS.body} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="learn" stackId="a" fill={SPECTRUM_COLORS.learn} radius={[4, 4, 0, 0]} />
-      </BarChart>
+        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} />
+      </AreaChart>
     </ResponsiveContainer>
   )
 }
@@ -164,8 +181,8 @@ function SpectrumBreakdown({ spectrumTotals }: { spectrumTotals: SpectrumScores 
                 />
               )}
             </div>
-            <span className="text-xs text-muted-foreground w-8 text-right shrink-0">
-              {value > 0 ? value.toFixed(1) : '–'}
+            <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
+              {value > 0 ? `${Math.round(value)}m` : '–'}
             </span>
           </div>
         )
@@ -384,11 +401,11 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-baseline justify-between mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Activity
+                Zone Time
               </h3>
               <div className="text-right">
-                <span className="text-2xl font-bold">{weekStats.totalSessions}</span>
-                <span className="text-sm text-muted-foreground ml-1">sessions</span>
+                <span className="text-2xl font-bold">{weekStats.totalMinutes}</span>
+                <span className="text-sm text-muted-foreground ml-1">min</span>
               </div>
             </div>
 
@@ -407,10 +424,10 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
               ))}
             </div>
 
-            {/* Total minutes */}
-            {weekStats.totalMinutes > 0 && (
+            {/* Session count */}
+            {weekStats.totalSessions > 0 && (
               <p className="text-xs text-muted-foreground text-center mt-2">
-                ~{weekStats.totalMinutes} estimated minutes
+                {weekStats.totalSessions} sessions
               </p>
             )}
           </div>
@@ -418,9 +435,12 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
           {/* Spectrum Breakdown */}
           {weekStats.totalSessions > 0 && (
             <div className="rounded-xl border bg-card p-4">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Spectrum Breakdown
-              </h3>
+              <div className="flex items-baseline justify-between mb-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Spectrum Breakdown
+                </h3>
+                <span className="text-[10px] text-muted-foreground">minutes</span>
+              </div>
               <SpectrumBreakdown spectrumTotals={weekStats.spectrumTotals} />
             </div>
           )}

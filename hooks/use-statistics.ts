@@ -11,7 +11,7 @@ export interface DayStats {
   dayName: string
   sessionCount: number
   estimatedMinutes: number
-  spectrumSessions: SpectrumScores
+  spectrumMinutes: SpectrumScores  // Minutes weighted by spectrum (e.g., 10min activity with 80% heart = 8 heart minutes)
 }
 
 export interface ActivityBreakdown {
@@ -89,21 +89,23 @@ export function useStatistics() {
 
       let sessionCount = 0
       let estimatedMinutes = 0
-      let spectrumSessions: SpectrumScores = { ...EMPTY_SPECTRUM }
+      let spectrumMinutes: SpectrumScores = { ...EMPTY_SPECTRUM }
 
       for (const c of completions) {
         const activity = getActivityRef.current(c.activityId)
         if (!activity) continue
 
         sessionCount++
-        estimatedMinutes += c.durationMinutes ?? activity.duration ?? 5
+        const mins = c.durationMinutes ?? activity.duration ?? 5
+        estimatedMinutes += mins
 
         if (activity.spectrum) {
-          spectrumSessions = addSpectrum(spectrumSessions, {
-            heart: activity.spectrum.heart || 0,
-            mind: activity.spectrum.mind || 0,
-            body: activity.spectrum.body || 0,
-            learn: activity.spectrum.learn || 0,
+          // Weight minutes by spectrum proportions (e.g., 10min * 0.8 heart = 8 heart minutes)
+          spectrumMinutes = addSpectrum(spectrumMinutes, {
+            heart: mins * (activity.spectrum.heart || 0),
+            mind: mins * (activity.spectrum.mind || 0),
+            body: mins * (activity.spectrum.body || 0),
+            learn: mins * (activity.spectrum.learn || 0),
           })
         }
       }
@@ -113,7 +115,7 @@ export function useStatistics() {
         dayName: SHORT_DAYS[i],
         sessionCount,
         estimatedMinutes,
-        spectrumSessions,
+        spectrumMinutes,
       })
     }
 
@@ -125,7 +127,7 @@ export function useStatistics() {
     for (const day of dayStatsArray) {
       totalSessions += day.sessionCount
       totalMinutes += day.estimatedMinutes
-      spectrumTotals = addSpectrum(spectrumTotals, day.spectrumSessions)
+      spectrumTotals = addSpectrum(spectrumTotals, day.spectrumMinutes)
     }
 
     // Activity breakdown

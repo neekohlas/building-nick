@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { X, Clock } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { X, Clock, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Activity, CATEGORIES, Category, TimeBlock } from '@/lib/activities'
 import { formatDuration, formatDateShort } from '@/lib/date-utils'
@@ -34,8 +34,10 @@ const TIME_BLOCKS: { value: TimeBlock; label: string }[] = [
 export function AddActivityModal({ targetDate, defaultTimeBlock, onClose, onAdd }: AddActivityModalProps) {
   const { getAllActivities } = useActivities()
   const [filter, setFilter] = useState<'all' | Category>('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null)
   const [selectedTimeBlock, setSelectedTimeBlock] = useState<TimeBlock>(defaultTimeBlock || 'before9pm')
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Update selected time block when defaultTimeBlock prop changes (e.g., when modal opens with a specific block)
   useEffect(() => {
@@ -55,6 +57,7 @@ export function AddActivityModal({ targetDate, defaultTimeBlock, onClose, onAdd 
   const activities = allActivities
     .filter(a => filter === 'all' || a.category === filter)
     .filter(a => a.name !== 'Untitled') // Exclude empty entries
+    .filter(a => !searchQuery || a.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       // Sort by sortOrder if available, then by name
       if (a.sortOrder !== undefined && b.sortOrder !== undefined) {
@@ -95,8 +98,29 @@ export function AddActivityModal({ targetDate, defaultTimeBlock, onClose, onAdd 
             For {formatDateShort(targetDate)}
           </p>
 
+          {/* Search */}
+          <div className="relative mt-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder="Search activities..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 rounded-lg border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearchQuery(''); searchRef.current?.focus() }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-muted"
+              >
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+
           {/* Filters */}
-          <div className="flex gap-2 mt-4 overflow-x-auto pb-2">
+          <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
             {FILTERS.map(f => (
               <button
                 key={f.value}

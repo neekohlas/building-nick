@@ -1,15 +1,45 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Loader2, Lock } from 'lucide-react'
+
+// localStorage key for persisting auth across iOS PWA cookie resets
+const AUTH_BACKUP_KEY = 'building_nick_auth_backup'
 
 export default function LoginPage() {
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isAutoLogging, setIsAutoLogging] = useState(true)
+
+  // On mount, check if we have a saved password in localStorage (iOS PWA cookie recovery)
+  useEffect(() => {
+    const savedPassword = localStorage.getItem(AUTH_BACKUP_KEY)
+    if (savedPassword) {
+      // Try to silently re-authenticate
+      fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: savedPassword })
+      }).then(res => {
+        if (res.ok) {
+          router.push('/')
+          router.refresh()
+        } else {
+          // Saved password no longer valid — clear it
+          localStorage.removeItem(AUTH_BACKUP_KEY)
+          setIsAutoLogging(false)
+        }
+      }).catch(() => {
+        setIsAutoLogging(false)
+      })
+    } else {
+      setIsAutoLogging(false)
+    }
+  }, [router])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -24,6 +54,8 @@ export default function LoginPage() {
       })
 
       if (response.ok) {
+        // Persist password in localStorage so iOS PWA can recover if cookies are cleared
+        localStorage.setItem(AUTH_BACKUP_KEY, password)
         router.push('/')
         router.refresh()
       } else {
@@ -35,6 +67,15 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show loading spinner while attempting auto-login from localStorage backup
+  if (isAutoLogging) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (

@@ -64,11 +64,13 @@ export interface NotificationContext {
   nextBlock: TimeBlock | null
 }
 
-// Default notification times (morning, midday, evening)
+// Default notification times
 export const DEFAULT_NOTIFICATION_TIMES: NotificationTime[] = [
-  { hour: 7, minute: 0, enabled: true },
-  { hour: 12, minute: 0, enabled: true },
-  { hour: 18, minute: 0, enabled: true }
+  { hour: 8, minute: 15, enabled: true },
+  { hour: 10, minute: 30, enabled: true },
+  { hour: 13, minute: 0, enabled: true },
+  { hour: 16, minute: 0, enabled: true },
+  { hour: 20, minute: 45, enabled: true }
 ]
 
 /**

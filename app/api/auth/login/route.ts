@@ -2,11 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const APP_PASSWORD = process.env.APP_PASSWORD
 
+// iOS standalone PWAs can lose cookies with only maxAge — set explicit expires too
+const oneYear = 60 * 60 * 24 * 365
 const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
-  maxAge: 60 * 60 * 24 * 365, // 1 year
+  maxAge: oneYear,
+  expires: new Date(Date.now() + oneYear * 1000),
   path: '/',
 }
 

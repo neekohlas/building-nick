@@ -21,6 +21,8 @@ export default function Home() {
   const [globalToast, setGlobalToast] = useState<string | null>(null)
   const [snapToTodayKey, setSnapToTodayKey] = useState(0)
   const [autoOpenStravaImport, setAutoOpenStravaImport] = useState(false)
+  // Keep plan view mounted (but hidden) when navigating away, so drag ordering is preserved
+  const [planMounted, setPlanMounted] = useState(false)
   const today = new Date()
   const { hasConnectionError, retryConnection, clearDatabase } = useStorage()
 
@@ -76,6 +78,7 @@ export default function Home() {
             onFocusForWeek={(activityIds) => {
               setPreSelectedActivities(activityIds)
               setPreLoadedRoutine(null)
+              setPlanMounted(true)
               setActiveView('plan')
             }}
           />
@@ -83,21 +86,25 @@ export default function Home() {
         {activeView === 'week' && (
           <WeekView onBack={() => setActiveView('today')} />
         )}
-        {activeView === 'plan' && (
-          <PlanWeekView
-            onComplete={() => {
-              setActiveView('today')
-              setPreSelectedActivities([])
-              setPreLoadedRoutine(null)
-            }}
-            onBack={() => {
-              setActiveView('menu')
-              setPreSelectedActivities([])
-              setPreLoadedRoutine(null)
-            }}
-            preSelectedActivities={preSelectedActivities}
-            preLoadedRoutine={preLoadedRoutine}
-          />
+        {(activeView === 'plan' || planMounted) && (
+          <div className={activeView === 'plan' ? '' : 'hidden'}>
+            <PlanWeekView
+              onComplete={() => {
+                setActiveView('today')
+                setPlanMounted(false)
+                setPreSelectedActivities([])
+                setPreLoadedRoutine(null)
+              }}
+              onBack={() => {
+                setActiveView('menu')
+                setPlanMounted(false)
+                setPreSelectedActivities([])
+                setPreLoadedRoutine(null)
+              }}
+              preSelectedActivities={preSelectedActivities}
+              preLoadedRoutine={preLoadedRoutine}
+            />
+          </div>
         )}
         {activeView === 'routines' && (
           <RoutinesView
@@ -105,6 +112,7 @@ export default function Home() {
             onLoadRoutine={(routine) => {
               setPreLoadedRoutine(routine)
               setPreSelectedActivities([])
+              setPlanMounted(true)
               setActiveView('plan')
             }}
           />
@@ -118,15 +126,17 @@ export default function Home() {
         {activeView === 'menu' && (
           <MenuView
             onBack={() => setActiveView('today')}
-            onOpenPlan={() => setActiveView('plan')}
+            onOpenPlan={() => { setPlanMounted(true); setActiveView('plan') }}
             onOpenPlanWithActivities={(activityIds) => {
               setPreSelectedActivities(activityIds)
               setPreLoadedRoutine(null)
+              setPlanMounted(true)
               setActiveView('plan')
             }}
             onOpenPlanWithRoutine={(routine) => {
               setPreLoadedRoutine(routine)
               setPreSelectedActivities([])
+              setPlanMounted(true)
               setActiveView('plan')
             }}
             onNavigateToToday={() => setActiveView('today')}

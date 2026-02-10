@@ -57,7 +57,14 @@ function useVimeoThumbnail(url: string | undefined) {
     const videoId = getVimeoVideoId(url)
     if (!videoId) return
 
-    fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`)
+    // For unlisted videos, pass the full URL (with privacy hash) to oEmbed
+    // e.g. vimeo.com/715226740/a262662ffb — the hash is required for the API to respond
+    const match = url.match(/vimeo\.com\/(\d+)(?:\/([a-zA-Z0-9]+))?/)
+    const oEmbedUrl = match && match[2]
+      ? `https://vimeo.com/api/oembed.json?url=https://vimeo.com/${match[1]}/${match[2]}`
+      : `https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`
+
+    fetch(oEmbedUrl)
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.thumbnail_url) {
