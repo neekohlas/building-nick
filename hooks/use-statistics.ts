@@ -35,7 +35,8 @@ export interface WeekStats {
   weekEnd: Date
   days: DayStats[]
   totalSessions: number
-  totalMinutes: number
+  totalMinutes: number         // Raw activity minutes (actual time spent)
+  spectrumTotalMinutes: number // Sum of spectrum-weighted minutes (what the chart shows)
   spectrumTotals: SpectrumScores
   activityBreakdown: ActivityBreakdown[]
   moodEntries: MoodEntry[]
@@ -130,6 +131,11 @@ export function useStatistics() {
       spectrumTotals = addSpectrum(spectrumTotals, day.spectrumMinutes)
     }
 
+    // Sum of spectrum-weighted minutes (what the stacked chart actually shows)
+    const spectrumTotalMinutes = Math.round(
+      spectrumTotals.heart + spectrumTotals.mind + spectrumTotals.body + spectrumTotals.learn
+    )
+
     // Activity breakdown
     const breakdownMap = new Map<string, ActivityBreakdown>()
     for (const c of allCompletions) {
@@ -178,6 +184,7 @@ export function useStatistics() {
       days: dayStatsArray,
       totalSessions,
       totalMinutes,
+      spectrumTotalMinutes,
       spectrumTotals,
       activityBreakdown,
       moodEntries,

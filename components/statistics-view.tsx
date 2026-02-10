@@ -5,6 +5,25 @@ import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
 import { SpectrumScores } from '@/lib/activities'
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
+// Format minutes as hours + minutes (e.g., 210 → "3h 30m", 45 → "45m", 120 → "2h")
+function formatMinutesDisplay(mins: number): { value: string; unit: string } {
+  const rounded = Math.round(mins)
+  if (rounded < 60) return { value: `${rounded}`, unit: 'm' }
+  const h = Math.floor(rounded / 60)
+  const m = rounded % 60
+  if (m === 0) return { value: `${h}`, unit: 'h' }
+  return { value: `${h}h ${m}`, unit: 'm' }
+}
+
+function formatMinutesShort(mins: number): string {
+  const rounded = Math.round(mins)
+  if (rounded < 60) return `${rounded}m`
+  const h = Math.floor(rounded / 60)
+  const m = rounded % 60
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
 // Spectrum colors (matching spectrum-bar.tsx)
 const SPECTRUM_COLORS = {
   heart: '#F43F5E',
@@ -94,11 +113,11 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
         <div key={p.name} className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />
           <span className="capitalize">{p.name}:</span>
-          <span className="font-medium">{Math.round(p.value)} min</span>
+          <span className="font-medium">{formatMinutesShort(p.value)}</span>
         </div>
       ))}
       <div className="border-t border-border/50 mt-1 pt-1 font-medium">
-        Total: {Math.round(total)} min
+        Total: {formatMinutesShort(total)}
       </div>
     </div>
   )
@@ -111,55 +130,65 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
   const todayStr = new Date().toISOString().split('T')[0]
 
   // Build cumulative values per day
-  type CumDay = { heart: number; mind: number; body: number; learn: number }
+  type CumDay = { heart: number; mind: number; body: number; learn: number; total: number }
   const cumDays: (CumDay | null)[] = []
   let cumHeart = 0, cumMind = 0, cumBody = 0, cumLearn = 0
+  let daysElapsed = 0
 
   for (let i = 0; i < weekStats.days.length; i++) {
     const day = weekStats.days[i]
     if (day.date > todayStr) {
       cumDays.push(null) // future
     } else {
+      daysElapsed++
       cumHeart += day.spectrumMinutes.heart
       cumMind += day.spectrumMinutes.mind
       cumBody += day.spectrumMinutes.body
       cumLearn += day.spectrumMinutes.learn
+      const total = cumHeart + cumMind + cumBody + cumLearn
       cumDays.push({
         heart: Math.round(cumHeart * 10) / 10,
         mind: Math.round(cumMind * 10) / 10,
         body: Math.round(cumBody * 10) / 10,
         learn: Math.round(cumLearn * 10) / 10,
+        total,
       })
     }
   }
 
+  // Project Y-axis max: extrapolate current pace to full 7 days
+  // Use at least 1.5x current total so there's always headroom
+  const currentTotal = cumHeart + cumMind + cumBody + cumLearn
+  let projectedMax: number
+  if (daysElapsed > 0 && daysElapsed < 7) {
+    const dailyAvg = currentTotal / daysElapsed
+    projectedMax = Math.ceil(dailyAvg * 7)
+  } else {
+    projectedMax = currentTotal
+  }
+  // Ensure some minimum headroom (at least 1.3x current, minimum 60)
+  const yMax = Math.max(Math.ceil(currentTotal * 1.3), projectedMax, 60)
+  // Round up to nice number (nearest 30)
+  const yMaxRounded = Math.ceil(yMax / 30) * 30
+
   // Build chart data with midpoint transitions (Apple Fitness style)
   // Each day i is at x = i. The plateau for day i extends from i-0.5 to i+0.5.
   // The vertical jump happens at the midpoint between days.
-  // We use a numeric x-axis and place two points per day: (i-0.5, val) and (i+0.5, val)
-  // The first point of each day (i-0.5) uses the NEW value → vertical jump at midpoint.
   const chartData: Array<{ x: number; heart: number | null; mind: number | null; body: number | null; learn: number | null }> = []
 
-  // Leading zero: from x=-0.5 (before Mon) to x=0 (start of Mon midpoint area)
-  // This gives the "starts at 0" baseline
+  // Leading zero: start at x=-0.5 with all zeros (graph starts at 0)
   chartData.push({ x: -0.5, heart: 0, mind: 0, body: 0, learn: 0 })
 
   for (let i = 0; i < 7; i++) {
     const cum = cumDays[i]
-    const prev = i > 0 ? cumDays[i - 1] : { heart: 0, mind: 0, body: 0, learn: 0 }
 
     if (cum === null) {
-      // Future day: end the area at the midpoint before this day
-      // Add one last point with prev value at x = i - 0.5 to close off the area
-      if (prev) {
-        chartData.push({ x: i - 0.5, heart: prev.heart, mind: prev.mind, body: prev.body, learn: prev.learn })
-      }
-      // Then nulls for the rest of the future days
-      chartData.push({ x: i, heart: null, mind: null, body: null, learn: null })
-      for (let j = i + 1; j < 7; j++) {
+      // Future day: close off the area cleanly, then nulls for the rest
+      // The previous day's right edge (i-1+0.5 = i-0.5) was already added
+      // Add null points for all remaining future days so X-axis labels show
+      for (let j = i; j < 7; j++) {
         chartData.push({ x: j, heart: null, mind: null, body: null, learn: null })
       }
-      // Add trailing point at end so x-axis extends fully
       chartData.push({ x: 6.5, heart: null, mind: null, body: null, learn: null })
       break
     }
@@ -168,21 +197,16 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
     chartData.push({ x: i - 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
     // Right edge of this day's plateau
     chartData.push({ x: i + 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
-
-    // If this is the last day (Sun) or the last non-future day, close off
-    if (i === 6) {
-      // Already added up to x=6.5
-    }
   }
 
-  // If all 7 days had data, ensure we have a trailing point
+  // If all 7 days had data, ensure trailing point
   if (cumDays[6] !== null && chartData[chartData.length - 1]?.x !== 6.5) {
     const last = cumDays[6]!
     chartData.push({ x: 6.5, heart: last.heart, mind: last.mind, body: last.body, learn: last.learn })
   }
 
   // Check if there's any data
-  const hasData = (cumHeart + cumMind + cumBody + cumLearn) > 0
+  const hasData = currentTotal > 0
 
   if (!hasData) {
     return (
@@ -206,11 +230,12 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickLine={false}
         />
         <YAxis
+          domain={[0, yMaxRounded]}
           tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
-          width={28}
-          tickFormatter={(v) => `${v}`}
+          width={32}
+          tickFormatter={(v: number) => v >= 60 ? `${Math.round(v / 60)}h` : `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
         <Area type="linear" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} connectNulls={false} />
@@ -250,8 +275,8 @@ function SpectrumBreakdown({ spectrumTotals }: { spectrumTotals: SpectrumScores 
                 />
               )}
             </div>
-            <span className="text-xs text-muted-foreground w-10 text-right shrink-0">
-              {value > 0 ? `${Math.round(value)}m` : '–'}
+            <span className="text-xs text-muted-foreground w-14 text-right shrink-0">
+              {value > 0 ? formatMinutesShort(value) : '–'}
             </span>
           </div>
         )
@@ -291,7 +316,7 @@ function ActivityList({ breakdown }: { breakdown: WeekStats['activityBreakdown']
           <div className="text-sm text-muted-foreground shrink-0 ml-3">
             <span className="font-semibold text-foreground">{ab.sessionCount}x</span>
             <span className="mx-1">·</span>
-            <span>~{ab.estimatedMinutes} min</span>
+            <span>~{formatMinutesShort(ab.estimatedMinutes)}</span>
           </div>
         </div>
       ))}
@@ -473,8 +498,20 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
                 Zone Time
               </h3>
               <div className="text-right">
-                <span className="text-2xl font-bold">{weekStats.totalMinutes}</span>
-                <span className="text-sm text-muted-foreground ml-1">min</span>
+                {(() => {
+                  const { value, unit } = formatMinutesDisplay(weekStats.totalMinutes)
+                  return (
+                    <>
+                      <span className="text-2xl font-bold">{value}</span>
+                      <span className="text-sm text-muted-foreground ml-1">{unit}</span>
+                    </>
+                  )
+                })()}
+                {weekStats.totalSessions > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {weekStats.totalSessions} sessions
+                  </p>
+                )}
               </div>
             </div>
 
@@ -493,12 +530,6 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
               ))}
             </div>
 
-            {/* Session count */}
-            {weekStats.totalSessions > 0 && (
-              <p className="text-xs text-muted-foreground text-center mt-2">
-                {weekStats.totalSessions} sessions
-              </p>
-            )}
           </div>
 
           {/* Spectrum Breakdown */}
@@ -508,7 +539,7 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Spectrum Breakdown
                 </h3>
-                <span className="text-[10px] text-muted-foreground">minutes</span>
+                <span className="text-[10px] text-muted-foreground">weighted</span>
               </div>
               <SpectrumBreakdown spectrumTotals={weekStats.spectrumTotals} />
             </div>
