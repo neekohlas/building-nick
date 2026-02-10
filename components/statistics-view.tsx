@@ -102,42 +102,52 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
-  // Get today's date string to cap cumulative data (exclude future days)
+  // Get today's date string to cap cumulative data (future days show as blank)
   const todayStr = new Date().toISOString().split('T')[0]
 
   // Build cumulative chart data — running total of spectrum minutes
-  // Start with a "0" baseline, then accumulate through each day up to today
+  // All 7 days always appear on the X-axis; future days have null values (blank area)
   let cumHeart = 0
   let cumMind = 0
   let cumBody = 0
   let cumLearn = 0
 
-  const chartData: Array<{ name: string; heart: number; mind: number; body: number; learn: number; sessions: number }> = []
+  const chartData: Array<{ name: string; heart: number | null; mind: number | null; body: number | null; learn: number | null; sessions: number }> = []
 
   // Start point at zero (before Monday)
   chartData.push({ name: '', heart: 0, mind: 0, body: 0, learn: 0, sessions: 0 })
 
   for (const day of weekStats.days) {
-    // Stop before we reach future days
-    if (day.date > todayStr) break
+    if (day.date > todayStr) {
+      // Future day: show on X-axis but with null values (blank)
+      chartData.push({
+        name: day.dayName,
+        heart: null,
+        mind: null,
+        body: null,
+        learn: null,
+        sessions: 0,
+      })
+    } else {
+      // Past/today: accumulate
+      cumHeart += day.spectrumMinutes.heart
+      cumMind += day.spectrumMinutes.mind
+      cumBody += day.spectrumMinutes.body
+      cumLearn += day.spectrumMinutes.learn
 
-    cumHeart += day.spectrumMinutes.heart
-    cumMind += day.spectrumMinutes.mind
-    cumBody += day.spectrumMinutes.body
-    cumLearn += day.spectrumMinutes.learn
-
-    chartData.push({
-      name: day.dayName,
-      heart: Math.round(cumHeart * 10) / 10,
-      mind: Math.round(cumMind * 10) / 10,
-      body: Math.round(cumBody * 10) / 10,
-      learn: Math.round(cumLearn * 10) / 10,
-      sessions: day.sessionCount,
-    })
+      chartData.push({
+        name: day.dayName,
+        heart: Math.round(cumHeart * 10) / 10,
+        mind: Math.round(cumMind * 10) / 10,
+        body: Math.round(cumBody * 10) / 10,
+        learn: Math.round(cumLearn * 10) / 10,
+        sessions: day.sessionCount,
+      })
+    }
   }
 
-  // Check if there's any data (beyond the zero start point)
-  const hasData = chartData.length > 1 && (cumHeart + cumMind + cumBody + cumLearn) > 0
+  // Check if there's any data
+  const hasData = (cumHeart + cumMind + cumBody + cumLearn) > 0
 
   if (!hasData) {
     return (
@@ -164,10 +174,10 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickFormatter={(v) => `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Area type="monotone" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
+        <Area type="stepAfter" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} connectNulls={false} />
+        <Area type="stepAfter" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} connectNulls={false} />
+        <Area type="stepAfter" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} connectNulls={false} />
+        <Area type="stepAfter" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} connectNulls={false} />
       </AreaChart>
     </ResponsiveContainer>
   )
