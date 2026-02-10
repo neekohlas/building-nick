@@ -171,23 +171,25 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
   // Round up to nice number (nearest 30)
   const yMaxRounded = Math.ceil(yMax / 30) * 30
 
-  // Build chart data with midpoint transitions (Apple Fitness style)
-  // Each day i is at x = i. The plateau for day i extends from i-0.5 to i+0.5.
-  // The vertical jump happens at the midpoint between days.
+  // Build chart data with angled midpoint transitions
+  // For each day the shape is: diagonal ramp from midpoint to day label, then flat plateau.
+  //   x = i-0.5 → previous day's cumulative value (bottom of ramp)
+  //   x = i     → this day's cumulative value (top of ramp, at the day label)
+  //   x = i+0.5 → this day's cumulative value (flat plateau continues)
+  // The diagonal line from (i-0.5, prev) to (i, current) creates the angled transition.
+  const zero = { heart: 0, mind: 0, body: 0, learn: 0 }
   const chartData: Array<{ x: number; heart: number | null; mind: number | null; body: number | null; learn: number | null }> = []
 
-  // Leading zero baseline: flat line at 0 from x=-1 to x=-0.5
-  // This creates a visible "starts at 0" on the left before Monday's value rises
-  chartData.push({ x: -1, heart: 0, mind: 0, body: 0, learn: 0 })
-  chartData.push({ x: -0.5, heart: 0, mind: 0, body: 0, learn: 0 })
+  // Leading zero baseline: flat at 0 from x=-1 to x=-0.5
+  // The ramp from x=-0.5 (0) to x=0 (Mon's value) is the "starts at 0" rise
+  chartData.push({ x: -1, ...zero })
+  chartData.push({ x: -0.5, ...zero })
 
   for (let i = 0; i < 7; i++) {
     const cum = cumDays[i]
 
     if (cum === null) {
-      // Future day: close off the area cleanly, then nulls for the rest
-      // The previous day's right edge (i-1+0.5 = i-0.5) was already added
-      // Add null points for all remaining future days so X-axis labels show
+      // Future day — null out the rest so X-axis labels still show
       for (let j = i; j < 7; j++) {
         chartData.push({ x: j, heart: null, mind: null, body: null, learn: null })
       }
@@ -195,9 +197,11 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
       break
     }
 
-    // Left edge of this day's plateau (midpoint between prev day and this day)
-    chartData.push({ x: i - 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
-    // Right edge of this day's plateau
+    // Day label position (i): diagonal ramp arrives at this day's value
+    chartData.push({ x: i, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
+
+    // Right edge (i+0.5): flat plateau at this day's value
+    // This also serves as the bottom of the next day's ramp
     chartData.push({ x: i + 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
   }
 
