@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
 import { SpectrumScores } from '@/lib/activities'
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 // Spectrum colors (matching spectrum-bar.tsx)
 const SPECTRUM_COLORS = {
@@ -99,22 +99,15 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
-  // Build cumulative data for stacked area chart (like Apple Fitness zone time)
-  let cumHeart = 0, cumMind = 0, cumBody = 0, cumLearn = 0
-  const chartData = weekStats.days.map(day => {
-    cumHeart += day.spectrumMinutes.heart
-    cumMind += day.spectrumMinutes.mind
-    cumBody += day.spectrumMinutes.body
-    cumLearn += day.spectrumMinutes.learn
-    return {
-      name: day.dayName,
-      heart: Math.round(cumHeart),
-      mind: Math.round(cumMind),
-      body: Math.round(cumBody),
-      learn: Math.round(cumLearn),
-      sessions: day.sessionCount,
-    }
-  })
+  // Per-day spectrum minutes for stacked bar chart
+  const chartData = weekStats.days.map(day => ({
+    name: day.dayName,
+    heart: Math.round(day.spectrumMinutes.heart),
+    mind: Math.round(day.spectrumMinutes.mind),
+    body: Math.round(day.spectrumMinutes.body),
+    learn: Math.round(day.spectrumMinutes.learn),
+    sessions: day.sessionCount,
+  }))
 
   // Check if there's any data
   const hasData = chartData.some(d => d.sessions > 0)
@@ -129,7 +122,7 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+      <BarChart data={chartData} barCategoryGap="20%">
         <XAxis
           dataKey="name"
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
@@ -140,15 +133,15 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
-          width={32}
+          width={28}
           tickFormatter={(v) => `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} />
-      </AreaChart>
+        <Bar dataKey="heart" stackId="a" fill={SPECTRUM_COLORS.heart} radius={[0, 0, 0, 0]} />
+        <Bar dataKey="mind" stackId="a" fill={SPECTRUM_COLORS.mind} radius={[0, 0, 0, 0]} />
+        <Bar dataKey="body" stackId="a" fill={SPECTRUM_COLORS.body} radius={[0, 0, 0, 0]} />
+        <Bar dataKey="learn" stackId="a" fill={SPECTRUM_COLORS.learn} radius={[4, 4, 0, 0]} />
+      </BarChart>
     </ResponsiveContainer>
   )
 }
