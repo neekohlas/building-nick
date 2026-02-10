@@ -81,6 +81,9 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   const total = payload.reduce((sum, p) => sum + (p.value || 0), 0)
   if (total === 0) return null
 
+  // Don't show tooltip for the empty start point
+  if (!label) return null
+
   return (
     <div className="bg-card border rounded-lg shadow-lg p-2 text-xs">
       <p className="font-medium mb-1">{label}</p>
@@ -99,18 +102,42 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
-  // Per-day spectrum minutes for stacked area chart
-  const chartData = weekStats.days.map(day => ({
-    name: day.dayName,
-    heart: Math.round(day.spectrumMinutes.heart),
-    mind: Math.round(day.spectrumMinutes.mind),
-    body: Math.round(day.spectrumMinutes.body),
-    learn: Math.round(day.spectrumMinutes.learn),
-    sessions: day.sessionCount,
-  }))
+  // Get today's date string to cap cumulative data (exclude future days)
+  const todayStr = new Date().toISOString().split('T')[0]
 
-  // Check if there's any data
-  const hasData = chartData.some(d => d.sessions > 0)
+  // Build cumulative chart data — running total of spectrum minutes
+  // Start with a "0" baseline, then accumulate through each day up to today
+  let cumHeart = 0
+  let cumMind = 0
+  let cumBody = 0
+  let cumLearn = 0
+
+  const chartData: Array<{ name: string; heart: number; mind: number; body: number; learn: number; sessions: number }> = []
+
+  // Start point at zero (before Monday)
+  chartData.push({ name: '', heart: 0, mind: 0, body: 0, learn: 0, sessions: 0 })
+
+  for (const day of weekStats.days) {
+    // Stop before we reach future days
+    if (day.date > todayStr) break
+
+    cumHeart += day.spectrumMinutes.heart
+    cumMind += day.spectrumMinutes.mind
+    cumBody += day.spectrumMinutes.body
+    cumLearn += day.spectrumMinutes.learn
+
+    chartData.push({
+      name: day.dayName,
+      heart: Math.round(cumHeart * 10) / 10,
+      mind: Math.round(cumMind * 10) / 10,
+      body: Math.round(cumBody * 10) / 10,
+      learn: Math.round(cumLearn * 10) / 10,
+      sessions: day.sessionCount,
+    })
+  }
+
+  // Check if there's any data (beyond the zero start point)
+  const hasData = chartData.length > 1 && (cumHeart + cumMind + cumBody + cumLearn) > 0
 
   if (!hasData) {
     return (
@@ -122,7 +149,7 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+      <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
         <XAxis
           dataKey="name"
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
@@ -137,10 +164,10 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickFormatter={(v) => `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
-        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
         <Area type="monotone" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
       </AreaChart>
     </ResponsiveContainer>
   )
