@@ -75,18 +75,21 @@ function formatDateRange(start: Date, end: Date): string {
 }
 
 // Custom tooltip for the chart
-function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string; dataKey: string }>; label?: string }) {
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string; dataKey: string }>; label?: number }) {
   if (!active || !payload?.length) return null
 
   const total = payload.reduce((sum, p) => sum + (p.value || 0), 0)
   if (total === 0) return null
 
-  // Don't show tooltip for the empty start point
-  if (!label) return null
+  // Convert numeric x position to day name (round to nearest integer)
+  const dayIndex = typeof label === 'number' ? Math.round(label) : -1
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const dayName = dayIndex >= 0 && dayIndex <= 6 ? dayLabels[dayIndex] : ''
+  if (!dayName) return null
 
   return (
     <div className="bg-card border rounded-lg shadow-lg p-2 text-xs">
-      <p className="font-medium mb-1">{label}</p>
+      <p className="font-medium mb-1">{dayName}</p>
       {payload.filter(p => p.value > 0).map(p => (
         <div key={p.name} className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />
@@ -101,49 +104,81 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   )
 }
 
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
   // Get today's date string to cap cumulative data (future days show as blank)
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // Build cumulative chart data — running total of spectrum minutes
-  // All 7 days always appear on the X-axis; future days have null values (blank area)
-  let cumHeart = 0
-  let cumMind = 0
-  let cumBody = 0
-  let cumLearn = 0
+  // Build cumulative values per day
+  type CumDay = { heart: number; mind: number; body: number; learn: number }
+  const cumDays: (CumDay | null)[] = []
+  let cumHeart = 0, cumMind = 0, cumBody = 0, cumLearn = 0
 
-  const chartData: Array<{ name: string; heart: number | null; mind: number | null; body: number | null; learn: number | null; sessions: number }> = []
-
-  // Start point at zero (before Monday)
-  chartData.push({ name: '', heart: 0, mind: 0, body: 0, learn: 0, sessions: 0 })
-
-  for (const day of weekStats.days) {
+  for (let i = 0; i < weekStats.days.length; i++) {
+    const day = weekStats.days[i]
     if (day.date > todayStr) {
-      // Future day: show on X-axis but with null values (blank)
-      chartData.push({
-        name: day.dayName,
-        heart: null,
-        mind: null,
-        body: null,
-        learn: null,
-        sessions: 0,
-      })
+      cumDays.push(null) // future
     } else {
-      // Past/today: accumulate
       cumHeart += day.spectrumMinutes.heart
       cumMind += day.spectrumMinutes.mind
       cumBody += day.spectrumMinutes.body
       cumLearn += day.spectrumMinutes.learn
-
-      chartData.push({
-        name: day.dayName,
+      cumDays.push({
         heart: Math.round(cumHeart * 10) / 10,
         mind: Math.round(cumMind * 10) / 10,
         body: Math.round(cumBody * 10) / 10,
         learn: Math.round(cumLearn * 10) / 10,
-        sessions: day.sessionCount,
       })
     }
+  }
+
+  // Build chart data with midpoint transitions (Apple Fitness style)
+  // Each day i is at x = i. The plateau for day i extends from i-0.5 to i+0.5.
+  // The vertical jump happens at the midpoint between days.
+  // We use a numeric x-axis and place two points per day: (i-0.5, val) and (i+0.5, val)
+  // The first point of each day (i-0.5) uses the NEW value → vertical jump at midpoint.
+  const chartData: Array<{ x: number; heart: number | null; mind: number | null; body: number | null; learn: number | null }> = []
+
+  // Leading zero: from x=-0.5 (before Mon) to x=0 (start of Mon midpoint area)
+  // This gives the "starts at 0" baseline
+  chartData.push({ x: -0.5, heart: 0, mind: 0, body: 0, learn: 0 })
+
+  for (let i = 0; i < 7; i++) {
+    const cum = cumDays[i]
+    const prev = i > 0 ? cumDays[i - 1] : { heart: 0, mind: 0, body: 0, learn: 0 }
+
+    if (cum === null) {
+      // Future day: end the area at the midpoint before this day
+      // Add one last point with prev value at x = i - 0.5 to close off the area
+      if (prev) {
+        chartData.push({ x: i - 0.5, heart: prev.heart, mind: prev.mind, body: prev.body, learn: prev.learn })
+      }
+      // Then nulls for the rest of the future days
+      chartData.push({ x: i, heart: null, mind: null, body: null, learn: null })
+      for (let j = i + 1; j < 7; j++) {
+        chartData.push({ x: j, heart: null, mind: null, body: null, learn: null })
+      }
+      // Add trailing point at end so x-axis extends fully
+      chartData.push({ x: 6.5, heart: null, mind: null, body: null, learn: null })
+      break
+    }
+
+    // Left edge of this day's plateau (midpoint between prev day and this day)
+    chartData.push({ x: i - 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
+    // Right edge of this day's plateau
+    chartData.push({ x: i + 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
+
+    // If this is the last day (Sun) or the last non-future day, close off
+    if (i === 6) {
+      // Already added up to x=6.5
+    }
+  }
+
+  // If all 7 days had data, ensure we have a trailing point
+  if (cumDays[6] !== null && chartData[chartData.length - 1]?.x !== 6.5) {
+    const last = cumDays[6]!
+    chartData.push({ x: 6.5, heart: last.heart, mind: last.mind, body: last.body, learn: last.learn })
   }
 
   // Check if there's any data
@@ -159,9 +194,13 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+      <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
         <XAxis
-          dataKey="name"
+          dataKey="x"
+          type="number"
+          domain={[-0.5, 6.5]}
+          ticks={[0, 1, 2, 3, 4, 5, 6]}
+          tickFormatter={(v: number) => DAY_LABELS[v] ?? ''}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
           axisLine={false}
           tickLine={false}
@@ -174,10 +213,10 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickFormatter={(v) => `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Area type="stepAfter" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} connectNulls={false} />
-        <Area type="stepAfter" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} connectNulls={false} />
-        <Area type="stepAfter" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} connectNulls={false} />
-        <Area type="stepAfter" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} connectNulls={false} />
+        <Area type="linear" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} connectNulls={false} />
+        <Area type="linear" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} connectNulls={false} />
+        <Area type="linear" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} connectNulls={false} />
+        <Area type="linear" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} connectNulls={false} />
       </AreaChart>
     </ResponsiveContainer>
   )
