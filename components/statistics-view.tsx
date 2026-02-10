@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
 import { SpectrumScores } from '@/lib/activities'
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 // Spectrum colors (matching spectrum-bar.tsx)
 const SPECTRUM_COLORS = {
@@ -99,7 +99,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 }
 
 function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
-  // Per-day spectrum minutes for stacked bar chart
+  // Per-day spectrum minutes for stacked area chart
   const chartData = weekStats.days.map(day => ({
     name: day.dayName,
     heart: Math.round(day.spectrumMinutes.heart),
@@ -122,7 +122,7 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
 
   return (
     <ResponsiveContainer width="100%" height={180}>
-      <BarChart data={chartData} barCategoryGap="20%">
+      <AreaChart data={chartData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
         <XAxis
           dataKey="name"
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
@@ -137,11 +137,11 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickFormatter={(v) => `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Bar dataKey="heart" stackId="a" fill={SPECTRUM_COLORS.heart} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="mind" stackId="a" fill={SPECTRUM_COLORS.mind} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="body" stackId="a" fill={SPECTRUM_COLORS.body} radius={[0, 0, 0, 0]} />
-        <Bar dataKey="learn" stackId="a" fill={SPECTRUM_COLORS.learn} radius={[4, 4, 0, 0]} />
-      </BarChart>
+        <Area type="monotone" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} />
+        <Area type="monotone" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} />
+      </AreaChart>
     </ResponsiveContainer>
   )
 }
