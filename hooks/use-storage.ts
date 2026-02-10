@@ -1023,6 +1023,36 @@ export function useStorage() {
     )
   }, [])
 
+  // Weekly goals storage (uses metadata store with key 'weekly_goals')
+  const saveWeeklyGoals = useCallback(async (goals: { heart: number; mind: number; body: number; learn: number }) => {
+    await dbPut('metadata', {
+      key: 'weekly_goals',
+      ...goals,
+      updatedAt: new Date().toISOString()
+    }, 'key')
+  }, [])
+
+  const getWeeklyGoals = useCallback(async (): Promise<{ heart: number; mind: number; body: number; learn: number } | null> => {
+    const result = await dbGet<{ key: string; heart: number; mind: number; body: number; learn: number }>('metadata', 'weekly_goals')
+    if (!result) return null
+    return { heart: result.heart, mind: result.mind, body: result.body, learn: result.learn }
+  }, [])
+
+  const clearWeeklyGoals = useCallback(async () => {
+    const db = await getDB()
+    const tx = db.transaction('metadata', 'readwrite')
+    const store = tx.objectStore('metadata')
+    try {
+      store.delete('weekly_goals')
+      await new Promise<void>((resolve, reject) => {
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+    } catch {
+      // Key might not exist, that's fine
+    }
+  }, [])
+
   const retryConnection = useCallback(() => {
     dbPromise = null
     setHasConnectionError(false)
@@ -1082,6 +1112,10 @@ export function useStorage() {
     saveMoodEntry,
     getMoodEntry,
     getMoodEntriesForRange,
+    // Weekly goals
+    saveWeeklyGoals,
+    getWeeklyGoals,
+    clearWeeklyGoals,
     // Recovery
     clearDatabase,
     retryConnection

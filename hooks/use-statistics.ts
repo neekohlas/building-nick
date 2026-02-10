@@ -30,6 +30,15 @@ export interface MoodEntry {
   savedAt: string
 }
 
+export interface WeeklyGoals {
+  heart: number   // goal spectrum-weighted minutes
+  mind: number
+  body: number
+  learn: number
+  total: number   // sum of all 4
+  isDefault: boolean  // true = auto-computed from schedule (75%), false = user-set
+}
+
 export interface WeekStats {
   weekStart: Date
   weekEnd: Date
@@ -38,6 +47,7 @@ export interface WeekStats {
   totalMinutes: number         // Raw activity minutes (actual time spent)
   spectrumTotalMinutes: number // Sum of spectrum-weighted minutes (what the chart shows)
   spectrumTotals: SpectrumScores
+  weeklyGoals: WeeklyGoals
   activityBreakdown: ActivityBreakdown[]
   moodEntries: MoodEntry[]
 }
@@ -178,6 +188,54 @@ export function useStatistics() {
       console.error('Failed to fetch mood entries:', e)
     }
 
+    // Compute weekly goals
+    let weeklyGoals: WeeklyGoals
+    const userGoals = await storageRef.current.getWeeklyGoals()
+
+    if (userGoals) {
+      // User has set custom goals
+      weeklyGoals = {
+        ...userGoals,
+        total: userGoals.heart + userGoals.mind + userGoals.body + userGoals.learn,
+        isDefault: false,
+      }
+    } else {
+      // Compute default goals from scheduled activities (75% of scheduled spectrum-minutes)
+      let scheduledSpectrum: SpectrumScores = { ...EMPTY_SPECTRUM }
+      try {
+        const scheduled = await storageRef.current.getScheduledActivitiesForRange(startDateStr, 7)
+        for (const activityIds of Object.values(scheduled)) {
+          for (const actId of activityIds) {
+            const activity = getActivityRef.current(actId)
+            if (!activity) continue
+            const mins = activity.duration ?? 5
+            if (activity.spectrum) {
+              scheduledSpectrum = addSpectrum(scheduledSpectrum, {
+                heart: mins * (activity.spectrum.heart || 0),
+                mind: mins * (activity.spectrum.mind || 0),
+                body: mins * (activity.spectrum.body || 0),
+                learn: mins * (activity.spectrum.learn || 0),
+              })
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Failed to compute scheduled goals:', e)
+      }
+
+      // 75% of scheduled total as default goal
+      const factor = 0.75
+      const heart = Math.round(scheduledSpectrum.heart * factor)
+      const mind = Math.round(scheduledSpectrum.mind * factor)
+      const body = Math.round(scheduledSpectrum.body * factor)
+      const learn = Math.round(scheduledSpectrum.learn * factor)
+      weeklyGoals = {
+        heart, mind, body, learn,
+        total: heart + mind + body + learn,
+        isDefault: true,
+      }
+    }
+
     return {
       weekStart,
       weekEnd,
@@ -186,6 +244,7 @@ export function useStatistics() {
       totalMinutes,
       spectrumTotalMinutes,
       spectrumTotals,
+      weeklyGoals,
       activityBreakdown,
       moodEntries,
     }
@@ -250,6 +309,18 @@ export function useStatistics() {
 
   const isCurrentWeek = weekOffset === 0
 
+  const saveWeeklyGoals = useCallback(async (goals: { heart: number; mind: number; body: number; learn: number }) => {
+    await storage.saveWeeklyGoals(goals)
+    // Refresh to recompute with new goals
+    setRefreshKey(k => k + 1)
+  }, [storage])
+
+  const clearWeeklyGoals = useCallback(async () => {
+    await storage.clearWeeklyGoals()
+    // Refresh to recompute with defaults
+    setRefreshKey(k => k + 1)
+  }, [storage])
+
   return {
     weekStats,
     isLoading,
@@ -258,5 +329,7 @@ export function useStatistics() {
     goToPreviousWeek,
     goToNextWeek,
     refresh,
+    saveWeeklyGoals,
+    clearWeeklyGoals,
   }
 }

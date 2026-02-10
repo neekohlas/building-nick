@@ -1,9 +1,10 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { useStatistics, WeekStats, MoodEntry } from '@/hooks/use-statistics'
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, Loader2, Pencil, X } from 'lucide-react'
+import { useStatistics, WeekStats, WeeklyGoals, MoodEntry } from '@/hooks/use-statistics'
 import { SpectrumScores } from '@/lib/activities'
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine } from 'recharts'
 
 // Format minutes as hours + minutes (e.g., 210 → "3h 30m", 45 → "45m", 120 → "2h")
 function formatMinutesDisplay(mins: number): { value: string; unit: string } {
@@ -97,8 +98,10 @@ function formatDateRange(start: Date, end: Date): string {
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; fill: string; dataKey: string }>; label?: number }) {
   if (!active || !payload?.length) return null
 
-  const total = payload.reduce((sum, p) => sum + (p.value || 0), 0)
-  if (total === 0) return null
+  const visiblePayload = payload.filter(p => p.value > 0)
+  if (visiblePayload.length === 0) return null
+
+  const total = visiblePayload.reduce((sum, p) => sum + (p.value || 0), 0)
 
   // Convert numeric x position to day name (round to nearest integer)
   const dayIndex = typeof label === 'number' ? Math.round(label) : -1
@@ -109,23 +112,26 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   return (
     <div className="bg-card border rounded-lg shadow-lg p-2 text-xs">
       <p className="font-medium mb-1">{dayName}</p>
-      {payload.filter(p => p.value > 0).map(p => (
+      {visiblePayload.map(p => (
         <div key={p.name} className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: p.fill }} />
           <span className="capitalize">{p.name}:</span>
           <span className="font-medium">{formatMinutesShort(p.value)}</span>
         </div>
       ))}
-      <div className="border-t border-border/50 mt-1 pt-1 font-medium">
-        Total: {formatMinutesShort(total)}
-      </div>
+      {visiblePayload.length > 1 && (
+        <div className="border-t border-border/50 mt-1 pt-1 font-medium">
+          Total: {formatMinutesShort(total)}
+        </div>
+      )}
     </div>
   )
 }
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const ALL_DIMS: DimensionKey[] = ['heart', 'mind', 'body', 'learn']
 
-function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
+function WeeklyChart({ weekStats, activeFilter, weeklyGoals }: { weekStats: WeekStats; activeFilter: DimensionKey | null; weeklyGoals: WeeklyGoals }) {
   // Get today's date string to cap cumulative data (future days show as blank)
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -156,9 +162,13 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
     }
   }
 
+  // Goal line value
+  const goalValue = activeFilter ? weeklyGoals[activeFilter] : weeklyGoals.total
+
   // Project Y-axis max: extrapolate current pace to full 7 days
-  // Use at least 1.5x current total so there's always headroom
-  const currentTotal = cumHeart + cumMind + cumBody + cumLearn
+  const currentTotal = activeFilter
+    ? (activeFilter === 'heart' ? cumHeart : activeFilter === 'mind' ? cumMind : activeFilter === 'body' ? cumBody : cumLearn)
+    : (cumHeart + cumMind + cumBody + cumLearn)
   let projectedMax: number
   if (daysElapsed > 0 && daysElapsed < 7) {
     const dailyAvg = currentTotal / daysElapsed
@@ -166,22 +176,16 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
   } else {
     projectedMax = currentTotal
   }
-  // Ensure some minimum headroom (at least 1.3x current, minimum 60)
-  const yMax = Math.max(Math.ceil(currentTotal * 1.3), projectedMax, 60)
+  // Ensure headroom and always show the goal line
+  const yMax = Math.max(Math.ceil(currentTotal * 1.3), projectedMax, goalValue > 0 ? Math.ceil(goalValue * 1.15) : 60, 60)
   // Round up to nice number (nearest 30)
   const yMaxRounded = Math.ceil(yMax / 30) * 30
 
   // Build chart data with angled midpoint transitions
-  // For each day the shape is: diagonal ramp from midpoint to day label, then flat plateau.
-  //   x = i-0.5 → previous day's cumulative value (bottom of ramp)
-  //   x = i     → this day's cumulative value (top of ramp, at the day label)
-  //   x = i+0.5 → this day's cumulative value (flat plateau continues)
-  // The diagonal line from (i-0.5, prev) to (i, current) creates the angled transition.
   const zero = { heart: 0, mind: 0, body: 0, learn: 0 }
   const chartData: Array<{ x: number; heart: number | null; mind: number | null; body: number | null; learn: number | null }> = []
 
-  // Leading zero baseline: flat at 0 from x=-1 to x=-0.5
-  // The ramp from x=-0.5 (0) to x=0 (Mon's value) is the "starts at 0" rise
+  // Leading zero baseline
   chartData.push({ x: -1, ...zero })
   chartData.push({ x: -0.5, ...zero })
 
@@ -189,7 +193,6 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
     const cum = cumDays[i]
 
     if (cum === null) {
-      // Future day — null out the rest so X-axis labels still show
       for (let j = i; j < 7; j++) {
         chartData.push({ x: j, heart: null, mind: null, body: null, learn: null })
       }
@@ -197,24 +200,25 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
       break
     }
 
-    // Day label position (i): diagonal ramp arrives at this day's value
     chartData.push({ x: i, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
-
-    // Right edge (i+0.5): flat plateau at this day's value
-    // This also serves as the bottom of the next day's ramp
     chartData.push({ x: i + 0.5, heart: cum.heart, mind: cum.mind, body: cum.body, learn: cum.learn })
   }
 
-  // If all 7 days had data, ensure trailing point
   if (cumDays[6] !== null && chartData[chartData.length - 1]?.x !== 6.5) {
     const last = cumDays[6]!
     chartData.push({ x: 6.5, heart: last.heart, mind: last.mind, body: last.body, learn: last.learn })
   }
 
-  // Check if there's any data
-  const hasData = currentTotal > 0
+  // Determine which areas to render
+  const visibleDims = activeFilter ? [activeFilter] : ALL_DIMS
+  // Render order: bottom to top (learn, body, mind, heart) — filter to only visible ones
+  const renderOrder: DimensionKey[] = ['learn', 'body', 'mind', 'heart']
+  const areasToRender = renderOrder.filter(d => visibleDims.includes(d))
 
-  if (!hasData) {
+  // Check if there's any data
+  const hasData = (cumHeart + cumMind + cumBody + cumLearn) > 0
+
+  if (!hasData && goalValue <= 0) {
     return (
       <div className="w-full h-[180px] flex items-center justify-center text-sm text-muted-foreground">
         No activity this week
@@ -244,10 +248,27 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
           tickFormatter={(v: number) => v >= 60 ? `${Math.round(v / 60)}h` : `${v}`}
         />
         <Tooltip content={<ChartTooltip />} cursor={false} />
-        <Area type="linear" dataKey="learn" stackId="1" fill={SPECTRUM_COLORS.learn} stroke={SPECTRUM_COLORS.learn} fillOpacity={0.85} connectNulls={false} />
-        <Area type="linear" dataKey="body" stackId="1" fill={SPECTRUM_COLORS.body} stroke={SPECTRUM_COLORS.body} fillOpacity={0.85} connectNulls={false} />
-        <Area type="linear" dataKey="mind" stackId="1" fill={SPECTRUM_COLORS.mind} stroke={SPECTRUM_COLORS.mind} fillOpacity={0.85} connectNulls={false} />
-        <Area type="linear" dataKey="heart" stackId="1" fill={SPECTRUM_COLORS.heart} stroke={SPECTRUM_COLORS.heart} fillOpacity={0.85} connectNulls={false} />
+        {goalValue > 0 && (
+          <ReferenceLine
+            y={goalValue}
+            stroke={activeFilter ? SPECTRUM_COLORS[activeFilter] : 'var(--muted-foreground)'}
+            strokeDasharray="6 4"
+            strokeOpacity={0.6}
+            strokeWidth={1.5}
+          />
+        )}
+        {areasToRender.map(dim => (
+          <Area
+            key={dim}
+            type="linear"
+            dataKey={dim}
+            stackId="1"
+            fill={SPECTRUM_COLORS[dim]}
+            stroke={SPECTRUM_COLORS[dim]}
+            fillOpacity={0.85}
+            connectNulls={false}
+          />
+        ))}
       </AreaChart>
     </ResponsiveContainer>
   )
@@ -341,6 +362,84 @@ function getDominantColor(spectrum: SpectrumScores): string {
     }
   }
   return SPECTRUM_COLORS[maxDim]
+}
+
+// Inline goal editor
+function GoalEditor({
+  weeklyGoals,
+  onSave,
+  onReset,
+  onClose,
+}: {
+  weeklyGoals: WeeklyGoals
+  onSave: (goals: { heart: number; mind: number; body: number; learn: number }) => void
+  onReset: () => void
+  onClose: () => void
+}) {
+  const [heart, setHeart] = useState(Math.round(weeklyGoals.heart))
+  const [mind, setMind] = useState(Math.round(weeklyGoals.mind))
+  const [body, setBody] = useState(Math.round(weeklyGoals.body))
+  const [learn, setLearn] = useState(Math.round(weeklyGoals.learn))
+
+  const dims: { key: DimensionKey; value: number; setter: (v: number) => void }[] = [
+    { key: 'heart', value: heart, setter: setHeart },
+    { key: 'mind', value: mind, setter: setMind },
+    { key: 'body', value: body, setter: setBody },
+    { key: 'learn', value: learn, setter: setLearn },
+  ]
+
+  return (
+    <div className="mt-3 pt-3 border-t border-border/50 space-y-2.5">
+      {dims.map(({ key, value, setter }) => {
+        const Icon = SPECTRUM_ICONS[key]
+        return (
+          <div key={key} className="flex items-center gap-2">
+            <div className="w-4 h-4 shrink-0" style={{ color: SPECTRUM_COLORS[key] }}>
+              <Icon className="w-full h-full" />
+            </div>
+            <span className="text-xs font-medium w-12 shrink-0 capitalize">{key}</span>
+            <input
+              type="number"
+              value={value}
+              onChange={e => setter(Math.max(0, parseInt(e.target.value) || 0))}
+              className="w-16 h-7 text-xs text-center rounded-md border bg-background px-1"
+              min={0}
+            />
+            <span className="text-[10px] text-muted-foreground">min</span>
+            <span className="text-[10px] text-muted-foreground ml-auto">
+              {formatMinutesShort(value)}
+            </span>
+          </div>
+        )
+      })}
+      <div className="flex items-center gap-2 pt-1">
+        <button
+          onClick={() => {
+            onSave({ heart, mind, body, learn })
+            onClose()
+          }}
+          className="flex-1 h-8 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Save Goals
+        </button>
+        <button
+          onClick={() => {
+            onReset()
+            onClose()
+          }}
+          className="h-8 px-3 text-xs text-muted-foreground rounded-lg border hover:bg-muted transition-colors"
+        >
+          Reset
+        </button>
+        <button
+          onClick={onClose}
+          className="h-8 w-8 flex items-center justify-center text-muted-foreground rounded-lg hover:bg-muted transition-colors"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  )
 }
 
 // Mood category display config (matches health-coach-modal.tsx)
@@ -445,7 +544,12 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
     isCurrentWeek,
     goToPreviousWeek,
     goToNextWeek,
+    saveWeeklyGoals,
+    clearWeeklyGoals,
   } = useStatistics()
+
+  const [activeFilter, setActiveFilter] = useState<DimensionKey | null>(null)
+  const [showGoalEditor, setShowGoalEditor] = useState(false)
 
   return (
     <div className="space-y-4">
@@ -501,11 +605,14 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-baseline justify-between mb-3">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Zone Time
+                {activeFilter ? `${SPECTRUM_LABELS[activeFilter]} Time` : 'Zone Time'}
               </h3>
               <div className="text-right">
                 {(() => {
-                  const { value, unit } = formatMinutesDisplay(weekStats.totalMinutes)
+                  const mins = activeFilter
+                    ? weekStats.spectrumTotals[activeFilter]
+                    : weekStats.totalMinutes
+                  const { value, unit } = formatMinutesDisplay(mins)
                   return (
                     <>
                       <span className="text-2xl font-bold">{value}</span>
@@ -513,7 +620,7 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
                     </>
                   )
                 })()}
-                {weekStats.totalSessions > 0 && (
+                {weekStats.totalSessions > 0 && !activeFilter && (
                   <p className="text-[10px] text-muted-foreground">
                     {weekStats.totalSessions} sessions
                   </p>
@@ -521,21 +628,64 @@ export function StatisticsView({ onBack }: StatisticsViewProps) {
               </div>
             </div>
 
-            <WeeklyChart weekStats={weekStats} />
+            <WeeklyChart
+              weekStats={weekStats}
+              activeFilter={activeFilter}
+              weeklyGoals={weekStats.weeklyGoals}
+            />
 
-            {/* Legend */}
-            <div className="flex items-center justify-center gap-4 mt-3">
-              {(['heart', 'mind', 'body', 'learn'] as DimensionKey[]).map(dim => (
-                <div key={dim} className="flex items-center gap-1">
+            {/* Clickable Legend */}
+            <div className="flex items-center justify-center gap-2 mt-3">
+              {ALL_DIMS.map(dim => (
+                <button
+                  key={dim}
+                  onClick={() => setActiveFilter(prev => prev === dim ? null : dim)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full transition-all ${
+                    activeFilter === dim
+                      ? 'ring-1 ring-offset-1 ring-offset-card'
+                      : activeFilter !== null
+                        ? 'opacity-35'
+                        : ''
+                  }`}
+                  style={activeFilter === dim ? { ringColor: SPECTRUM_COLORS[dim] } : undefined}
+                >
                   <div
-                    className="w-2.5 h-2.5 rounded-sm"
+                    className="w-2.5 h-2.5 rounded-full"
                     style={{ backgroundColor: SPECTRUM_COLORS[dim] }}
                   />
                   <span className="text-[10px] text-muted-foreground capitalize">{dim}</span>
-                </div>
+                </button>
               ))}
             </div>
 
+            {/* Goal label + editor toggle */}
+            {weekStats.weeklyGoals.total > 0 && (
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowGoalEditor(!showGoalEditor)}
+                  className="flex items-center gap-1.5 mx-auto text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <span>
+                    Goal: {formatMinutesShort(
+                      activeFilter ? weekStats.weeklyGoals[activeFilter] : weekStats.weeklyGoals.total
+                    )}
+                  </span>
+                  {weekStats.weeklyGoals.isDefault && (
+                    <span className="opacity-60">(auto)</span>
+                  )}
+                  <Pencil className="h-2.5 w-2.5" />
+                </button>
+
+                {showGoalEditor && (
+                  <GoalEditor
+                    weeklyGoals={weekStats.weeklyGoals}
+                    onSave={saveWeeklyGoals}
+                    onReset={clearWeeklyGoals}
+                    onClose={() => setShowGoalEditor(false)}
+                  />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Spectrum Breakdown */}
