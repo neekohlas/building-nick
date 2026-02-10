@@ -176,7 +176,9 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
   // The vertical jump happens at the midpoint between days.
   const chartData: Array<{ x: number; heart: number | null; mind: number | null; body: number | null; learn: number | null }> = []
 
-  // Leading zero: start at x=-0.5 with all zeros (graph starts at 0)
+  // Leading zero baseline: flat line at 0 from x=-1 to x=-0.5
+  // This creates a visible "starts at 0" on the left before Monday's value rises
+  chartData.push({ x: -1, heart: 0, mind: 0, body: 0, learn: 0 })
   chartData.push({ x: -0.5, heart: 0, mind: 0, body: 0, learn: 0 })
 
   for (let i = 0; i < 7; i++) {
@@ -222,7 +224,7 @@ function WeeklyChart({ weekStats }: { weekStats: WeekStats }) {
         <XAxis
           dataKey="x"
           type="number"
-          domain={[-0.5, 6.5]}
+          domain={[-1, 6.5]}
           ticks={[0, 1, 2, 3, 4, 5, 6]}
           tickFormatter={(v: number) => DAY_LABELS[v] ?? ''}
           tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
