@@ -145,6 +145,8 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const keepAliveTimerRef = useRef<NodeJS.Timeout | null>(null) // Periodic restart for iOS Safari
   const lastInterimRef = useRef<string>('') // Track interim results for quick keyword matching
   const pauseTimerRef = useRef<NodeJS.Timeout | null>(null) // Post-speech pause before listening
+  const isRestartingRef = useRef(false) // Prevent concurrent restart attempts
+  const watchdogTimerRef = useRef<NodeJS.Timeout | null>(null) // Detect silently dead recognition
 
   // Keep storageRef in sync
   useEffect(() => {
@@ -186,6 +188,10 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       if (keepAliveTimerRef.current) {
         clearInterval(keepAliveTimerRef.current)
         keepAliveTimerRef.current = null
+      }
+      if (watchdogTimerRef.current) {
+        clearInterval(watchdogTimerRef.current)
+        watchdogTimerRef.current = null
       }
       if (pauseTimerRef.current) {
         clearTimeout(pauseTimerRef.current)
@@ -350,7 +356,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const quickKeywordCheck = useCallback((transcript: string): AudioCommand | null => {
     const words = transcript.toLowerCase().trim().split(/\s+/)
     // Only match very clear, unambiguous single-word commands from interim results
-    const nextWords = ['next', 'continue', 'forward', 'okay', 'ok', 'ready', 'done', 'yes', 'yep', 'alright']
+    const nextWords = ['next', 'continue', 'forward', 'okay', 'ok', 'ready', 'done', 'yes', 'yep', 'yup', 'alright', 'sure', 'yeah', 'right', 'go', 'got']
     const repeatWords = ['repeat', 'again']
     const backWords = ['back', 'previous']
     const stopWords = ['stop', 'quit', 'exit', 'end']
@@ -363,6 +369,19 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     if (words.some(w => pauseWords.includes(w))) return 'pause'
     return null
   }, [])
+
+  // Deduplicated restart - prevents onerror and onend from both restarting
+  const scheduleRestart = useCallback(() => {
+    if (isStoppedRef.current || isRestartingRef.current) return
+    if (stateRef.current.phase !== 'listening') return
+    isRestartingRef.current = true
+    setTimeout(() => {
+      isRestartingRef.current = false
+      if (!isStoppedRef.current && stateRef.current.phase === 'listening') {
+        startListening()
+      }
+    }, 50) // Fast restart to minimize gaps where speech is missed
+  }, []) // startListening added below via ref pattern
 
   const startListening = useCallback(() => {
     // Don't start listening if stopped
@@ -390,6 +409,13 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       clearInterval(keepAliveTimerRef.current)
       keepAliveTimerRef.current = null
     }
+    // Clear any existing watchdog timer
+    if (watchdogTimerRef.current) {
+      clearInterval(watchdogTimerRef.current)
+      watchdogTimerRef.current = null
+    }
+
+    isRestartingRef.current = false
 
     try {
       const recognition = new SpeechRecognition()
@@ -400,8 +426,10 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       recognition.lang = 'en-US'
 
       let hasProcessedCommand = false
+      let lastActivityTime = Date.now() // Track when we last got any event from recognition
 
       recognition.onresult = (event: SpeechRecognitionEvent) => {
+        lastActivityTime = Date.now()
         // Don't process if stopped or already processing a command from this session
         if (isStoppedRef.current || hasProcessedCommand) return
 
@@ -451,18 +479,15 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       }
 
       recognition.onerror = (event) => {
+        lastActivityTime = Date.now()
         // Don't handle errors if stopped
         if (isStoppedRef.current) return
 
-        // "no-speech" is expected when user is quiet - restart listening
         const errorEvent = event as unknown as { error?: string }
-        if (errorEvent.error === 'no-speech' || errorEvent.error === 'aborted') {
-          // Restart listening after a brief pause
-          setTimeout(() => {
-            if (!isStoppedRef.current && stateRef.current.phase === 'listening') {
-              startListening()
-            }
-          }, 200)
+        // "no-speech" and "aborted" are expected during long silences - restart
+        // "network" can happen on flaky connections - also retry
+        if (errorEvent.error === 'no-speech' || errorEvent.error === 'aborted' || errorEvent.error === 'network') {
+          scheduleRestart()
           return
         }
         // On other errors, fall back to paused state (user can use manual controls)
@@ -471,17 +496,14 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       }
 
       recognition.onend = () => {
+        lastActivityTime = Date.now()
         // Don't restart if stopped
         if (isStoppedRef.current) return
 
         // If we're still supposed to be listening, restart
         // This handles browser timeouts (usually ~60 seconds)
         if (stateRef.current.phase === 'listening') {
-          setTimeout(() => {
-            if (!isStoppedRef.current && stateRef.current.phase === 'listening') {
-              startListening()
-            }
-          }, 100)
+          scheduleRestart()
         }
       }
 
@@ -506,7 +528,31 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
             // Will be restarted by onend handler
           }
         }
-      }, 45000) // Restart every 45 seconds (before the ~60s browser timeout)
+      }, 30000) // Restart every 30 seconds (more aggressive than before)
+
+      // Watchdog: detect if recognition silently died (no events for 15+ seconds)
+      watchdogTimerRef.current = setInterval(() => {
+        if (isStoppedRef.current || stateRef.current.phase !== 'listening') {
+          if (watchdogTimerRef.current) {
+            clearInterval(watchdogTimerRef.current)
+            watchdogTimerRef.current = null
+          }
+          return
+        }
+        // If no activity for 15 seconds, recognition may have silently died
+        if (Date.now() - lastActivityTime > 15000) {
+          lastActivityTime = Date.now()
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.abort()
+            } catch {
+              // Ignore
+            }
+          }
+          // Force restart
+          scheduleRestart()
+        }
+      }, 5000)
     } catch {
       setState((prev) => ({ ...prev, phase: 'paused' }))
     }
@@ -624,7 +670,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
   const fallbackKeywordMatch = (transcript: string): AudioCommand => {
     const words = transcript.toLowerCase().split(' ')
 
-    if (words.some((w) => ['next', 'continue', 'forward', 'okay', 'ready', 'done', 'got'].includes(w))) {
+    if (words.some((w) => ['next', 'continue', 'forward', 'okay', 'ok', 'ready', 'done', 'got', 'yes', 'yep', 'yup', 'alright', 'sure', 'yeah', 'right', 'go'].includes(w))) {
       return 'next'
     } else if (words.some((w) => ['repeat', 'again', 'what'].includes(w))) {
       return 'repeat'
@@ -686,6 +732,10 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     if (keepAliveTimerRef.current) {
       clearInterval(keepAliveTimerRef.current)
       keepAliveTimerRef.current = null
+    }
+    if (watchdogTimerRef.current) {
+      clearInterval(watchdogTimerRef.current)
+      watchdogTimerRef.current = null
     }
     if (recognitionRef.current) {
       try {

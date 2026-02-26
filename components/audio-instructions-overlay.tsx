@@ -108,7 +108,7 @@ export function AudioInstructionsOverlay({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-black/95">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-black/95" onClick={(e) => e.stopPropagation()}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-white/10">
         <div className="flex items-center gap-3">
