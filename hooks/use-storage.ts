@@ -943,6 +943,12 @@ export function useStorage() {
     console.log('Audio cached for:', text.substring(0, 50) + '...')
   }, [generateAudioCacheKey])
 
+  const deleteCachedAudio = useCallback(async (text: string, voice: string): Promise<void> => {
+    const id = generateAudioCacheKey(text, voice)
+    await dbDelete('audioCache', id)
+    console.log('Audio cache cleared for:', text.substring(0, 50) + '...')
+  }, [generateAudioCacheKey])
+
   // Claude-generated audio (for activities with custom prompts)
   const getClaudeGeneratedAudio = useCallback(async (activityId: string, lessonId: string): Promise<Blob | null> => {
     const id = `claude_${activityId}_${lessonId}`
@@ -1104,6 +1110,7 @@ export function useStorage() {
     // Audio cache
     getCachedAudio,
     saveAudioToCache,
+    deleteCachedAudio,
     getClaudeGeneratedAudio,
     saveClaudeGeneratedAudio,
     deleteClaudeGeneratedAudio,

@@ -233,12 +233,13 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
     window.speechSynthesis.speak(utterance)
   }, [])
 
-  // OpenAI TTS with IndexedDB caching
+  // ElevenLabs TTS with IndexedDB caching
   const speakWithOpenAI = useCallback(async (text: string, onEnd?: () => void) => {
     // Don't start if already stopped
     if (isStoppedRef.current) return
 
     const voice = 'rachel'
+    let fromCache = false
 
     try {
       // Stop any current audio
@@ -250,10 +251,19 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       // Check if stopped during cleanup
       if (isStoppedRef.current) return
 
-      // Check cache first
+      // Check cache first (wrapped in own try-catch so cache errors don't block API)
       let audioBlob: Blob | null = null
-      if (storageRef.current.isReady) {
-        audioBlob = await storageRef.current.getCachedAudio(text, voice)
+      try {
+        if (storageRef.current.isReady) {
+          audioBlob = await storageRef.current.getCachedAudio(text, voice)
+          if (audioBlob) {
+            fromCache = true
+            console.log('TTS cache hit:', text.substring(0, 50) + '...')
+          }
+        }
+      } catch (cacheError) {
+        console.warn('TTS cache lookup failed, will fetch from API:', cacheError)
+        audioBlob = null
       }
 
       // Check if stopped during cache lookup
@@ -261,6 +271,7 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
 
       // If not cached, fetch from API
       if (!audioBlob) {
+        console.log('TTS fetching from API:', text.substring(0, 50) + '...', `(${text.length} chars)`)
         const response = await fetch('/api/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -279,21 +290,24 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
               console.log('ElevenLabs not configured, permanently using browser TTS')
               useOpenAITTS.current = false
             } else {
-              console.log('ElevenLabs TTS failed for this step, will retry next step:', response.status)
+              console.log('ElevenLabs TTS failed:', response.status, data.error || '')
             }
             speakWithBrowser(text, onEnd)
             return
           }
-          throw new Error('TTS failed')
+          throw new Error(`TTS failed: ${response.status}`)
         }
 
         audioBlob = await response.blob()
+        console.log('TTS received audio:', audioBlob.size, 'bytes')
 
         // Cache the audio for future use
-        if (storageRef.current.isReady) {
-          storageRef.current.saveAudioToCache(text, voice, audioBlob).catch(err => {
-            console.warn('Failed to cache audio:', err)
-          })
+        try {
+          if (storageRef.current.isReady) {
+            await storageRef.current.saveAudioToCache(text, voice, audioBlob)
+          }
+        } catch (cacheError) {
+          console.warn('Failed to cache audio:', cacheError)
         }
       }
 
@@ -316,10 +330,22 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
       audio.onerror = () => {
         URL.revokeObjectURL(audioUrl)
         audioRef.current = null
-        // Only fall back if not stopped
         if (!isStoppedRef.current) {
-          console.log('Audio playback error, using browser TTS')
-          speakWithBrowser(text, onEnd)
+          // If cached audio failed to play, clear the bad cache entry
+          if (fromCache) {
+            console.log('Cached audio failed to play, clearing cache and retrying from API')
+            try {
+              if (storageRef.current.isReady) {
+                storageRef.current.deleteCachedAudio(text, voice)
+              }
+            } catch { /* ignore */ }
+            // Retry without cache
+            fromCache = false
+            speakWithOpenAI(text, onEnd)
+          } else {
+            console.log('Audio playback error, using browser TTS')
+            speakWithBrowser(text, onEnd)
+          }
         }
       }
 
