@@ -3,6 +3,9 @@ import { createHash } from 'crypto'
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'fs'
 import { join } from 'path'
 
+// Allow up to 60 seconds for ElevenLabs to generate longer audio clips
+export const maxDuration = 60
+
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY
 
 // Check if we're running on Vercel (serverless with read-only filesystem)
@@ -80,9 +83,16 @@ export async function POST(request: Request) {
       }
     }
 
-    console.log('TTS generating:', hash, '(cache available:', canCache, ')')
+    console.log('TTS generating:', hash, `(${text.length} chars, cache available: ${canCache})`)
 
     const voiceId = ELEVENLABS_VOICES[voice as keyof typeof ELEVENLABS_VOICES] || ELEVENLABS_VOICES.rachel
+
+    // Convert pause markers to SSML break tags for ElevenLabs
+    // Supports: [pause], [pause 2s], [pause 500ms]
+    const processedText = text
+      .replace(/\[pause\s+(\d+(?:\.\d+)?)\s*s\]/gi, '<break time="$1s"/>')
+      .replace(/\[pause\s+(\d+)\s*ms\]/gi, '<break time="$1ms"/>')
+      .replace(/\[pause\]/gi, '<break time="1.5s"/>')
 
     const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
@@ -92,7 +102,7 @@ export async function POST(request: Request) {
         'xi-api-key': ELEVENLABS_API_KEY,
       },
       body: JSON.stringify({
-        text: text,
+        text: processedText,
         model_id: 'eleven_multilingual_v2',
         voice_settings: {
           stability: 0.5,
