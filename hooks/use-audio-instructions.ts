@@ -273,9 +273,14 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
         if (!response.ok) {
           const data = await response.json().catch(() => ({}))
           if (data.fallback) {
-            // OpenAI not available, fall back to browser TTS
-            console.log('OpenAI TTS unavailable, using browser TTS')
-            useOpenAITTS.current = false
+            // Only permanently disable if API key isn't configured (503)
+            // For transient errors (rate limit, text too long), just fall back for this step
+            if (response.status === 503) {
+              console.log('ElevenLabs not configured, permanently using browser TTS')
+              useOpenAITTS.current = false
+            } else {
+              console.log('ElevenLabs TTS failed for this step, will retry next step:', response.status)
+            }
             speakWithBrowser(text, onEnd)
             return
           }
@@ -320,10 +325,9 @@ export function useAudioInstructions(): UseAudioInstructionsReturn {
 
       await audio.play()
     } catch (error) {
-      console.error('OpenAI TTS error:', error)
-      // Only fall back if not stopped
+      console.error('ElevenLabs TTS error:', error)
+      // Fall back to browser TTS for this step only - will retry ElevenLabs next step
       if (!isStoppedRef.current) {
-        useOpenAITTS.current = false
         speakWithBrowser(text, onEnd)
       }
     }
