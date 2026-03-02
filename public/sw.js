@@ -21,7 +21,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
   // Get the URL from notification data, default to Today page
-  const targetUrl = event.notification.data?.url || '/today'
+  const targetUrl = event.notification.data?.url || '/'
   const fullUrl = new URL(targetUrl, self.location.origin).href
 
   // Try to focus existing window or open new one
@@ -56,7 +56,7 @@ self.addEventListener('push', (event) => {
     let title = 'Building Nick'
     let body = 'Time to check in on your activities!'
     let tag = 'building-nick-push'
-    let url = '/today'
+    let url = '/'
 
     // Try to parse push data if available
     if (event.data) {
