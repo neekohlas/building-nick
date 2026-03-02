@@ -6,7 +6,7 @@
  * navigate to specific URLs - they just open the app to its last state.
  */
 
-const SW_VERSION = 15
+const SW_VERSION = 16
 console.log('[SW] Service worker version:', SW_VERSION)
 
 // Install event - skip waiting immediately
@@ -20,9 +20,8 @@ self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked:', event.notification.tag)
   event.notification.close()
 
-  // Get the URL from notification data, default to Today page
-  const targetUrl = event.notification.data?.url || '/'
-  const fullUrl = new URL(targetUrl, self.location.origin).href
+  // Always navigate to root - the app is a SPA with no sub-routes
+  const fullUrl = new URL('/', self.location.origin).href
 
   // Try to focus existing window or open new one
   // Note: iOS may ignore the URL and just open the app to its last state
